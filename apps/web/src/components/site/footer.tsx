@@ -26,7 +26,7 @@ export function Footer() {
         <div className="col-span-1 lg:col-span-1">
           <div className="inline-flex items-center gap-1.5 mb-4">
             <Icon name="all_inclusive" className="text-on-primary text-[24px]" />
-            <span className="text-lg font-bold tracking-tight text-on-primary">Infinity Africa</span>
+            <span className="text-lg font-bold tracking-tight text-on-primary">InfinityPay</span>
           </div>
           <p className="text-base text-on-primary/80 max-w-sm">
             Secure payment infrastructure for growing merchants — collect, link, invoice, and integrate from one
@@ -59,6 +59,10 @@ export function Footer() {
         </div>
         <div>
           <h4 className="text-xs font-semibold text-on-primary uppercase tracking-wider mb-4">Contact</h4>
+          {/* Contact addresses stay on the old infinityafrica.net domain
+              until infinitypay.me mailboxes/DNS are verified — switching
+              early would break real support email delivery. See
+              docs/email-delivery.md. */}
           <ul className="space-y-4">
             <li className="flex items-start gap-2.5">
               <Icon name="mail" className="text-[18px] text-on-primary/70 mt-0.5" />
@@ -86,8 +90,12 @@ export function Footer() {
             </li>
             <li className="flex items-start gap-2.5">
               <Icon name="language" className="text-[18px] text-on-primary/70 mt-0.5" />
-              <a className="text-base text-on-primary/90 hover:text-on-primary transition-colors" href="https://infinityafrica.net">
-                infinityafrica.net
+              {/* Site itself has already moved to the new domain — unlike
+                  the mailto addresses above, this isn't gated on Resend
+                  domain verification. The old infinityafrica.net keeps
+                  working via a DNS/Vercel redirect in the meantime. */}
+              <a className="text-base text-on-primary/90 hover:text-on-primary transition-colors" href="https://infinitypay.me">
+                infinitypay.me
               </a>
             </li>
             <li className="flex items-start gap-2.5">
@@ -99,7 +107,7 @@ export function Footer() {
       </div>
       <div className="border-t border-on-primary/10 py-5 px-4 md:px-10">
         <div className="max-w-[1280px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-on-primary/70">© {new Date().getFullYear()} Infinity Africa. All rights reserved.</p>
+          <p className="text-xs font-semibold text-on-primary/70">© {new Date().getFullYear()} InfinityPay. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link href="/privacy" className="text-xs font-semibold text-on-primary/70 hover:text-on-primary transition-colors">
               Privacy Policy

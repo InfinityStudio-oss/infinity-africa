@@ -39,7 +39,7 @@
 
   --color-accent: #dcfce7;
 
-  /* Merchant Portal / Super Admin sidebar branding — deep Infinity Africa green,
+  /* Merchant Portal / Super Admin sidebar branding — deep InfinityPay green,
      kept separate from --color-primary so the sidebar can go deeper/richer
      than buttons and links do without changing the whole app's accent. */
   --color-sidebar: #04332a;

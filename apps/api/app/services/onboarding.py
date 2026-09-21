@@ -108,9 +108,9 @@ def create_merchant_onboarding(
     contact_name: str | None = None,
 ) -> dict:
     if not payload.accepted_terms:
-        raise ValidationAPIError("You must accept the Infinity Africa Terms of Service")
+        raise ValidationAPIError("You must accept the InfinityPay Terms of Service")
     if not payload.accepted_privacy:
-        raise ValidationAPIError("You must accept the Infinity Africa Privacy Policy")
+        raise ValidationAPIError("You must accept the InfinityPay Privacy Policy")
 
     # Mandatory for MVP — raises NidaRequiredError / NidaInvalidError with
     # the dedicated codes the frontend attaches to the NIDA field. Stored

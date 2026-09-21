@@ -47,8 +47,8 @@ export async function submitOnboardingAction(_prevState: FormState, formData: Fo
   else if (!isValidNida(nidaNumber)) errors.nidaNumber = ["Enter a valid NIDA number — it should be 20 digits."];
   if (servicesNeeded.length === 0) errors.servicesNeeded = ["Select at least one service you need."];
 
-  if (!agreedToTerms) errors.agreedToTerms = ["You must agree to the Infinity Africa Terms of Service."];
-  if (!agreedToPrivacy) errors.agreedToPrivacy = ["You must agree to the Infinity Africa Privacy Policy."];
+  if (!agreedToTerms) errors.agreedToTerms = ["You must agree to the InfinityPay Terms of Service."];
+  if (!agreedToPrivacy) errors.agreedToPrivacy = ["You must agree to the InfinityPay Privacy Policy."];
   if (!confirmedAccurate) errors.confirmedAccurate = ["You must confirm the information provided is accurate."];
 
   const values = {
@@ -89,7 +89,7 @@ export async function submitOnboardingAction(_prevState: FormState, formData: Fo
         ? err.code === "conflict"
           ? "You already have a merchant account submitted for review."
           : err.message
-        : "Couldn't reach Infinity Africa. Check your connection and try again.";
+        : "Couldn't reach InfinityPay. Check your connection and try again.";
     return { errors: {}, formError, values };
   }
 

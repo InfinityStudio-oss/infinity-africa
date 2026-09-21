@@ -8,7 +8,7 @@ import { UpdatePasswordForm } from "@/components/auth/update-password-form";
 import { NotificationSettingsCard } from "@/components/merchant/notification-settings-card";
 
 export const metadata = {
-  title: "Settings | Infinity Africa",
+  title: "Settings | InfinityPay",
 };
 
 export default async function MerchantSettingsPage() {

@@ -33,7 +33,7 @@ export async function refreshAdminCollectionStatusClient(collectionId: string): 
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   } catch {
-    throw new Error("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new Error("Couldn't reach InfinityPay. Check your connection and try again.");
   }
 
   const body: ApiEnvelope<AdminCollectionRow> = await res.json();

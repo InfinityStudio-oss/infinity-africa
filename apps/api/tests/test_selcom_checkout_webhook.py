@@ -394,7 +394,7 @@ def test_production_cannot_enable_unsigned_webhook_even_with_the_test_secret_set
     "development", which a real deployed environment never is."""
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SELCOM_CHECKOUT_WEBHOOK_TEST_SECRET", _TEST_BYPASS_SECRET)
-    monkeypatch.setenv("CORS_ORIGINS", '["https://infinityafrica.net"]')
+    monkeypatch.setenv("CORS_ORIGINS", '["https://infinitypay.me"]')
     get_settings.cache_clear()
     collection = _seed_pending_collection(fake_client, monkeypatch)
     body = _webhook_body(collection, payment_status="COMPLETED")

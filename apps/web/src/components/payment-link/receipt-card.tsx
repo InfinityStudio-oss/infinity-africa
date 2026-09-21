@@ -37,7 +37,7 @@ export function ReceiptCard({ receipt, slug }: { receipt: PublicCollectionReceip
           <div>
             <span className="flex items-center gap-1.5">
               <Icon name="all_inclusive" className="text-primary text-[20px]" />
-              <span className="text-lg font-bold tracking-tight text-primary">Infinity Africa</span>
+              <span className="text-lg font-bold tracking-tight text-primary">InfinityPay</span>
             </span>
             <p className="mt-0.5 text-xs text-primary/70">Payment Receipt</p>
           </div>
@@ -70,7 +70,7 @@ export function ReceiptCard({ receipt, slug }: { receipt: PublicCollectionReceip
         </dl>
 
         <p className="mt-6 border-t border-dashed border-outline-variant pt-4 text-center text-xs text-on-surface-variant">
-          Powered by Infinity Africa.
+          Powered by InfinityPay.
         </p>
       </div>
 

@@ -35,11 +35,11 @@ describe("ReceiptCard", () => {
     expect(screen.getByText("S20690471578")).toBeInTheDocument();
   });
 
-  it("shows the Infinity Africa logo mark (icon + wordmark), not plain text alone", () => {
+  it("shows the InfinityPay logo mark (icon + wordmark), not plain text alone", () => {
     render(<ReceiptCard receipt={receipt} slug="test-slug" />);
 
     expect(screen.getByText("all_inclusive")).toBeInTheDocument();
-    expect(screen.getByText("Infinity Africa")).toBeInTheDocument();
+    expect(screen.getByText("InfinityPay")).toBeInTheDocument();
   });
 
   it("does not show internal record IDs or the processor's name — customer-facing only", () => {

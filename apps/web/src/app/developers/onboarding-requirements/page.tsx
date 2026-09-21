@@ -33,7 +33,7 @@ const REQUIRED_DOCUMENTS: Array<{ label: string; description: string; status: "R
   },
   {
     label: "Contact person details",
-    description: "Full name, email, and phone number of the person Infinity Africa should reach for account and compliance matters.",
+    description: "Full name, email, and phone number of the person InfinityPay should reach for account and compliance matters.",
     status: "Documentation only",
   },
   {
@@ -53,7 +53,7 @@ const REQUIRED_DOCUMENTS: Array<{ label: string; description: string; status: "R
   },
   {
     label: "Additional compliance documents",
-    description: "Infinity Africa's compliance team may request further documentation during review (see Document Requests in the dashboard).",
+    description: "InfinityPay's compliance team may request further documentation during review (see Document Requests in the dashboard).",
     status: "Documentation only",
   },
 ];
@@ -64,7 +64,7 @@ export default function OnboardingRequirementsPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Merchant Onboarding Requirements</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-6 max-w-2xl">
-        What Infinity Africa needs before your account is approved for live API access and withdrawals. Provide your
+        What InfinityPay needs before your account is approved for live API access and withdrawals. Provide your
         business details through the onboarding flow at <code className="font-mono text-sm bg-surface-container-low px-1.5 py-0.5 rounded">/onboarding</code> after
         creating your merchant account. Identity and compliance documents are not uploaded during onboarding — Infinity
         Africa&apos;s compliance team requests whatever it needs directly during review.
@@ -115,7 +115,7 @@ export default function OnboardingRequirementsPage() {
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
           The onboarding submission itself only collects your business details and Terms/Privacy acceptance. Nothing in
           the list above is uploaded through the onboarding form. Items marked <strong>&quot;Requested during
-          review&quot;</strong> are asked for directly by Infinity Africa&apos;s compliance team if needed (see Document
+          review&quot;</strong> are asked for directly by InfinityPay&apos;s compliance team if needed (see Document
           Requests in the dashboard); everything marked &quot;Documentation only&quot; is either captured in the
           submission form or requested the same way.
         </p>
@@ -133,10 +133,10 @@ export default function OnboardingRequirementsPage() {
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
               {[
-                ["PENDING_VERIFICATION", "Submitted, awaiting Infinity Africa review."],
+                ["PENDING_VERIFICATION", "Submitted, awaiting InfinityPay review."],
                 ["VERIFIED", "Approved — merchant account is active and verified, live API access and withdrawals unlocked."],
                 ["REJECTED", "Declined — see the review note for why, and resubmit with corrections."],
-                ["INFO_REQUESTED", "Infinity Africa needs more information or documents before deciding — resubmit once addressed."],
+                ["INFO_REQUESTED", "InfinityPay needs more information or documents before deciding — resubmit once addressed."],
               ].map(([status, meaning]) => (
                 <tr key={status}>
                   <td className="px-4 py-2.5 font-mono text-xs text-on-surface whitespace-nowrap">{status}</td>

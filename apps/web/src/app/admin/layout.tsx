@@ -3,7 +3,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { listAdminNotifications } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Super Admin | Infinity Africa",
+  title: "Super Admin | InfinityPay",
   robots: { index: false, follow: false },
 };
 

@@ -36,7 +36,7 @@ export default function TransactionStatusApiPage() {
           Requires the <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">transactions:read</code> scope
           on the API key used. A key only ever sees transactions belonging to its own merchant.
         </p>
-        <CodeBlock language="bash — cURL">{`curl https://api.infinityafrica.net/v1/transactions/TXN-4821AB \\
+        <CodeBlock language="bash — cURL">{`curl https://api.infinitypay.me/v1/transactions/TXN-4821AB \\
   -H "Authorization: Bearer inf_live_xxxxxxxxxxxxx"`}</CodeBlock>
       </section>
 

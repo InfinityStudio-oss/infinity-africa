@@ -167,7 +167,7 @@ def review_document_request(
         merchant_id=uuid.UUID(request["merchant_id"]),
         notification_type=NotificationType.DOCUMENT_REQUEST,
         title=f"Document request {status.lower()}",
-        body=f"Your submitted documents were {status.lower()} by Infinity Africa.",
+        body=f"Your submitted documents were {status.lower()} by InfinityPay.",
         related_resource_type="document_request",
         related_resource_id=request_id,
     )

@@ -49,7 +49,7 @@ def is_production_api_access_allowed(client: Client, merchant: dict) -> bool:
 def check_production_api_access(client: Client, merchant: dict) -> None:
     if is_merchant_api_access_suspended(merchant):
         raise ProductionAccessRestrictedError(
-            "This merchant's API access has been suspended. Contact Infinity Africa support."
+            "This merchant's API access has been suspended. Contact InfinityPay support."
         )
     if merchant.get("status") != "active" or merchant.get("kyc_status") != "verified":
         raise ProductionAccessRestrictedError(
@@ -58,12 +58,12 @@ def check_production_api_access(client: Client, merchant: dict) -> None:
     if not has_resolvable_pricing_rule(client, uuid.UUID(merchant["id"])):
         raise ProductionAccessRestrictedError(
             "Production API access isn't available yet — no pricing has been assigned to your account. "
-            "Contact Infinity Africa support."
+            "Contact InfinityPay support."
         )
 
 
 def check_sandbox_api_access(merchant: dict) -> None:
     if is_merchant_api_access_suspended(merchant):
         raise ProductionAccessRestrictedError(
-            "This merchant's API access has been suspended. Contact Infinity Africa support."
+            "This merchant's API access has been suspended. Contact InfinityPay support."
         )

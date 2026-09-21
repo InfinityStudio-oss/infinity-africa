@@ -6,7 +6,7 @@ import { RiskMonitoringView } from "@/components/merchant/risk-monitoring-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Risk Monitoring | Infinity Africa",
+  title: "Risk Monitoring | InfinityPay",
 };
 
 export default async function RiskMonitoringPage() {

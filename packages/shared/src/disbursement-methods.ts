@@ -1,4 +1,4 @@
-/** How a merchant receives payouts from their Infinity Africa balance — matches disbursements.method in the DB schema. */
+/** How a merchant receives payouts from their InfinityPay balance — matches disbursements.method in the DB schema. */
 export enum DisbursementMethod {
   SELCOM_PESA = "SELCOM_PESA",
   MOBILE_MONEY = "MOBILE_MONEY",

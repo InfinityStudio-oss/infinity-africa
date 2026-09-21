@@ -141,7 +141,7 @@ export function DisputesView() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Disputes" description="Customer-reported issues on your transactions and Infinity Africa's review of them." />
+      <PageHeader title="Disputes" description="Customer-reported issues on your transactions and InfinityPay's review of them." />
 
       {disputes.length === 0 ? (
         <Card>

@@ -19,7 +19,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
           </button>
           <Link href="/" className="flex items-center gap-1.5">
             <Icon name="all_inclusive" className="text-primary text-[22px]" />
-            <span className="text-lg font-bold tracking-tight text-primary">Infinity Africa</span>
+            <span className="text-lg font-bold tracking-tight text-primary">InfinityPay</span>
           </Link>
           <span className="hidden sm:inline text-sm font-semibold text-on-surface-variant border-l border-outline-variant pl-3 ml-1">
             API Docs

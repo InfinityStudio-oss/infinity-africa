@@ -3,7 +3,7 @@ import { WithdrawalsTable } from "@/components/super-admin/withdrawals-table";
 import { listAdminWithdrawals } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Withdrawals | Infinity Africa Super Admin",
+  title: "Withdrawals | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminWithdrawalsPage() {

@@ -4,7 +4,7 @@ import { ApiKeysTable } from "@/components/super-admin/api-keys-table";
 import { listAdminApiKeys } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "API Keys | Infinity Africa Super Admin",
+  title: "API Keys | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminApiKeysPage() {

@@ -10,9 +10,9 @@ import { SolutionCard } from "@/components/site/solution-card";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
-  title: "Infinity Africa — Collect Payments, Create Links, and Get Paid Faster in Tanzania",
+  title: "InfinityPay — Collect Payments, Create Links, and Get Paid Faster in Tanzania",
   description:
-    "Infinity Africa helps merchants accept mobile money payments, create secure payment links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
+    "InfinityPay helps merchants accept mobile money payments, create secure payment links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
 };
 
 const NETWORKS = [
@@ -80,7 +80,7 @@ export default function Home() {
                 Faster.
               </h1>
               <p className="text-lg text-on-surface-variant max-w-xl leading-relaxed">
-                Infinity Africa helps merchants accept mobile money payments, create secure payment links, generate
+                InfinityPay helps merchants accept mobile money payments, create secure payment links, generate
                 invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web
                 apps.
               </p>
@@ -119,7 +119,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex justify-between items-center px-1">
-                    <span className="text-sm font-bold text-on-surface">Infinity Africa</span>
+                    <span className="text-sm font-bold text-on-surface">InfinityPay</span>
                     <div className="w-7 h-7 rounded-full bg-primary-container/20 flex items-center justify-center">
                       <Icon name="person" className="text-[16px] text-primary-container" />
                     </div>
@@ -246,7 +246,7 @@ export default function Home() {
               <span className="text-xs font-semibold text-primary-container uppercase tracking-wide">Security</span>
               <h2 className="text-2xl md:text-4xl font-bold mt-2 mb-4 text-on-surface tracking-tight">Security and Trust</h2>
               <p className="text-base text-on-surface-variant mb-8 max-w-lg">
-                Infinity Africa is built to move your customers&apos; money with the same rigor as a bank — so you can focus on
+                InfinityPay is built to move your customers&apos; money with the same rigor as a bank — so you can focus on
                 growing your business.
               </p>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
@@ -263,7 +263,7 @@ export default function Home() {
                 <Icon name="shield" className="text-primary text-[44px]" />
               </div>
               <h3 className="text-2xl font-semibold text-on-surface mb-2">Protected by design</h3>
-              <p className="text-sm text-on-surface-variant mb-8 max-w-xs">Every layer of Infinity Africa is monitored, encrypted, and audited.</p>
+              <p className="text-sm text-on-surface-variant mb-8 max-w-xs">Every layer of InfinityPay is monitored, encrypted, and audited.</p>
               <div className="grid grid-cols-3 gap-4 w-full">
                 {[
                   { value: "99.9%", label: "Uptime" },

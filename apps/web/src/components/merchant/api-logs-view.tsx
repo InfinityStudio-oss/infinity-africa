@@ -25,7 +25,7 @@ export function ApiLogsView() {
       <Card padded={false}>
         {logs.length === 0 ? (
           <p className="p-6 text-sm text-on-surface-variant">
-            No API requests yet — once your integration starts calling Infinity Africa&rsquo;s API, requests will
+            No API requests yet — once your integration starts calling InfinityPay&rsquo;s API, requests will
             show up here.
           </p>
         ) : (

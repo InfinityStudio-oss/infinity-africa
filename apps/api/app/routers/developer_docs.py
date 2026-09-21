@@ -38,7 +38,7 @@ _ENDPOINT_GROUPS = [
     EndpointGroup(
         name="Disbursements",
         base_path="/v1/disbursements/{selcom-pesa,mobile-money,bank-account}",
-        description="Request a payout from your Infinity Africa balance (flat — merchant_id in the body; "
+        description="Request a payout from your InfinityPay balance (flat — merchant_id in the body; "
         "validates available balance first). Read back at /v1/disbursements "
         "(merchant_id as a query param) or /v1/disbursements/{id}.",
     ),

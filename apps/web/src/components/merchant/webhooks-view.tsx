@@ -79,7 +79,7 @@ export function WebhooksView() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Webhooks" description="Configure where Infinity Africa sends event notifications, and review delivery status." />
+      <PageHeader title="Webhooks" description="Configure where InfinityPay sends event notifications, and review delivery status." />
 
       <Card>
         <form onSubmit={handleSave} className="space-y-5">

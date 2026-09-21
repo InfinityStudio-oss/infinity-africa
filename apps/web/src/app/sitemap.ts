@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const BASE_URL = "https://infinityafrica.net";
+const BASE_URL = "https://infinitypay.me";
 
 // Public marketing/developer-docs pages only — deliberately excludes every
 // private, authenticated, or transaction-specific route (merchant portal,

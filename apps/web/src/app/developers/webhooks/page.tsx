@@ -46,7 +46,7 @@ export default function WebhooksPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">API Reference</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Webhooks</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        Infinity Africa notifies your server the moment a collection resolves, a payout completes, or an invoice gets paid —
+        InfinityPay notifies your server the moment a collection resolves, a payout completes, or an invoice gets paid —
         so you don&apos;t have to poll. Configure your endpoint once; every event after that is pushed to you.
       </p>
 
@@ -221,7 +221,7 @@ app.post(
           </a>{" "}
           to poll as a fallback. Respond quickly to real deliveries once retries ship — do your processing
           asynchronously after returning <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">200</code>,
-          rather than making Infinity Africa wait on it.
+          rather than making InfinityPay wait on it.
         </p>
         <Callout title="Design for at-least-once delivery">
           Once automatic retries are live, treat every delivery as at-least-once, not exactly-once. Key your own

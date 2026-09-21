@@ -301,7 +301,7 @@ def admin_request_refund(client: Client, *, dispute_id: uuid.UUID, amount: Decim
         client,
         merchant_id=merchant_id,
         notification_type=NotificationType.REFUND_REQUESTED,
-        title="Infinity Africa requested a refund for a dispute",
+        title="InfinityPay requested a refund for a dispute",
         body=f"Please review and process a refund of {amount}.",
         related_resource_type="refund",
         related_resource_id=uuid.UUID(refund["id"]),
@@ -377,7 +377,7 @@ def update_refund_status(
             merchant_id=merchant_id,
             notification_type=NotificationType.DISPUTE_STATUS_UPDATED,
             title="Refund attempt failed",
-            body="A refund attempt failed — Infinity Africa will follow up.",
+            body="A refund attempt failed — InfinityPay will follow up.",
             related_resource_type="refund",
             related_resource_id=refund_id,
         )

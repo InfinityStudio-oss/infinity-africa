@@ -1,5 +1,15 @@
 # Transactional email (Resend)
 
+> **Brand/domain migration in progress**: the product is now **InfinityPay**
+> (was Infinity Africa), and the long-term domain is `infinitypay.me` (was
+> `infinityafrica.net`). Email templates already say InfinityPay, but every
+> sender/reply-to/CEO address below **stays on `infinityafrica.net` until
+> `infinitypay.me` is verified in Resend** — see "Sender addresses" below.
+> Do not switch `EMAIL_FROM`/`INVOICE_EMAIL_FROM`/`EMAIL_REPLY_TO`/
+> `CEO_EMAIL` to `@infinitypay.me` in Railway before that verification is
+> confirmed; doing so would make transactional email fail to send or land
+> in spam.
+
 All outbound transactional email goes through [Resend](https://resend.com),
 via `app/services/email.py`. `RESEND_API_KEY` is backend/Railway-only —
 never set it in `apps/web`/Vercel (and never as `NEXT_PUBLIC_RESEND_API_KEY`
@@ -9,7 +19,9 @@ module or reads that key.
 The domain `infinityafrica.net` is verified in Resend (SPF/DKIM/DMARC DNS
 records added in Cloudflare — see Resend's own domain-verification page for
 the exact record values if they ever need re-adding; they aren't
-reproduced here since they're config, not code).
+reproduced here since they're config, not code). `infinitypay.me` is not
+verified yet — verifying it (adding the equivalent DNS records) is a
+prerequisite for switching any sender address to the new domain.
 
 ## What's wired up
 
@@ -85,8 +97,8 @@ deployment:
 
 | Email type | Sender | Env var |
 | --- | --- | --- |
-| Invoice payment requests | `Infinity Africa Invoices <invoice@infinityafrica.net>` | `INVOICE_EMAIL_FROM` |
-| Everything else (staff invites, password resets, payment receipts, merchant collection notifications, welcome emails, inquiry notifications, withdrawal request/success, payment link delivery) | `Infinity Africa <notification@infinityafrica.net>` | `EMAIL_FROM` |
+| Invoice payment requests | `InfinityPay Invoices <invoice@infinityafrica.net>` | `INVOICE_EMAIL_FROM` |
+| Everything else (staff invites, password resets, payment receipts, merchant collection notifications, welcome emails, inquiry notifications, withdrawal request/success, payment link delivery) | `InfinityPay <notification@infinityafrica.net>` | `EMAIL_FROM` |
 
 If `INVOICE_EMAIL_FROM` isn't set, invoice emails fall back to whatever
 `EMAIL_FROM` is set to (see `Settings.invoice_email_from` in
@@ -104,12 +116,26 @@ template and page now shows `info@infinityafrica.net` instead.
 
 ```
 RESEND_API_KEY=                                                    # backend-only, never in Vercel, never NEXT_PUBLIC_*
-EMAIL_FROM="Infinity Africa <notification@infinityafrica.net>"
-INVOICE_EMAIL_FROM="Infinity Africa Invoices <invoice@infinityafrica.net>"
+EMAIL_FROM="InfinityPay <notification@infinityafrica.net>"
+INVOICE_EMAIL_FROM="InfinityPay Invoices <invoice@infinityafrica.net>"
 EMAIL_REPLY_TO="info@infinityafrica.net"
 CEO_EMAIL="ceo@infinityafrica.net"
-APP_URL="https://infinityafrica.net"
+APP_URL="https://infinitypay.me"
 ```
+
+Once `infinitypay.me` is verified in Resend, switch the four sender/
+contact addresses above to:
+
+```
+EMAIL_FROM="InfinityPay <notification@infinitypay.me>"
+INVOICE_EMAIL_FROM="InfinityPay Invoices <invoice@infinitypay.me>"
+EMAIL_REPLY_TO="info@infinitypay.me"
+CEO_EMAIL="ceo@infinitypay.me"
+```
+
+`APP_URL` above is already on the new domain — it's just a link target
+inside email bodies, not a Resend-verified sending domain, so it isn't
+gated the same way.
 
 `APP_URL` is distinct from the existing `PUBLIC_APP_URL` — `PUBLIC_APP_URL`
 specifically builds the `/pay/{slug}` payment-link URL
@@ -202,7 +228,7 @@ response's own `public_url` field does — never a placeholder domain. Note:
 this is currently wired into the Merchant Portal's own create endpoint
 (`app/routers/merchant_portal.py::create_my_payment_link`) only, not the
 API-key-authenticated `POST /v1/payment-links` — an API integrator likely
-wants to send their own email, not have Infinity Africa's branded one sent
+wants to send their own email, not have InfinityPay's branded one sent
 on their behalf. A "request collection" (merchant portal wallet-push)
 equivalent was scoped out of this pass: unlike a payment link, a plain
 phone push has no public payment page/URL to email in the first place (see

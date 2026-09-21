@@ -39,7 +39,7 @@ def last_webhook_delivery(client: Client, merchant_id: uuid.UUID) -> dict | None
 def sign_outbound_payload(*, raw_body: bytes, secret: str) -> str:
     """HMAC-SHA256 over the raw JSON body, using the merchant's own
     webhook_secret — the signature a merchant's receiving endpoint should
-    recompute and compare to verify a delivery genuinely came from Infinity Africa.
+    recompute and compare to verify a delivery genuinely came from InfinityPay.
     Same scheme as compute_selcom_signature, just the other direction."""
     return hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
 
@@ -130,7 +130,7 @@ def enqueue_webhook_event(
     per-event payload builders scattered across the codebase — merchant_code
     is identification only (not a secret, not an auth credential), added so
     a merchant's webhook receiver can attribute a delivery without a second
-    API call back to Infinity Africa."""
+    API call back to InfinityPay."""
     merchant = get_by_id(client, "merchants", merchant_id)
     target_url = merchant.get("webhook_url") if merchant else None
 

@@ -17,16 +17,16 @@ describe("ProfileView", () => {
 
   it("shows the admin's email and role as Super Admin", async () => {
     const { ProfileView } = await import("./profile-view");
-    render(<ProfileView email="ceo@infinityafrica.net" fullName="Amina CEO" />);
+    render(<ProfileView email="ceo@infinitypay.me" fullName="Amina CEO" />);
 
-    expect(screen.getByText("ceo@infinityafrica.net")).toBeInTheDocument();
+    expect(screen.getByText("ceo@infinitypay.me")).toBeInTheDocument();
     expect(screen.getByText("Super Admin")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Amina CEO")).toBeInTheDocument();
   });
 
   it("saves a new full name via Supabase Auth on Save Profile", async () => {
     const { ProfileView } = await import("./profile-view");
-    render(<ProfileView email="ceo@infinityafrica.net" fullName="Amina CEO" />);
+    render(<ProfileView email="ceo@infinitypay.me" fullName="Amina CEO" />);
 
     fireEvent.change(screen.getByDisplayValue("Amina CEO"), { target: { value: "Amina Mwakalinga" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Profile" }));
@@ -37,7 +37,7 @@ describe("ProfileView", () => {
 
   it("rejects a blank full name without calling Supabase", async () => {
     const { ProfileView } = await import("./profile-view");
-    render(<ProfileView email="ceo@infinityafrica.net" fullName="Amina CEO" />);
+    render(<ProfileView email="ceo@infinitypay.me" fullName="Amina CEO" />);
 
     fireEvent.change(screen.getByDisplayValue("Amina CEO"), { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "Save Profile" }));

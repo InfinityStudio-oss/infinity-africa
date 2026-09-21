@@ -4,7 +4,7 @@ import { RiskMonitoringTable } from "@/components/super-admin/risk-monitoring-ta
 import { listAdminRiskAlerts } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Risk Monitoring | Infinity Africa Super Admin",
+  title: "Risk Monitoring | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminRiskMonitoringPage() {

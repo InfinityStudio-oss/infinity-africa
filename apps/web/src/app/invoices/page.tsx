@@ -5,7 +5,7 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "Invoices | Infinity Africa",
+  title: "Invoices | InfinityPay",
   description: "Create professional invoices with itemized line items, due dates, and a built-in Pay Now link so customers can settle instantly.",
 };
 
@@ -54,7 +54,7 @@ export default function InvoicesPage() {
               <div className="relative z-10 w-full max-w-sm bg-surface border border-outline-variant/50 rounded-2xl shadow-ambient-lg overflow-hidden">
                 <div className="p-6 border-b border-outline-variant/40">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-primary">Infinity Africa</span>
+                    <span className="text-sm font-bold text-primary">InfinityPay</span>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Sent</span>
                   </div>
                   <p className="text-xs text-on-surface-variant">Invoice #INV-1043 · Due 24 Aug 2026</p>

@@ -300,7 +300,7 @@ export function ApiKeysView() {
     <div className="space-y-8">
       <PageHeader
         title="API Keys"
-        description="Manage sandbox and live keys to integrate Infinity Africa into your app."
+        description="Manage sandbox and live keys to integrate InfinityPay into your app."
         action={
           <SegmentedControl
             options={[
@@ -322,7 +322,7 @@ export function ApiKeysView() {
           <span className="font-semibold">Use secret keys only on your backend.</span> Never expose them in
           frontend or mobile apps — anyone who sees your source code, a browser DevTools request, or an
           unpacked app bundle can read a key embedded there. Have your client app call your own backend, and
-          have your backend call Infinity Africa.
+          have your backend call InfinityPay.
         </p>
       </div>
 
@@ -331,7 +331,7 @@ export function ApiKeysView() {
           <Icon name="block" className="text-[20px] text-error shrink-0 mt-0.5" />
           <p className="text-sm text-on-error-container">
             <span className="font-semibold">API access is currently suspended</span> for this account. Existing and
-            new keys will not authenticate. Contact Infinity Africa support.
+            new keys will not authenticate. Contact InfinityPay support.
           </p>
         </div>
       )}
@@ -569,7 +569,7 @@ export function ApiKeysView() {
           <EmptyState
             icon="vpn_key"
             heading="No API keys yet"
-            body="Generate your first sandbox key to start testing the Infinity Africa API — switch to Live once you're ready to go into production."
+            body="Generate your first sandbox key to start testing the InfinityPay API — switch to Live once you're ready to go into production."
             actionLabel="Generate API Key"
             onAction={() => setFormOpen(true)}
           />
@@ -810,7 +810,7 @@ export function ApiKeysView() {
                               </div>
                               {expandedError && <p className="text-sm text-error">{expandedError}</p>}
                               <p className="text-xs text-on-surface-variant">
-                                New IPs start pending until Infinity Africa approves them.
+                                New IPs start pending until InfinityPay approves them.
                               </p>
                             </>
                           )}
@@ -840,7 +840,7 @@ export function ApiKeysView() {
           ))}
         </div>
         <pre className="bg-on-surface text-primary-fixed text-xs sm:text-sm rounded-lg p-4 overflow-x-auto">
-          <span className="text-white/40">curl</span> https://api.infinityafrica.net/v1/payment-links \{"\n"}
+          <span className="text-white/40">curl</span> https://api.infinitypay.me/v1/payment-links \{"\n"}
           {"  "}-H &quot;Authorization: Bearer inf_live_••••••••&quot; \{"\n"}
           {"  "}-H &quot;Content-Type: application/json&quot;
         </pre>

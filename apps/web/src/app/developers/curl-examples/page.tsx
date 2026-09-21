@@ -18,7 +18,7 @@ export default function CurlExamplesPage() {
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Create a payment link</h2>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinityafrica.net/v1/payment-links \\
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/payment-links \\
   -H "X-API-Key: $INFINITY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: $(uuidgen)" \\
@@ -32,7 +32,7 @@ export default function CurlExamplesPage() {
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Push an STK collection</h2>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinityafrica.net/v1/collections/stk-push \\
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/collections/stk-push \\
   -H "X-API-Key: $INFINITY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: $(uuidgen)" \\
@@ -46,7 +46,7 @@ export default function CurlExamplesPage() {
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Create and send an invoice</h2>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinityafrica.net/v1/invoices \\
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/invoices \\
   -H "X-API-Key: $INFINITY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -60,10 +60,10 @@ export default function CurlExamplesPage() {
   }'
 
 # Grab "id" from the response, then:
-curl -X POST https://api.infinityafrica.net/v1/invoices/INVOICE_ID/send \\
+curl -X POST https://api.infinitypay.me/v1/invoices/INVOICE_ID/send \\
   -H "X-API-Key: $INFINITY_API_KEY"
 
-curl -X POST https://api.infinityafrica.net/v1/invoices/INVOICE_ID/payment-link \\
+curl -X POST https://api.infinitypay.me/v1/invoices/INVOICE_ID/payment-link \\
   -H "X-API-Key: $INFINITY_API_KEY"`}</CodeBlock>
       </section>
 
@@ -75,7 +75,7 @@ curl -X POST https://api.infinityafrica.net/v1/invoices/INVOICE_ID/payment-link 
           for the full status lifecycle and the phone-number format requirement (no leading{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">+</code>).
         </p>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinityafrica.net/v1/disbursements/selcom-pesa \\
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/disbursements/selcom-pesa \\
   -H "X-API-Key: $INFINITY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: $(uuidgen)" \\
@@ -90,7 +90,7 @@ curl -X POST https://api.infinityafrica.net/v1/invoices/INVOICE_ID/payment-link 
 
       <section>
         <h2 className="text-xl font-semibold text-on-surface mb-3">List recent transactions</h2>
-        <CodeBlock language="bash">{`curl "https://api.infinityafrica.net/v1/merchants/5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71/transactions?page=1&page_size=20" \\
+        <CodeBlock language="bash">{`curl "https://api.infinitypay.me/v1/merchants/5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71/transactions?page=1&page_size=20" \\
   -H "X-API-Key: $INFINITY_API_KEY"`}</CodeBlock>
       </section>
 

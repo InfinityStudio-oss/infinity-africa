@@ -34,7 +34,7 @@ _HEADER = [
     "Status",
 ]
 
-# Infinity Africa brand green (see apps/web/src/app/globals.css --color-primary).
+# InfinityPay brand green (see apps/web/src/app/globals.css --color-primary).
 _HEADER_FILL = PatternFill(start_color="04332A", end_color="04332A", fill_type="solid")
 _HEADER_FONT = Font(color="FFFFFFFF", bold=True)
 _MONEY_FORMAT = "#,##0.00"

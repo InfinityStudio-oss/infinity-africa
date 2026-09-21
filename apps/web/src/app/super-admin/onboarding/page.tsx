@@ -7,7 +7,7 @@ import { OnboardingTable } from "@/components/super-admin/onboarding-table";
 import { listOnboardingSubmissions } from "@/lib/onboarding/api";
 
 export const metadata = {
-  title: "Onboarding & Compliance/KYC | Infinity Africa",
+  title: "Onboarding & Compliance/KYC | InfinityPay",
 };
 
 export default async function SuperAdminOnboardingPage() {

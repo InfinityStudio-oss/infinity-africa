@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { ProfileView } from "@/components/super-admin/profile-view";
 
 export const metadata = {
-  title: "Profile | Infinity Africa Admin",
+  title: "Profile | InfinityPay Admin",
 };
 
 export default async function SuperAdminProfilePage() {

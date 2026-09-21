@@ -45,7 +45,7 @@ export function ApiCredentialsTabs({ initialTab }: { initialTab?: string }) {
     <div className="space-y-6">
       <PageHeader
         title="API Credentials"
-        description="Everything for integrating your website, mobile app, or backend with Infinity Africa — in one place."
+        description="Everything for integrating your website, mobile app, or backend with InfinityPay — in one place."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6 items-start">

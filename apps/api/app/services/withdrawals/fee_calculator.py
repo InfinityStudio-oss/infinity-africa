@@ -1,7 +1,7 @@
 """Withdrawal fee calculation (calculate_withdrawal_fee) and
 merchant_pricing_rules precedence lookup (find_pricing_rule).
 
-MVP pricing policy (2026-08-31): Infinity Africa earns fees from
+MVP pricing policy (2026-08-31): InfinityPay earns fees from
 collections only — calculate_withdrawal_fee always returns zero fees now
 (see its own docstring), regardless of what's configured in
 merchant_pricing_rules. That table and find_pricing_rule below are NOT
@@ -101,7 +101,7 @@ def calculate_withdrawal_fee(
     channel: DisbursementMethod | str,
     destination_code: DestinationCode | str,
 ) -> FeeBreakdown:
-    """MVP pricing policy (2026-08-31): Infinity Africa earns fees from
+    """MVP pricing policy (2026-08-31): InfinityPay earns fees from
     collections only — withdrawals never charge the merchant anything,
     regardless of any merchant_pricing_rules row that exists. No
     percentage fee, no flat fee, no processor charge passed through;
@@ -117,7 +117,7 @@ def calculate_withdrawal_fee(
     — "has this merchant been assigned pricing at all", independent of
     what that pricing actually charges) — not this function's concern.
 
-    If Infinity Africa ever needs to track a real provider disbursement
+    If InfinityPay ever needs to track a real provider disbursement
     cost, that must be recorded as an internal platform cost (a separate
     field/table), never deducted from what the merchant receives —
     intentionally not built here; nothing today reads merchant_pricing_rules

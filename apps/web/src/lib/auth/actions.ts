@@ -35,7 +35,7 @@ function isEmailNotConfirmed(error: unknown): boolean {
  * the confirmation link in their email. Must be an allow-listed redirect
  * URL in the Supabase dashboard (Auth > URL Configuration) — see
  * docs/supabase-auth-settings.md. Prefers the explicit NEXT_PUBLIC_SITE_URL
- * (set to https://infinityafrica.net in production) and falls back to the
+ * (set to https://infinitypay.me in production) and falls back to the
  * request's own forwarded host so local dev works with no extra config.
  */
 async function authCallbackUrl(next: string): Promise<string> {
@@ -92,9 +92,9 @@ export async function resendVerificationAction(_prevState: FormState, formData: 
 const VALID_SERVICES = new Set<string>(Object.values(ServiceNeeded));
 
 const SIGNUP_SUCCESS_VERIFY =
-  "Account created. Please verify your email, then wait for Infinity Africa approval.";
+  "Account created. Please verify your email, then wait for InfinityPay approval.";
 const SIGNUP_SUCCESS_NO_VERIFY =
-  "Account created. Your business details have been submitted for review. Infinity Africa will contact you if " +
+  "Account created. Your business details have been submitted for review. InfinityPay will contact you if " +
   "additional KYC documents are needed.";
 
 /**
@@ -214,7 +214,7 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
     }
     return {
       errors: {},
-      formError: "Couldn't reach Infinity Africa. Check your connection and try again.",
+      formError: "Couldn't reach InfinityPay. Check your connection and try again.",
       values,
     };
   }

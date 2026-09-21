@@ -1,5 +1,5 @@
 """Pay by Link: a merchant's permanent public checkout page
-(/pay/{slug}) — e.g. https://infinityafrica.net/pay/paul-masanja — that a
+(/pay/{slug}) — e.g. https://infinitypay.me/pay/paul-masanja — that a
 merchant shares once and reuses forever (WhatsApp, Instagram, a poster
 QR, ...), distinct from payment_links' one-off generated/shareable links
 (a fixed amount, a random 128-bit public_slug, created per-transaction).
@@ -32,7 +32,7 @@ _SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MIN_SLUG_LENGTH = 3
 MAX_SLUG_LENGTH = 60
 
-# Path segments already meaningful elsewhere on infinityafrica.net (or
+# Path segments already meaningful elsewhere on infinitypay.me (or
 # that would be confusing/risky as a merchant's own permanent public
 # URL) — checked before a slug is ever offered as a default or accepted
 # from a merchant's own edit. Deliberately a plain Python set, not a DB

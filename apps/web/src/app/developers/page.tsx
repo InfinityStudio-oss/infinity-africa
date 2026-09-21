@@ -24,7 +24,7 @@ export default function DocsOverviewPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">REST API Overview</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        The Infinity Africa API lets you accept mobile money collections, generate payment links and invoices, and send
+        The InfinityPay API lets you accept mobile money collections, generate payment links and invoices, and send
         disbursements — from a website, a mobile app, an ecommerce platform, or your own backend. It&apos;s a
         predictable, versioned REST API: JSON in, JSON out, one response shape everywhere.
       </p>
@@ -34,8 +34,8 @@ export default function DocsOverviewPage() {
         <p className="text-sm text-on-surface-variant mb-3">
           Every endpoint in these docs is relative to your environment&apos;s base URL:
         </p>
-        <CodeBlock language="text">{`Production   https://api.infinityafrica.net
-Sandbox      https://sandbox.infinityafrica.net
+        <CodeBlock language="text">{`Production   https://api.infinitypay.me
+Sandbox      https://sandbox.infinitypay.me
 Local dev    http://localhost:8000`}</CodeBlock>
       </section>
 
@@ -143,7 +143,7 @@ Local dev    http://localhost:8000`}</CodeBlock>
         <h2 className="text-xl font-semibold text-on-surface mb-3">Who this API is for</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed">
           The same REST API powers every kind of integration — a checkout flow on a website, a native mobile app, an
-          ecommerce plugin, or an internal web app calling Infinity Africa from your own backend. There&apos;s no
+          ecommerce plugin, or an internal web app calling InfinityPay from your own backend. There&apos;s no
           platform-specific SDK required: any language or framework that can make an HTTPS request and parse JSON can
           integrate. See{" "}
           <Link href="/developers/curl-examples" className="text-primary font-semibold hover:underline">

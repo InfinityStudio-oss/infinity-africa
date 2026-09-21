@@ -190,8 +190,8 @@ export function mockSupportTickets(): SupportTicketRow[] {
 
 export function mockAdminTeam(): AdminTeamMember[] {
   return [
-    { id: id("adm"), name: "Admin User", email: "admin@infinityafrica.net", role: "Super Admin", status: "active" },
-    { id: id("adm"), name: "David Komba", email: "david.komba@infinityafrica.net", role: "Operations Admin", status: "active" },
-    { id: id("adm"), name: "Rehema Ally", email: "rehema.ally@infinityafrica.net", role: "Support Admin", status: "active" },
+    { id: id("adm"), name: "Admin User", email: "admin@infinitypay.me", role: "Super Admin", status: "active" },
+    { id: id("adm"), name: "David Komba", email: "david.komba@infinitypay.me", role: "Operations Admin", status: "active" },
+    { id: id("adm"), name: "Rehema Ally", email: "rehema.ally@infinitypay.me", role: "Support Admin", status: "active" },
   ];
 }

@@ -34,7 +34,7 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("MOCK_PROVIDER_FAILURE_RATE", "0")
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
     get_selcom_business_client.cache_clear()
     yield
@@ -123,7 +123,7 @@ def test_ceo_email_sent_when_merchant_requests_withdrawal(fake_client, fake_rese
     _request_withdrawal(merchant_id, admin_id, "50000.00")
 
     assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["to"] == ["ceo@infinityafrica.net"]
+    assert fake_resend.calls[0]["to"] == ["ceo@infinitypay.me"]
     assert fake_resend.calls[0]["subject"] == "New withdrawal request from Masanja Traders"
     assert "Masanja Traders" in fake_resend.calls[0]["html"]
 
@@ -161,7 +161,7 @@ def test_withdrawal_request_email_delivery_is_logged(fake_client, fake_resend):
     request_deliveries = [d for d in deliveries if d["email_type"] == "withdrawal_request_notification"]
     assert len(request_deliveries) == 1
     assert request_deliveries[0]["status"] == "sent"
-    assert request_deliveries[0]["recipient_email"] == "ceo@infinityafrica.net"
+    assert request_deliveries[0]["recipient_email"] == "ceo@infinitypay.me"
     assert request_deliveries[0]["related_resource_id"] == body["id"]
 
 
@@ -195,7 +195,7 @@ def test_merchant_email_sent_once_withdrawal_succeeds(fake_client, fake_resend):
     assert response.json()["data"]["status"] == "SUCCESS"
     assert len(fake_resend.calls) == 1
     assert fake_resend.calls[0]["to"] == ["owner@masanjatraders.co.tz"]
-    assert fake_resend.calls[0]["subject"] == "Your Infinity Africa withdrawal is successful"
+    assert fake_resend.calls[0]["subject"] == "Your InfinityPay withdrawal is successful"
 
 
 def test_no_success_email_while_still_pending_approval(fake_client, fake_resend):

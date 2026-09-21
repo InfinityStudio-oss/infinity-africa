@@ -184,7 +184,7 @@ def test_approval_sends_a_welcome_email(fake_client, fake_resend):
 
     assert len(fake_resend.calls) == 1
     assert fake_resend.calls[0]["to"] == ["user@example.com"]
-    assert fake_resend.calls[0]["subject"] == "Your Infinity Africa account has been approved"
+    assert fake_resend.calls[0]["subject"] == "Your InfinityPay account has been approved"
     html = fake_resend.calls[0]["html"]
     assert "Kilimanjaro Fresh Produce" in html
     assert "Request collections" in html
@@ -215,7 +215,7 @@ def test_welcome_email_never_goes_to_ceo(fake_client, fake_resend, monkeypatch):
     """Regression test for the exact live bug this was reported against:
     the welcome/approval email must go to the merchant's own contact
     email, never to CEO_EMAIL, even when CEO_EMAIL is configured."""
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
     submitted = _submit_onboarding(uuid.uuid4())
@@ -230,10 +230,10 @@ def test_welcome_email_never_goes_to_ceo(fake_client, fake_resend, monkeypatch):
     response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
     assert response.status_code == 200, response.text
 
-    welcome_calls = [c for c in fake_resend.calls if c["subject"] == "Your Infinity Africa account has been approved"]
+    welcome_calls = [c for c in fake_resend.calls if c["subject"] == "Your InfinityPay account has been approved"]
     assert len(welcome_calls) == 1
     assert welcome_calls[0]["to"] == ["user@example.com"]
-    assert welcome_calls[0]["to"] != ["ceo@infinityafrica.net"]
+    assert welcome_calls[0]["to"] != ["ceo@infinitypay.me"]
 
 
 def test_welcome_email_reply_to_is_info_email(fake_client, fake_resend):
@@ -248,7 +248,7 @@ def test_welcome_email_reply_to_is_info_email(fake_client, fake_resend):
 
     client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
 
-    welcome_call = next(c for c in fake_resend.calls if c["subject"] == "Your Infinity Africa account has been approved")
+    welcome_call = next(c for c in fake_resend.calls if c["subject"] == "Your InfinityPay account has been approved")
     assert welcome_call["reply_to"] == "info@infinityafrica.net"
 
 
@@ -280,7 +280,7 @@ def test_missing_merchant_email_does_not_fall_back_to_ceo(fake_client, fake_rese
     email at CEO_EMAIL instead — no email should be sent at all, approval
     must still succeed, and the gap must be logged and surfaced to the
     Super Admin."""
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
     submitted = _submit_onboarding(uuid.uuid4())
@@ -318,7 +318,7 @@ def test_missing_merchant_email_does_not_fall_back_to_ceo(fake_client, fake_rese
     assert merchant["status"] == "active"
 
     # No welcome email sent anywhere — in particular, never to CEO_EMAIL.
-    welcome_calls = [c for c in fake_resend.calls if c["subject"] == "Your Infinity Africa account has been approved"]
+    welcome_calls = [c for c in fake_resend.calls if c["subject"] == "Your InfinityPay account has been approved"]
     assert welcome_calls == []
     assert not any(d["email_type"] == "merchant_welcome" for d in fake_client.table("email_deliveries")._table.rows)
 
@@ -337,20 +337,20 @@ def test_new_merchant_signup_notification_goes_to_ceo(fake_client, fake_resend, 
     distinct notification from the merchant welcome email — this one goes
     to CEO_EMAIL, fired at submission time, not approval time, with subject
     exactly 'New merchant signup submitted'."""
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
     _submit_onboarding(uuid.uuid4())
 
     signup_calls = [c for c in fake_resend.calls if c["subject"] == "New merchant signup submitted"]
     assert len(signup_calls) == 1
-    assert signup_calls[0]["to"] == ["ceo@infinityafrica.net"]
+    assert signup_calls[0]["to"] == ["ceo@infinitypay.me"]
     assert "Kilimanjaro Fresh Produce" in signup_calls[0]["html"]
 
     delivery = next(
         d for d in fake_client.table("email_deliveries")._table.rows if d["email_type"] == "merchant_signup_notification"
     )
-    assert delivery["recipient_email"] == "ceo@infinityafrica.net"
+    assert delivery["recipient_email"] == "ceo@infinitypay.me"
     assert delivery["merchant_id"] is not None
     assert delivery["related_resource_type"] == "merchant"
     assert delivery["status"] == "sent"
@@ -361,7 +361,7 @@ def test_signup_notification_includes_merchant_business_and_contact_details(fake
     """Every field the brief asks for: business name, contact person name,
     merchant email, phone, business type/category, business location,
     submitted date, merchant ID, and status."""
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
     user_id = uuid.uuid4()
@@ -401,7 +401,7 @@ def test_signup_submission_succeeds_even_when_ceo_notification_delivery_fails(fa
     """A Resend failure on the internal CEO notification must never fail
     the merchant's own signup submission — the merchant record is already
     saved by the time this email is even attempted."""
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
     fake_resend.should_fail = True
 

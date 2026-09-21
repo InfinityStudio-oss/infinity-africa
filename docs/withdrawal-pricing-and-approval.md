@@ -1,7 +1,7 @@
 # Withdrawal Pricing & Super Admin Approval
 
 > **MVP pricing policy (2026-08-31): withdrawals no longer charge a
-> merchant fee.** Infinity Africa earns fees from merchant collections
+> merchant fee.** InfinityPay earns fees from merchant collections
 > only — see [`docs/collection-and-withdrawal-pricing.md`](./collection-and-withdrawal-pricing.md)
 > for the current policy. `calculate_withdrawal_fee`
 > (`app/services/withdrawals/fee_calculator.py`) always returns zero
@@ -185,7 +185,7 @@ All endpoints are `require_super_admin`-gated (`app/routers/admin_pricing.py`):
 
 ```bash
 # Create a negotiated rate for one merchant
-curl -X POST https://api.infinityafrica.net/v1/admin/merchants/{merchant_id}/pricing-rules \
+curl -X POST https://api.infinitypay.me/v1/admin/merchants/{merchant_id}/pricing-rules \
   -H "Authorization: Bearer <super-admin-jwt>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -200,21 +200,21 @@ curl -X POST https://api.infinityafrica.net/v1/admin/merchants/{merchant_id}/pri
   }'
 
 # List a merchant's rules
-curl https://api.infinityafrica.net/v1/admin/merchants/{merchant_id}/pricing-rules \
+curl https://api.infinitypay.me/v1/admin/merchants/{merchant_id}/pricing-rules \
   -H "Authorization: Bearer <super-admin-jwt>"
 
 # Edit a rule
-curl -X PATCH https://api.infinityafrica.net/v1/admin/pricing-rules/{pricing_rule_id} \
+curl -X PATCH https://api.infinitypay.me/v1/admin/pricing-rules/{pricing_rule_id} \
   -H "Authorization: Bearer <super-admin-jwt>" \
   -H "Content-Type: application/json" \
   -d '{"flat_fee": "750"}'
 
 # Deactivate a rule (soft-disable, keeps history)
-curl -X POST https://api.infinityafrica.net/v1/admin/pricing-rules/{pricing_rule_id}/deactivate \
+curl -X POST https://api.infinitypay.me/v1/admin/pricing-rules/{pricing_rule_id}/deactivate \
   -H "Authorization: Bearer <super-admin-jwt>"
 
 # Platform fallback rule (merchant_id null) — applies when a merchant has none of their own
-curl -X POST https://api.infinityafrica.net/v1/admin/pricing-rules/platform-fallback \
+curl -X POST https://api.infinitypay.me/v1/admin/pricing-rules/platform-fallback \
   -H "Authorization: Bearer <super-admin-jwt>" \
   -H "Content-Type: application/json" \
   -d '{"flat_fee": "1000", "label": "Platform default"}'

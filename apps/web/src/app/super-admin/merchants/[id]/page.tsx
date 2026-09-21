@@ -30,7 +30,7 @@ import { getOnboardingSubmission } from "@/lib/onboarding/api";
 import { merchantStatusBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Merchant Detail | Infinity Africa Super Admin",
+  title: "Merchant Detail | InfinityPay Super Admin",
 };
 
 function SectionCard({ title, viewAllHref, children }: { title: string; viewAllHref?: string; children: React.ReactNode }) {

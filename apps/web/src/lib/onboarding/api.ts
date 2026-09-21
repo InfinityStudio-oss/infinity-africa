@@ -125,7 +125,7 @@ export async function submitMerchantSignup(
     // No Content-Type header — the runtime sets the multipart boundary.
     res = await fetch(`${API_BASE}/v1/onboarding/signup`, { method: "POST", body: fd });
   } catch {
-    throw new OnboardingApiError("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new OnboardingApiError("Couldn't reach InfinityPay. Check your connection and try again.");
   }
   return parseEnvelope<MerchantSignupResult>(res);
 }
@@ -141,7 +141,7 @@ export async function submitOnboardingAccount(
       body: JSON.stringify(input),
     });
   } catch {
-    throw new OnboardingApiError("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new OnboardingApiError("Couldn't reach InfinityPay. Check your connection and try again.");
   }
   return parseEnvelope<OnboardingMerchantAccountResult>(res);
 }
@@ -159,7 +159,7 @@ export async function uploadOnboardingDocument(documentType: DocumentType, file:
       body: formData,
     });
   } catch {
-    throw new OnboardingApiError("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new OnboardingApiError("Couldn't reach InfinityPay. Check your connection and try again.");
   }
   return parseEnvelope<OnboardingDocument>(res);
 }

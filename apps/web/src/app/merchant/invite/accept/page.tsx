@@ -2,7 +2,7 @@ import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { AcceptInviteForm } from "@/components/auth/accept-invite-form";
 
 export const metadata = {
-  title: "Accept Invitation | Infinity Africa",
+  title: "Accept Invitation | InfinityPay",
 };
 
 /**
@@ -20,7 +20,7 @@ export default function MerchantInviteAcceptPage() {
     <AuthSplitLayout>
       <h1 className="text-2xl font-bold text-on-surface">Set your password</h1>
       <p className="mt-2 text-sm text-on-surface-variant">
-        Welcome to Infinity Africa. Choose a password to finish setting up your account.
+        Welcome to InfinityPay. Choose a password to finish setting up your account.
       </p>
       <AcceptInviteForm />
     </AuthSplitLayout>

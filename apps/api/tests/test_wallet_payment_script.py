@@ -44,9 +44,9 @@ def script(monkeypatch):
 
 _BASE_ARGS = [
     "--buyer-email",
-    "test@infinityafrica.net",
+    "test@infinitypay.me",
     "--buyer-name",
-    "Infinity Africa Test Customer",
+    "InfinityPay Test Customer",
     "--buyer-phone",
     "255747730270",
     "--amount",
@@ -183,9 +183,9 @@ async def test_buyer_phone_is_normalized_before_reaching_selcom(script, monkeypa
 
     args = [
         "--buyer-email",
-        "test@infinityafrica.net",
+        "test@infinitypay.me",
         "--buyer-name",
-        "Infinity Africa Test Customer",
+        "InfinityPay Test Customer",
         "--buyer-phone",
         "+255 747 730 270",
         "--amount",
@@ -205,9 +205,9 @@ async def test_invalid_phone_refuses_before_constructing_a_client(script, monkey
 
     args = [
         "--buyer-email",
-        "test@infinityafrica.net",
+        "test@infinitypay.me",
         "--buyer-name",
-        "Infinity Africa Test Customer",
+        "InfinityPay Test Customer",
         "--buyer-phone",
         "not-a-phone-number",
         "--amount",

@@ -8,8 +8,8 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "API Docs | Infinity Africa",
-  description: "Developer documentation for the Infinity Africa REST API — authentication, Collections, Payment Links, Invoices, webhooks, transaction status, error codes, and code examples.",
+  title: "API Docs | InfinityPay",
+  description: "Developer documentation for the InfinityPay REST API — authentication, Collections, Payment Links, Invoices, webhooks, transaction status, error codes, and code examples.",
 };
 
 const DOC_LINKS = [
@@ -30,7 +30,7 @@ const DOC_LINKS = [
 const INTEGRATORS = [
   { icon: "language", title: "Websites", description: "Drop a payment link or invoice checkout into any website — no SDK required." },
   { icon: "smartphone", title: "Mobile Apps", description: "Call the REST API directly from iOS or Android apps to collect payments and manage invoices." },
-  { icon: "storefront", title: "Ecommerce Platforms", description: "Wire Infinity Africa into your storefront's checkout flow for mobile money and cards." },
+  { icon: "storefront", title: "Ecommerce Platforms", description: "Wire InfinityPay into your storefront's checkout flow for mobile money and cards." },
   { icon: "web", title: "Web Apps", description: "Integrate collections, payment links, and invoices into any internal or customer-facing web app." },
 ];
 
@@ -44,7 +44,7 @@ export default function ApiDocsPage() {
             <div className="min-w-0">
               <span className="text-xs font-semibold text-primary-container uppercase tracking-wide">API Docs</span>
               <h1 className="text-2xl md:text-4xl font-bold mt-2 mb-4 text-on-surface tracking-tight">
-                Build on Infinity Africa&apos;s payment API
+                Build on InfinityPay&apos;s payment API
               </h1>
               <p className="text-base text-on-surface-variant max-w-lg mb-6">
                 RESTful APIs, signed webhooks, and clear documentation built for modern development teams — go from
@@ -102,7 +102,7 @@ export default function ApiDocsPage() {
 
         <section className="py-16 px-4 md:px-10 bg-surface-container-lowest">
           <div className="max-w-[1280px] mx-auto">
-            <SectionHeading eyebrow="Who Integrates" title="Built for However You Build" description="Infinity Africa's API works anywhere your business already lives." />
+            <SectionHeading eyebrow="Who Integrates" title="Built for However You Build" description="InfinityPay's API works anywhere your business already lives." />
             <div className="mt-10">
               <FeatureGrid columns={4}>
                 {INTEGRATORS.map((item) => (

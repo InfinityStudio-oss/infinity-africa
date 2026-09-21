@@ -8,7 +8,7 @@ import { incidentStatusBadge } from "@/lib/admin/status-tones";
 import type { ProviderHealth } from "@/lib/admin/types";
 
 export const metadata = {
-  title: "Provider Status | Infinity Africa Super Admin",
+  title: "Provider Status | InfinityPay Super Admin",
 };
 
 const STATUS_META: Record<ProviderHealth["status"], { label: string; color: string; textClass: string; animate: boolean; extraBorder?: string }> = {
@@ -22,7 +22,7 @@ export default async function ProviderStatusPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Provider Status" description="Live uptime and health for every payment network Infinity Africa connects to." />
+      <PageHeader title="Provider Status" description="Live uptime and health for every payment network InfinityPay connects to." />
 
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {providers.map((provider) => {

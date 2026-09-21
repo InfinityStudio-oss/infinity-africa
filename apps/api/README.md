@@ -1,4 +1,4 @@
-# apps/api — Infinity Africa backend
+# apps/api — InfinityPay backend
 
 FastAPI backend, deployed on Railway.
 

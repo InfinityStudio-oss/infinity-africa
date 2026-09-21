@@ -3,7 +3,7 @@ import { Icon } from "@/components/portal/icon";
 import { PageHeader } from "@/components/portal/page-header";
 
 export const metadata = {
-  title: "Pricing | Infinity Africa Merchant Portal",
+  title: "Pricing | InfinityPay Merchant Portal",
 };
 
 const FEE_SCHEDULE: Array<{ type: string; fee: string; notes: string; free?: boolean }> = [

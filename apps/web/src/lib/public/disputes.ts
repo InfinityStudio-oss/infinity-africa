@@ -60,7 +60,7 @@ export async function submitDisputeReport(input: DisputeReportInput): Promise<Di
       body: formData,
     });
   } catch {
-    throw new DisputeReportError("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new DisputeReportError("Couldn't reach InfinityPay. Check your connection and try again.");
   }
 
   const body: ApiEnvelope<DisputeReportResult> = await res.json();

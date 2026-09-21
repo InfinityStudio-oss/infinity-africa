@@ -1,6 +1,13 @@
 # MVP Launch Checklist
 
-Consolidated go-live checklist for opening Infinity Africa to selected real
+> **Product/domain migration**: platform brand/domain migrated from
+> Infinity Africa / infinityafrica.net to **InfinityPay** /
+> **infinitypay.me**. Keep the old domain's redirect active during the
+> transition — don't remove `infinityafrica.net` from `CORS_ORIGINS` or the
+> Supabase redirect allow-list until it's confirmed no real traffic/links
+> still depend on it (see §2 and §8 below, and `docs/supabase-auth-settings.md`).
+
+Consolidated go-live checklist for opening InfinityPay to selected real
 merchants with real collections and real withdrawals. This is the
 platform-wide checklist; it doesn't replace the subsystem-specific docs it
 links to — those still have the deeper mechanics and incident history.
@@ -363,7 +370,7 @@ set on every response:
 
 The API deliberately omits COOP/CORP: this app's own frontend calls it
 cross-origin over CORS by design (a different origin than
-`infinityafrica.net`) — `Cross-Origin-Resource-Policy: same-origin` on
+`infinitypay.me`) — `Cross-Origin-Resource-Policy: same-origin` on
 the API would silently block those legitimate fetch() calls even though
 CORS explicitly permits them. See that middleware's own docstring.
 
@@ -376,19 +383,24 @@ inline scripts to actually defend against. Documented in
 `next.config.ts` itself, not just here.
 
 **Google Search Console checklist**:
-- [ ] Verify `https://infinityafrica.net` as a property (DNS TXT record
+- [ ] Verify `https://infinitypay.me` as a property (DNS TXT record
       or the HTML file Search Console gives you — nothing in this repo
-      needs to change for that step itself).
-- [ ] Submit `https://infinityafrica.net/sitemap.xml` (see `app/sitemap.ts`).
-- [ ] Confirm `https://infinityafrica.net/robots.txt` (see `app/robots.ts`)
+      needs to change for that step itself). Keep the existing
+      `infinityafrica.net` property too until the redirect migration is
+      confirmed complete.
+- [ ] Submit `https://infinitypay.me/sitemap.xml` (see `app/sitemap.ts`).
+- [ ] Confirm `https://infinitypay.me/robots.txt` (see `app/robots.ts`)
       shows the expected allow/disallow rules once deployed.
 - [ ] Request indexing for `/` after the first deploy of this pass — the
       title/description/canonical all changed.
 
-**SEO metadata checklist** (`app/layout.tsx`):
-- [x] Title: "Infinity Africa | Payment Infrastructure for African Merchants"
+**SEO metadata checklist** (`app/layout.tsx`) — as of the 2026-08-30 pass,
+since superseded by the brand/domain migration to InfinityPay/
+infinitypay.me (re-verify each item below against the new values):
+- [x] Title: ~~"Infinity Africa | Payment Infrastructure for African Merchants"~~
+      now "InfinityPay | Payment Infrastructure for African Merchants"
 - [x] Description matches the brief's suggested copy
-- [x] `alternates.canonical` = `https://infinityafrica.net/`
+- [x] `alternates.canonical` = ~~`https://infinityafrica.net/`~~ now `https://infinitypay.me/`
 - [x] Open Graph title/description/url/image/type/siteName all set
 - [x] Twitter card: `summary_large_image`, title, description, image
 
@@ -402,14 +414,14 @@ inline scripts to actually defend against. Documented in
 - [x] Generated via `apps/web/scripts/generate-og-image.mjs` (Next's own
       `next/og` `ImageResponse` renderer, run standalone under plain
       Node — re-run this script, don't hand-edit the PNG, whenever the
-      brand mark or copy changes) → `apps/web/public/og/infinity-africa-og-v2.png`,
-      1200×630.
-- [x] Referenced by absolute URL (`https://infinityafrica.net/og/infinity-africa-og-v2.png`)
+      brand mark or copy changes) → now `apps/web/public/og/infinitypay-og-v1.png`
+      (supersedes `infinity-africa-og-v2.png`), 1200×630.
+- [x] Referenced by absolute URL (`https://infinitypay.me/og/infinitypay-og-v1.png`)
       in both `openGraph.images` and `twitter.images`.
-- [x] Versioned filename (`-v2`, not a re-save of the same old filename)
-      specifically so social platforms' own link-preview caches — keyed
-      by URL — pick up the new image on next crawl instead of continuing
-      to serve a cached copy of the same URL indefinitely.
+- [x] Versioned filename (`-v1` under the new brand, not a re-save of the
+      old filename) specifically so social platforms' own link-preview
+      caches — keyed by URL — pick up the new image on next crawl instead
+      of continuing to serve a cached copy of the same URL indefinitely.
 - [x] Favicon (`app/favicon.ico`) and app icons (`app/icon.png`,
       `app/apple-icon.png`) already used the current official mark —
       confirmed, not changed.
@@ -419,21 +431,25 @@ a link's preview per-URL for some time after the first share, independent
 of how fast the underlying page/metadata changes. If a preview still
 shows old/blank content after this deploy:
 - Share a version of the link with a harmless query string appended
-  (e.g. `https://infinityafrica.net/?v=2`) to force a fresh crawl — the
+  (e.g. `https://infinitypay.me/?v=2`) to force a fresh crawl — the
   page renders identically regardless of the query string.
 - Or wait; Discord's cache does expire on its own (observed: hours, not
   days, but not instant).
 - Verify the image itself is being served correctly independent of any
-  crawler cache by opening `https://infinityafrica.net/og/infinity-africa-og-v2.png`
+  crawler cache by opening `https://infinitypay.me/og/infinitypay-og-v1.png`
   directly in a browser.
 
 **Production CORS checklist** — already correct before this pass, just
 confirmed: `app/config/settings.py`'s `_reject_wildcard_cors_outside_development`
 validator refuses `CORS_ORIGINS` containing `"*"` whenever
 `ENVIRONMENT != "development"` (see `tests/test_settings.py`), and Railway's
-live `CORS_ORIGINS` is `https://infinityafrica.net,https://www.infinityafrica.net`
+live `CORS_ORIGINS` was `https://infinityafrica.net,https://www.infinityafrica.net`
 (§ "CORS blocker resolved", verified live 2026-08-19). No wildcard,
-nothing else, in production.
+nothing else, in production. **Action required for the brand/domain
+migration**: update Railway's `CORS_ORIGINS` to include the new domain —
+`https://infinitypay.me,https://www.infinitypay.me,https://infinityafrica.net,https://www.infinityafrica.net`
+— keeping the old domain listed until its redirect is confirmed and no
+real traffic still sends that `Origin` header.
 
 **Private route noindex checklist** — every private/authenticated/
 transaction-specific route now carries `robots: { index: false, follow:

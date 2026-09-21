@@ -7,7 +7,7 @@ import { listAdminWebhookEvents } from "@/lib/admin/live-api";
 import { adminWebhookEventBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Webhooks | Infinity Africa Super Admin",
+  title: "Webhooks | InfinityPay Super Admin",
 };
 
 // Set once whenever a webhook lands with no matching collection for its

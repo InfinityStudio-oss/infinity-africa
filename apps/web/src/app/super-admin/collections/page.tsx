@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/format";
 import { getAdminOverview, listAdminCollections, listAdminMerchants } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Collections | Infinity Africa Super Admin",
+  title: "Collections | InfinityPay Super Admin",
 };
 
 interface SuperAdminCollectionsPageProps {

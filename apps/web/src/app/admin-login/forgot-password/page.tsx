@@ -4,7 +4,7 @@ import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata = {
-  title: "Forgot Password | Infinity Africa Admin",
+  title: "Forgot Password | InfinityPay Admin",
 };
 
 export default function AdminForgotPasswordPage() {

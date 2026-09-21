@@ -22,7 +22,7 @@ from app.services.crud import get_by_id
 
 _PENDING_MESSAGE = (
     "Your merchant account is still pending verification. You'll be able to collect "
-    "payments and manage credentials once an Infinity Africa reviewer approves your account."
+    "payments and manage credentials once an InfinityPay reviewer approves your account."
 )
 
 

@@ -103,8 +103,8 @@ _FUTURE_EXPIRY_SECONDS = 3600  # 1 hour from now, if `expiry` turns out to
 
 
 def _build_variants(webhook_url: str | None) -> list[tuple[str, dict, str]]:
-    redirect_url = "https://infinityafrica.net/pay/diagnostic-success"
-    cancel_url = "https://infinityafrica.net/pay/diagnostic-cancel"
+    redirect_url = "https://infinitypay.me/pay/diagnostic-success"
+    cancel_url = "https://infinitypay.me/pay/diagnostic-cancel"
     return [
         (
             "bare-minimum",

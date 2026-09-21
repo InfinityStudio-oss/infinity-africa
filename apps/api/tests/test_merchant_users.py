@@ -260,7 +260,7 @@ def test_invite_uses_resend_branded_email_not_supabase_default(fake_client, monk
     )
     assert response.status_code == 201, response.text
     assert captured["params"]["to"] == ["david@example.com"]
-    assert captured["params"]["subject"] == "You're invited to Infinity Africa Merchant Portal"
+    assert captured["params"]["subject"] == "You're invited to InfinityPay Merchant Portal"
     assert "info@infinityafrica.net" in captured["params"]["html"]
 
 
@@ -321,7 +321,7 @@ def test_resend_invite_sends_another_branded_email(fake_client, monkeypatch):
     response = client.post(f"/v1/merchant/users/{row_id}/resend-invite", headers=auth_headers(admin_id))
     assert response.status_code == 200, response.text
     assert captured["params"]["to"] == ["staff@example.com"]
-    assert captured["params"]["subject"] == "You're invited to Infinity Africa Merchant Portal"
+    assert captured["params"]["subject"] == "You're invited to InfinityPay Merchant Portal"
 
 
 def test_staff_cannot_resend_an_invite(fake_client):

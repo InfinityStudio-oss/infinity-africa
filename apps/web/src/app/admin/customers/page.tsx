@@ -6,7 +6,7 @@ import { formatCurrency, formatDateTime } from "@/lib/format";
 import { listAdminCustomers } from "@/lib/admin/api";
 
 export const metadata = {
-  title: "Customers | Infinity Africa Super Admin",
+  title: "Customers | InfinityPay Super Admin",
 };
 
 export default async function AdminCustomersPage() {
@@ -14,7 +14,7 @@ export default async function AdminCustomersPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Customers" description="Everyone who has paid an Infinity Africa merchant, across the whole platform." />
+      <PageHeader title="Customers" description="Everyone who has paid an InfinityPay merchant, across the whole platform." />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <AdminKpiCard icon="group" label="Total Customers" value="18,204" />

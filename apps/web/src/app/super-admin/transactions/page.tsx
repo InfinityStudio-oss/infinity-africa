@@ -5,7 +5,7 @@ import { TransactionsTable } from "@/components/super-admin/transactions-table";
 import { listAdminMerchants, listAdminTransactions } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Transactions | Infinity Africa Super Admin",
+  title: "Transactions | InfinityPay Super Admin",
 };
 
 interface SuperAdminTransactionsPageProps {

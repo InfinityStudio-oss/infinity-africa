@@ -2,7 +2,7 @@ import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 
 export const metadata = {
-  title: "Reset Password | Infinity Africa Admin",
+  title: "Reset Password | InfinityPay Admin",
 };
 
 export default function AdminResetPasswordPage() {

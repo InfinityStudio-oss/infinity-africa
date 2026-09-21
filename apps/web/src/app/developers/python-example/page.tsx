@@ -30,7 +30,7 @@ export default function PythonExamplePage() {
         <CodeBlock language="python — infinity_client.py">{`import os
 import requests
 
-BASE_URL = os.environ.get("INFINITY_BASE_URL", "https://api.infinityafrica.net")
+BASE_URL = os.environ.get("INFINITY_BASE_URL", "https://api.infinitypay.me")
 API_KEY = os.environ["INFINITY_API_KEY"]
 
 
@@ -83,7 +83,7 @@ try:
     )
     print(collection["status"])  # "processing" — resolves via webhook
 except InfinityAPIError as exc:
-    print(f"Infinity Africa error [{exc.code}]: {exc}")`}</CodeBlock>
+    print(f"InfinityPay error [{exc.code}]: {exc}")`}</CodeBlock>
       </section>
 
       <section>

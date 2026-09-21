@@ -15,7 +15,7 @@ in apps/api/.env for a local run:
     SELCOM_CHECKOUT_VENDOR=...
 
 **Important, unlike the Business Disbursement API's equivalent script**:
-Infinity Africa has no Selcom Checkout sandbox at all (confirmed
+InfinityPay has no Selcom Checkout sandbox at all (confirmed
 2026-08-22) — SELCOM_CHECKOUT_BASE_URL is always a real production
 endpoint with real production credentials, and this script always hits
 it. That's acceptable for create-order-minimal specifically because it
@@ -179,7 +179,7 @@ async def _main() -> int:
     settings = get_settings()
 
     print(
-        "Confirmed 2026-08-22: Infinity Africa has no Selcom Checkout sandbox — "
+        "Confirmed 2026-08-22: InfinityPay has no Selcom Checkout sandbox — "
         "SELCOM_CHECKOUT_BASE_URL is a real production endpoint with real production "
         "credentials. This call creates a real order shell on Selcom's live system "
         "(no charge to any customer — create-order-minimal never triggers a push or "

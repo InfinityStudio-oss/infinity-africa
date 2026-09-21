@@ -187,7 +187,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 # See Settings.docs_enabled's own docstring for why these are conditional.
 app = FastAPI(
-    title="Infinity Africa API",
+    title="InfinityPay API",
     description="Payment infrastructure for African merchants — collections, payment links, invoices, and merchant tools.",
     version="0.1.0",
     lifespan=lifespan,

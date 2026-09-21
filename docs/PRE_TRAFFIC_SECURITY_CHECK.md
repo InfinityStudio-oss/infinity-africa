@@ -1,8 +1,17 @@
 # Pre-traffic production security check
 
+> **Brand/domain migration note (added after this check ran)**: the
+> product/domain has since migrated from Infinity Africa /
+> infinityafrica.net to **InfinityPay** / **infinitypay.me**. Everything
+> below is a dated historical record of the 2026-09-09 pass and
+> intentionally still refers to the old brand/domain as it was configured
+> at that time. Keep the old domain's redirect active during the
+> transition — see `docs/MVP_LAUNCH_CHECKLIST.md`.
+
 **Date:** 2026-09-09
-**Scope:** urgent pre/early-traffic safety inspection — Infinity Africa is
-already serving real merchants; this is a verification + light-hardening pass.
+**Scope:** urgent pre/early-traffic safety inspection — Infinity Africa (now
+InfinityPay) is already serving real merchants; this is a verification +
+light-hardening pass.
 **Result:** ✅ safe to continue serving traffic. Two low-severity hardening
 changes made (below). No critical issues. No secrets exposed.
 

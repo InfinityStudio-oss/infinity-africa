@@ -146,10 +146,10 @@ def verify_api_key(
     request: Request,
     raw_key: Annotated[str | None, Depends(_api_key_header)],
 ) -> ApiKeyContext:
-    """Verify the `X-API-Key` header for merchant-to-Infinity Africa server integrations.
+    """Verify the `X-API-Key` header for merchant-to-InfinityPay server integrations.
 
     A separate credential from Supabase Auth — used by a merchant's own
-    backend calling the Infinity Africa API directly, not by apps/web.
+    backend calling the InfinityPay API directly, not by apps/web.
 
     Also enforces the merchant's suspended-API-access kill switch and (for
     `live` keys with ip_whitelist_enabled=true) IP allowlist — see
@@ -316,7 +316,7 @@ def _coalesce_api_key(
 ) -> str | None:
     """API keys can be sent either as `X-API-Key: <key>` or, per the public
     docs' `Authorization: Bearer <INFINITY_API_KEY>` convention, as a bearer
-    token — distinguished from a Supabase Auth JWT by Infinity Africa's own key
+    token — distinguished from a Supabase Auth JWT by InfinityPay's own key
     prefix (JWTs never start with it), so a JWT bearer token is never
     mistaken for an API key and vice versa."""
     if api_key:

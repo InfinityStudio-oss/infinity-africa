@@ -4,7 +4,7 @@ import { formatDateTime } from "@/lib/format";
 import { listAdminAuditLogs } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Audit Logs | Infinity Africa Super Admin",
+  title: "Audit Logs | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminAuditLogsPage() {
@@ -12,7 +12,7 @@ export default async function SuperAdminAuditLogsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Audit Logs" description="Every administrative action taken on the Infinity Africa platform, in order." />
+      <PageHeader title="Audit Logs" description="Every administrative action taken on the InfinityPay platform, in order." />
 
       <Card padded={false}>
         <div className="p-5 pb-3">

@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { UpdatePasswordForm } from "@/components/auth/update-password-form";
 
 export const metadata = {
-  title: "Settings | Infinity Africa Admin",
+  title: "Settings | InfinityPay Admin",
 };
 
 export default async function SuperAdminSettingsPage() {

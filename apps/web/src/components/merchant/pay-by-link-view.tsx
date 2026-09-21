@@ -18,7 +18,7 @@ import { PayByLinkQrCard } from "./pay-by-link-qr-card";
 
 function whatsappShareUrl(link: PayByLink): string {
   return `https://wa.me/?text=${encodeURIComponent(
-    `Pay me securely via Infinity Africa: ${link.public_url}`,
+    `Pay me securely via InfinityPay: ${link.public_url}`,
   )}`;
 }
 
@@ -123,7 +123,7 @@ function CreatePanel({ defaultName, onCreated }: { defaultName: string; onCreate
       <div>
         <h3 className="text-2xl font-semibold text-on-background mb-1">Create your Pay by Link</h3>
         <p className="text-sm text-on-surface-variant">
-          We&apos;ll generate a web address like infinityafrica.net/pay/your-name — you can customize it after creating.
+          We&apos;ll generate a web address like infinitypay.me/pay/your-name — you can customize it after creating.
         </p>
       </div>
       <div>

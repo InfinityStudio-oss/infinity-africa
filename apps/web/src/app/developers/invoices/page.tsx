@@ -102,12 +102,12 @@ export default function InvoicesApiPage() {
     "amount": "320000.00",
     "status": "ACTIVE",
     "public_slug": "PLK-4M18RT",
-    "public_url": "https://pay.infinityafrica.net/link/PLK-4M18RT",
+    "public_url": "https://pay.infinitypay.me/link/PLK-4M18RT",
     "...": "same PaymentLinkResponse shape"
   }
 }`}</CodeBlock>
         <Callout title="Invoice status follows the payment automatically">
-          When that generated link is paid, Infinity Africa credits <code className="font-mono text-xs">amount_paid</code> and
+          When that generated link is paid, InfinityPay credits <code className="font-mono text-xs">amount_paid</code> and
           moves the invoice to <code className="font-mono text-xs">PARTIALLY_PAID</code> or{" "}
           <code className="font-mono text-xs">PAID</code> on its own — you don&apos;t reconcile this by hand. Listen for
           the <code className="font-mono text-xs">invoice.paid</code> webhook to know the moment it happens.

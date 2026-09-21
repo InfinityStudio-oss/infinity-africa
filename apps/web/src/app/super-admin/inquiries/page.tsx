@@ -4,7 +4,7 @@ import { formatDateTime } from "@/lib/format";
 import { listAdminInquiries } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Inquiries | Infinity Africa Super Admin",
+  title: "Inquiries | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminInquiriesPage() {

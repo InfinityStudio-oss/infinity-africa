@@ -24,7 +24,7 @@ export function Header() {
       <div className="flex justify-between items-center px-4 md:px-10 py-4 max-w-[1280px] mx-auto">
         <Link href="/" className="flex items-center gap-1.5">
           <Icon name="all_inclusive" className="text-primary text-[26px]" />
-          <span className="text-xl font-bold tracking-tight text-primary">Infinity Africa</span>
+          <span className="text-xl font-bold tracking-tight text-primary">InfinityPay</span>
         </Link>
         <nav className="hidden lg:flex items-center gap-7">
           {NAV_LINKS.map((link) => {

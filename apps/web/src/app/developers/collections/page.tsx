@@ -101,7 +101,7 @@ export default function CollectionsApiPage() {
     "collection_id": "9b7e2c1a-...",
     "reference": "ORDER-4821",
     "status": "created",
-    "payment_url": "https://infinityafrica.net/pay/8f3a1c2b"
+    "payment_url": "https://infinitypay.me/pay/8f3a1c2b"
   }
 }`}</CodeBlock>
         </div>

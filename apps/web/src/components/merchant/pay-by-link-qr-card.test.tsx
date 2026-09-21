@@ -69,7 +69,7 @@ describe("PayByLinkQrCard", () => {
       <PayByLinkQrCard
         merchantName="Paul Masanja"
         slug="paul-masanja"
-        publicUrl="https://infinityafrica.net/pay/paul-masanja"
+        publicUrl="https://infinitypay.me/pay/paul-masanja"
       />,
     );
 
@@ -89,7 +89,7 @@ describe("PayByLinkQrCard", () => {
       <PayByLinkQrCard
         merchantName="Paul Masanja"
         slug="paul-masanja"
-        publicUrl="https://infinityafrica.net/pay/paul-masanja"
+        publicUrl="https://infinitypay.me/pay/paul-masanja"
       />,
     );
 
@@ -98,13 +98,13 @@ describe("PayByLinkQrCard", () => {
 
     await waitFor(() => expect(saveMock).toHaveBeenCalledWith("pay-by-link-paul-masanja.pdf"));
     expect(toDataURLMock).toHaveBeenCalledWith(
-      "https://infinityafrica.net/pay/paul-masanja",
+      "https://infinitypay.me/pay/paul-masanja",
       expect.objectContaining({ width: expect.any(Number) }),
     );
     // The QR image and the instruction text both make it into the PDF —
     // not just a bare "it didn't crash" check.
     expect(addImageMock).toHaveBeenCalled();
-    expect(textMock.mock.calls.some((call) => call[0] === "https://infinityafrica.net/pay/paul-masanja")).toBe(true);
+    expect(textMock.mock.calls.some((call) => call[0] === "https://infinitypay.me/pay/paul-masanja")).toBe(true);
   });
 
   it("shows the missing-QR message and disables the button when there is no public URL yet", async () => {
@@ -122,7 +122,7 @@ describe("PayByLinkQrCard", () => {
       <PayByLinkQrCard
         merchantName="Paul Masanja"
         slug="paul-masanja"
-        publicUrl="https://infinityafrica.net/pay/paul-masanja"
+        publicUrl="https://infinitypay.me/pay/paul-masanja"
       />,
     );
 

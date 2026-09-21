@@ -80,7 +80,7 @@ describe("WithdrawalsView", () => {
 
     // The old fee-breakdown rows must be gone entirely — this is the
     // point of the MVP pricing change, not just an added message.
-    expect(screen.queryByText("Infinity Africa Fee")).not.toBeInTheDocument();
+    expect(screen.queryByText("InfinityPay Fee")).not.toBeInTheDocument();
     expect(screen.queryByText("Processor Charge")).not.toBeInTheDocument();
     expect(screen.queryByText("Total Charges")).not.toBeInTheDocument();
     expect(screen.queryByText("Total to Be Deducted")).not.toBeInTheDocument();

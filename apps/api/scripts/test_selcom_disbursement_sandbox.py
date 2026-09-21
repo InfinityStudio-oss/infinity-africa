@@ -36,7 +36,7 @@ Usage (from anywhere; the repo-relative apps/api path is resolved below):
       --recipient-name "Sandbox Test" \\
       --amount 1000 \\
       --purpose "Sandbox withdrawal test" \\
-      --remarks "Infinity Africa sandbox direct test"
+      --remarks "InfinityPay sandbox direct test"
 
 Or use one of the three known-good Selcom sandbox sample recipients via
 --preset (selcom, bank, wallet — see docs/selcom-sandbox-test-accounts.md

@@ -29,7 +29,7 @@ function paymentLink(overrides: Partial<PaymentLink>): PaymentLink {
     expires_at: null,
     status: PaymentLinkStatus.ACTIVE,
     public_slug: "abc123",
-    public_url: "https://pay.infinityafrica.net/pay/abc123",
+    public_url: "https://pay.infinitypay.me/pay/abc123",
     merchant_reference: null,
     success_redirect_url: null,
     failure_redirect_url: null,
@@ -98,7 +98,7 @@ describe("Merchant portal CollectionsPage — Request Collection form", () => {
   });
 
   it("submits customer details to createCollectionRequest without a method, then shows the shareable payment link", async () => {
-    createCollectionRequest.mockResolvedValue(paymentLink({ public_url: "https://pay.infinityafrica.net/pay/xyz789" }));
+    createCollectionRequest.mockResolvedValue(paymentLink({ public_url: "https://pay.infinitypay.me/pay/xyz789" }));
     const { default: CollectionsPage } = await import("./page");
     render(<CollectionsPage />);
 
@@ -115,7 +115,7 @@ describe("Merchant portal CollectionsPage — Request Collection form", () => {
     expect(createCollectionRequest.mock.calls[0][0]).not.toHaveProperty("method");
 
     expect(await screen.findByText("Payment page ready")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://pay.infinityafrica.net/pay/xyz789")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://pay.infinitypay.me/pay/xyz789")).toBeInTheDocument();
   });
 });
 

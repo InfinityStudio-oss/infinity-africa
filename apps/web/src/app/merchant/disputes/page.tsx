@@ -6,7 +6,7 @@ import { DisputesView } from "@/components/merchant/disputes-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Disputes | Infinity Africa",
+  title: "Disputes | InfinityPay",
 };
 
 export default async function MerchantDisputesPage() {

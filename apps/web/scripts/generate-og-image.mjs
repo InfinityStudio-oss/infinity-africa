@@ -26,7 +26,7 @@ import { ImageResponse } from "next/og.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(__dirname, "..");
 
-const OUTPUT_PATH = join(webRoot, "public", "og", "infinity-africa-og-v2.png");
+const OUTPUT_PATH = join(webRoot, "public", "og", "infinitypay-og-v1.png");
 const MARK_PATH = join(webRoot, "public", "brand", "infinity-mark.png");
 
 // Same tokens as apps/web/src/app/globals.css (--color-primary /
@@ -70,7 +70,7 @@ async function main() {
           letterSpacing: "-0.02em",
         },
       },
-      "Infinity Africa",
+      "InfinityPay",
     ),
     el(
       "div",

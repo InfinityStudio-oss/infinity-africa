@@ -106,7 +106,7 @@ async function apiWrite<T>(
   } catch {
     // Network failure (backend unreachable, DNS, timeout) — not a response
     // the backend sent, so there's no error.code to preserve.
-    throw new Error("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new Error("Couldn't reach InfinityPay. Check your connection and try again.");
   }
 
   const body: ApiEnvelope<T> = await res.json();
@@ -727,7 +727,7 @@ export async function exportWalletLedger({ start_date, end_date }: Required<Wall
       headers: await getAuthHeader(),
     });
   } catch {
-    throw new Error("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new Error("Couldn't reach InfinityPay. Check your connection and try again.");
   }
 
   if (!res.ok) {
@@ -814,7 +814,7 @@ export async function submitDocumentRequestFile(
       body: formData,
     });
   } catch {
-    throw new Error("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new Error("Couldn't reach InfinityPay. Check your connection and try again.");
   }
   const body: ApiEnvelope<DocumentRequest> = await res.json();
   if (!res.ok || !body.success || body.data === undefined) {

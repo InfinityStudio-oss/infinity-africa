@@ -1,6 +1,11 @@
 # MVP Readiness: 30–100 Selected Merchants
 
-Readiness review and hardening pass for opening Infinity Africa to a
+> **Brand/domain migration**: product/domain migrated from Infinity Africa
+> / infinityafrica.net to **InfinityPay** / **infinitypay.me**. Keep the
+> old domain's redirect active during the transition — see
+> `docs/MVP_LAUNCH_CHECKLIST.md`.
+
+Readiness review and hardening pass for opening InfinityPay to a
 controlled cohort of 30–100 real merchants using collections, payment
 links, Pay by Link permanent checkout pages, invoices, withdrawals,
 merchant API keys, and email notifications daily. This supersedes
@@ -230,7 +235,9 @@ Two structurally separate flows, confirmed not to cross:
 - `RESEND_API_KEY` is backend/Railway-only; confirmed no
   `NEXT_PUBLIC_RESEND_API_KEY` or any Resend key anywhere under
   `apps/web` (§6/§10 secret scan).
-- Sender: `EMAIL_FROM` (`Infinity Africa <notification@infinityafrica.net>`),
+- Sender: `EMAIL_FROM` (`InfinityPay <notification@infinityafrica.net>` —
+  brand renamed to InfinityPay; sending domain stays on infinityafrica.net
+  until infinitypay.me is verified in Resend, see `docs/email-delivery.md`),
   invoices use their own visually-distinct `INVOICE_EMAIL_FROM` (falls
   back to `EMAIL_FROM` if unset). Reply-to: `EMAIL_REPLY_TO`
   (`info@infinityafrica.net`). CEO recipient: `CEO_EMAIL`.

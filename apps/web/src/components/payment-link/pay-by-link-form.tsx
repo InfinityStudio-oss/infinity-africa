@@ -73,7 +73,7 @@ export function PayByLinkForm({ slug, link }: { slug: string; link: PublicPayByL
       // flash back to enabled during the brief navigation.
       window.location.href = body.data.redirect_url;
     } catch {
-      setErrorMessage("We couldn't reach Infinity Africa. Check your connection and try again.");
+      setErrorMessage("We couldn't reach InfinityPay. Check your connection and try again.");
       setSubmitting(false);
     }
   }
@@ -84,7 +84,7 @@ export function PayByLinkForm({ slug, link }: { slug: string; link: PublicPayByL
         <h1 className="text-lg font-bold text-on-primary sm:text-2xl">{link.display_name}</h1>
         <div className="flex shrink-0 items-center gap-2">
           <img src="/brand/infinity-mark.png" alt="" className="h-9 w-9 rounded-lg sm:h-12 sm:w-12" />
-          <span className="text-xs font-semibold tracking-wide text-on-primary sm:text-sm">Infinity Africa</span>
+          <span className="text-xs font-semibold tracking-wide text-on-primary sm:text-sm">InfinityPay</span>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ export function PayByLinkForm({ slug, link }: { slug: string; link: PublicPayByL
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="balekele@infinityafrica.net"
+            placeholder="balekele@infinitypay.me"
           />
         </div>
 

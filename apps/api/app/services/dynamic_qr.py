@@ -49,7 +49,7 @@ _METHOD_LABEL = "DYNAMIC_QR"
 # Mirrors app/services/checkout_orders.py's placeholder buyer_email
 # convention: a well-formed but inert value, never claimed to be real.
 _PLACEHOLDER_BUYER_PHONE = "255700000000"
-_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinityafrica.net"
+_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
 
 
 async def execute_dynamic_qr_for_payment_link(client: Client, *, payment_link: dict, customer_phone: str | None) -> dict:
@@ -179,7 +179,7 @@ async def execute_qr_collection(
     well-formed placeholder is used when none is given, same convention
     as execute_dynamic_qr_for_payment_link."""
     buyer_phone = normalize_tz_phone(customer_phone) if customer_phone else _PLACEHOLDER_BUYER_PHONE
-    buyer_name = customer_name or "Infinity Africa Customer"
+    buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 
     order = await create_checkout_order_minimal(

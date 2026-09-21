@@ -293,7 +293,7 @@ export function PricingRulesView({
         <p>
           <span className="font-semibold">Withdrawal fees are off for every merchant (MVP policy).</span> Rules
           configured below are no longer applied to any withdrawal — merchants always receive the full amount they
-          request, with no percentage fee, flat fee, or processor charge deducted. Infinity Africa earns fees from
+          request, with no percentage fee, flat fee, or processor charge deducted. InfinityPay earns fees from
           merchant collections only. This page is kept for future use (e.g. tracking an internal provider cost), not
           for editing what a merchant is charged.
         </p>

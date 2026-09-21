@@ -34,7 +34,7 @@ Two independent schemes, enforced per-endpoint by `apps/api/app/auth`:
   Used by `apps/web`. Role comes from `merchant_users`/`platform_admins`,
   never from the token's own claims/metadata.
 - **API key** — `X-API-Key: <key>`, from `POST /v1/merchants/{id}/api-keys`.
-  For a merchant's own backend calling Infinity Africa directly. Accepted
+  For a merchant's own backend calling InfinityPay directly. Accepted
   alongside a JWT on the handful of endpoints marked "dashboard or API key"
   below (creating a payment link, invoice, collection, or disbursement);
   everything else is dashboard-only.
@@ -126,7 +126,7 @@ Where a real Selcom callback would land, resolving a `collection` or
    `resolve_disbursement_from_callback`, same as before.
 
 `payment_link.paid` and `invoice.paid` are *not* things Selcom sends — they're
-outbound events Infinity Africa enqueues (to `webhook_events`) as a consequence of
+outbound events InfinityPay enqueues (to `webhook_events`) as a consequence of
 resolving a collection linked to a payment_link/invoice.
 
 ## Invoices
@@ -152,7 +152,7 @@ carrying `invoice_id` directly.
 
 ## Disbursements
 
-A payout from a merchant's Infinity Africa balance to `SELCOM_PESA`/`MOBILE_MONEY`
+A payout from a merchant's InfinityPay balance to `SELCOM_PESA`/`MOBILE_MONEY`
 (a phone number) or `BANK_ACCOUNT` (destination_identifier is the account
 number, `bank_name` required). `POST /v1/disbursements/{method}` validates
 available balance up front — `409 insufficient_balance` if `amount` exceeds
@@ -265,7 +265,7 @@ result, ledger posting, webhook enqueueing), never directly by a client.
 The four `/v1/collections/{method}` bodies share `merchant_id`, `amount`
 (> 0), `currency`, `customer_id`, `merchant_reference` (the *merchant's*
 own order/reference, max 100 chars — distinct from `transactions.reference`,
-which is Infinity Africa's own), `payment_link_id`, and `description`; the three
+which is InfinityPay's own), `payment_link_id`, and `description`; the three
 push endpoints additionally require `customer_phone` (validated format),
 which `dynamic-qr` omits entirely. `method` itself isn't a body field — the
 endpoint you call is the method. When `payment_link_id` is given, it's

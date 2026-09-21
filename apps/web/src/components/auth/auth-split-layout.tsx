@@ -24,13 +24,13 @@ export function AuthSplitLayout({
         <div className="absolute top-8 left-8 z-10">
           <Link href="/" className="inline-flex items-center gap-1.5">
             <Icon name="all_inclusive" className="text-on-primary text-[22px]" />
-            <span className="text-lg font-bold tracking-tight text-on-primary">Infinity Africa</span>
+            <span className="text-lg font-bold tracking-tight text-on-primary">InfinityPay</span>
           </Link>
         </div>
 
         <div className="relative z-10">
           <p className="text-3xl font-bold tracking-tight max-w-sm" aria-hidden>
-            Welcome to Infinity Africa
+            Welcome to InfinityPay
           </p>
           <p className="mt-4 max-w-sm text-on-primary/80 leading-relaxed">
             Payment infrastructure for growing merchants — collect, link, invoice, and integrate from one platform.
@@ -67,7 +67,7 @@ export function AuthSplitLayout({
             </li>
           </ul>
           <p className="pt-4 border-t border-on-primary/10 text-xs text-on-primary/60">
-            © {new Date().getFullYear()} Infinity Africa. All rights reserved.
+            © {new Date().getFullYear()} InfinityPay. All rights reserved.
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export function AuthSplitLayout({
           </Link>
           <div className="mb-6 flex items-center gap-1.5 lg:hidden">
             <Icon name="all_inclusive" className="text-primary text-[22px]" />
-            <span className="text-lg font-bold tracking-tight text-primary">Infinity Africa</span>
+            <span className="text-lg font-bold tracking-tight text-primary">InfinityPay</span>
           </div>
           <div className="rounded-lg border border-outline-variant bg-surface p-8 shadow-sm">{children}</div>
         </div>

@@ -3,7 +3,7 @@ import { DocumentRequestsTable } from "@/components/super-admin/document-request
 import { listAdminDocumentRequests } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Document Requests | Infinity Africa Super Admin",
+  title: "Document Requests | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminDocumentRequestsPage() {

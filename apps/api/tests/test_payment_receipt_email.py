@@ -88,7 +88,7 @@ def test_receipt_email_sent_after_a_successful_payment(fake_client, fake_resend)
 
     assert len(fake_resend.calls) == 1
     assert fake_resend.calls[0]["to"] == ["jane@example.com"]
-    assert fake_resend.calls[0]["subject"] == "Your payment receipt from Infinity Africa"
+    assert fake_resend.calls[0]["subject"] == "Your payment receipt from InfinityPay"
     html = fake_resend.calls[0]["html"]
     assert "Masanja Traders" in html
     assert "27048391" in html

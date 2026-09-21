@@ -105,7 +105,7 @@ https://web-production-3fdc4a.up.railway.app/v1/webhooks/selcom/checkout
 
 This is the **verified-live, currently-reachable** URL (confirmed via a
 real `GET` reachability check returning `{"status": "ok"}`). Do **not**
-register `https://api.infinityafrica.net/...` — as of 2026-08-22/23 that
+register `https://api.infinitypay.me/...` — as of 2026-08-22/23 that
 subdomain does **not resolve at all** (confirmed NXDOMAIN via `nslookup`
 and curl), despite being referenced as the "production" domain in both
 `apps/api/.env.example` and `apps/web/.env.example`. That stale

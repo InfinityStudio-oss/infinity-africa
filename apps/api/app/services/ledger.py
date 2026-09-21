@@ -282,7 +282,7 @@ def post_collection_entries(
     net_amount: Decimal,
     currency: str,
 ) -> None:
-    """A customer's payment lands in Infinity Africa's settlement account; the
+    """A customer's payment lands in InfinityPay's settlement account; the
     merchant's wallet balance grows by the net amount, and the fee becomes
     platform revenue. Debit (settlement_clearing) == credits (wallet + fee).
     """
@@ -347,7 +347,7 @@ def post_disbursement_entries(
     fee_amount: Decimal = Decimal(0),
 ) -> None:
     """A payout draws down the merchant's wallet by `amount + fee_amount`
-    (the total reserved), sends `amount` out through Infinity Africa's
+    (the total reserved), sends `amount` out through InfinityPay's
     settlement account to the recipient, and books `fee_amount` (when > 0)
     as platform revenue — the withdrawal-side mirror of
     post_collection_entries' existing fee leg. Debit (wallet) == credits

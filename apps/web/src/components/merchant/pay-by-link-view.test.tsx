@@ -31,7 +31,7 @@ const link: PayByLink = {
   id: "link-1",
   merchant_id: "merchant-1",
   slug: "paul-masanja",
-  public_url: "https://infinityafrica.net/pay/paul-masanja",
+  public_url: "https://infinitypay.me/pay/paul-masanja",
   display_name: "Paul Masanja",
   description: null,
   is_active: true,
@@ -53,7 +53,7 @@ describe("PayByLinkView / ManagePanel", () => {
 
     await waitFor(() => expect(screen.getByTestId("qr-card")).toBeInTheDocument());
     expect(screen.getByTestId("qr-card").textContent).toBe(
-      "Paul Masanja|paul-masanja|https://infinityafrica.net/pay/paul-masanja",
+      "Paul Masanja|paul-masanja|https://infinitypay.me/pay/paul-masanja",
     );
   });
 
@@ -66,7 +66,7 @@ describe("PayByLinkView / ManagePanel", () => {
     fireEvent.click(screen.getByTitle("Copy link"));
 
     await waitFor(() =>
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://infinityafrica.net/pay/paul-masanja"),
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://infinitypay.me/pay/paul-masanja"),
     );
     expect(screen.getByText("Pay by Link copied.")).toBeInTheDocument();
   });

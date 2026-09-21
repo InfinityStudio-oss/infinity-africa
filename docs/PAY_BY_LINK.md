@@ -10,16 +10,16 @@ changes or removes the other.
 Every merchant can create exactly one permanent page:
 
 ```
-https://infinityafrica.net/pay/{merchant_slug}
+https://infinitypay.me/pay/{merchant_slug}
 ```
 
-Example: `https://infinityafrica.net/pay/paul-masanja`
+Example: `https://infinitypay.me/pay/paul-masanja`
 
 The merchant copies this link once and shares it anywhere — WhatsApp,
 Instagram, Facebook, TikTok, a website, a business profile, or (later) a
 printed poster QR code. A customer who opens it fills in their own
 details and amount, then proceeds to the exact same secure checkout flow
-every other Infinity Africa payment already uses.
+every other InfinityPay payment already uses.
 
 ## Merchant use cases
 

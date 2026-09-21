@@ -60,13 +60,13 @@ describe("RefreshStatusButton", () => {
   });
 
   it("shows an error message and never calls onResult if the refresh call throws", async () => {
-    const onRefresh = vi.fn().mockRejectedValue(new Error("Couldn't reach Infinity Africa."));
+    const onRefresh = vi.fn().mockRejectedValue(new Error("Couldn't reach InfinityPay."));
     const onResult = vi.fn();
 
     render(<RefreshStatusButton onRefresh={onRefresh} onResult={onResult} />);
     fireEvent.click(screen.getByRole("button", { name: "Refresh status" }));
 
-    expect(await screen.findByText("Couldn't reach Infinity Africa.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't reach InfinityPay.")).toBeInTheDocument();
     expect(onResult).not.toHaveBeenCalled();
   });
 });

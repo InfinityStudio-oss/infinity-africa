@@ -10,7 +10,7 @@ import { PendingVerificationBanner } from "@/components/portal/pending-verificat
 import { AccountStatus } from "@infinity/shared";
 
 export const metadata = {
-  title: "Merchant Overview | Infinity Africa",
+  title: "Merchant Overview | InfinityPay",
 };
 
 export default async function MerchantOverviewPage() {

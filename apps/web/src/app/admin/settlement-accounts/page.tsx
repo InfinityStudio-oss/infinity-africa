@@ -8,7 +8,7 @@ import { listSettlementAccounts } from "@/lib/admin/api";
 import { settlementStatusBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Settlement Accounts | Infinity Africa Super Admin",
+  title: "Settlement Accounts | InfinityPay Super Admin",
 };
 
 export default async function SettlementAccountsPage() {

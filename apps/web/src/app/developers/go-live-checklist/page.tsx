@@ -40,8 +40,8 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
     title: "Compliance & security",
     items: [
       "Merchant KYC/onboarding is approved (see Merchant Onboarding Requirements).",
-      "HTTPS only — for your webhook endpoint and everywhere you call the Infinity Africa API from.",
-      "No Infinity Africa or Selcom credential appears in any frontend bundle, mobile app package, or public repository.",
+      "HTTPS only — for your webhook endpoint and everywhere you call the InfinityPay API from.",
+      "No InfinityPay or Selcom credential appears in any frontend bundle, mobile app package, or public repository.",
     ],
   },
 ];
@@ -78,7 +78,7 @@ export default function GoLiveChecklistPage() {
           <Callout tone="warning" title="Never ship a secret key to anywhere a customer's device can read it">
             An API key or webhook secret in a browser bundle, a mobile app package, or a public repository can be
             extracted by anyone. Keep both server-side; have client apps call your own backend, and have your
-            backend call Infinity Africa.
+            backend call InfinityPay.
           </Callout>
           <p className="text-sm text-on-surface-variant leading-relaxed">
             A few more that matter in practice:

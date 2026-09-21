@@ -75,13 +75,13 @@ describe("InvoicesView", () => {
     expect(screen.queryByText(/Send Invoice with Pay Now Link/)).not.toBeInTheDocument();
   });
 
-  it("shows the real customer-facing copy instead of the fake pay.infinityafrica.net domain", async () => {
+  it("shows the real customer-facing copy instead of the fake pay.infinitypay.me domain", async () => {
     const { InvoicesView } = await import("./invoices-view");
     render(<InvoicesView />);
 
     await waitFor(() => expect(listInvoices).toHaveBeenCalled());
     expect(screen.getByText("Customer will receive an invoice email with a secure Pay Now link.")).toBeInTheDocument();
-    expect(screen.queryByText(/pay\.infinityafrica\.net/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pay\.infinitypay\.me/)).not.toBeInTheDocument();
   });
 
   it("shows a success message once the invoice email is sent", async () => {

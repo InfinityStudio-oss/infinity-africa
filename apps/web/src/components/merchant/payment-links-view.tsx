@@ -16,7 +16,7 @@ const FILTERS = ["All", "Active", "Paid", "Expired", "Cancelled"] as const;
 
 function whatsappShareUrl(link: Pick<PaymentLink, "amount" | "currency" | "public_url">): string {
   return `https://wa.me/?text=${encodeURIComponent(
-    `Please complete your payment of ${formatCurrency(link.amount, link.currency)} via this secure Infinity Africa link: ${link.public_url}`,
+    `Please complete your payment of ${formatCurrency(link.amount, link.currency)} via this secure InfinityPay link: ${link.public_url}`,
   )}`;
 }
 

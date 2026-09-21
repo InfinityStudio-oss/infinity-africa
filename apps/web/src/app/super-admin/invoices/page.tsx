@@ -8,7 +8,7 @@ import { getAdminOverview, listAdminInvoices } from "@/lib/admin/live-api";
 import { adminInvoiceBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Invoices | Infinity Africa Super Admin",
+  title: "Invoices | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminInvoicesPage() {

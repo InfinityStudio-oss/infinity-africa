@@ -69,7 +69,7 @@ export default function SandboxPage() {
             </tbody>
           </table>
         </div>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinityafrica.net/v1/collections/wallet-push \\
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/collections/wallet-push \\
   -H "Authorization: Bearer $INFINITY_SANDBOX_KEY" \\
   -H "Idempotency-Key: $(uuidgen)" \\
   -H "Content-Type: application/json" \\

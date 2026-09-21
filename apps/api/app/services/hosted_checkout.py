@@ -54,7 +54,7 @@ _METHOD_LABEL = "HOSTED_CHECKOUT"
 # identical placeholder convention (and checkout_orders.py's placeholder
 # buyer_email).
 _PLACEHOLDER_BUYER_PHONE = "255700000000"
-_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinityafrica.net"
+_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
 
 
 def _insert_failed_order_collection(client: Client, base_row: dict, order: dict) -> dict:
@@ -93,7 +93,7 @@ async def execute_hosted_checkout_collection(
     there's no persistent resource here to reuse against beyond the
     router's own Idempotency-Key replay)."""
     buyer_phone = normalize_tz_phone(customer_phone) if customer_phone else _PLACEHOLDER_BUYER_PHONE
-    buyer_name = customer_name or "Infinity Africa Customer"
+    buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 
     order = await create_checkout_order_minimal(

@@ -7,7 +7,7 @@ script's docstring for the full reasoning; this one only differs in
 which endpoint actually pushes.
 
 **This script sends a REAL prompt to a REAL Selcom Pesa account and, if
-the customer approves it, moves REAL money.** Infinity Africa has no
+the customer approves it, moves REAL money.** InfinityPay has no
 Selcom Checkout sandbox — SELCOM_CHECKOUT_BASE_URL is always a
 production endpoint with production credentials. Do not run this:
 
@@ -43,8 +43,8 @@ Usage (not run automatically by anyone/anything other than a human who
 explicitly types this out):
 
     python apps/api/scripts/test_selcom_checkout_selcompesa_payment.py \\
-      --buyer-email test@infinityafrica.net \\
-      --buyer-name "Infinity Africa Test Customer" \\
+      --buyer-email test@infinitypay.me \\
+      --buyer-name "InfinityPay Test Customer" \\
       --buyer-phone 255747730270 \\
       --amount 1000 \\
       --confirm-live-payment

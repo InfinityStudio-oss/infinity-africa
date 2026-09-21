@@ -3,38 +3,38 @@ import { Header } from "@/components/site/header";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
-  title: "Terms of Service | Infinity Africa",
-  description: "Terms of Service for the Infinity Africa payment platform.",
+  title: "Terms of Service | InfinityPay",
+  description: "Terms of Service for the InfinityPay payment platform.",
 };
 
 const SECTIONS: { title: string; body: string; items?: string[] }[] = [
   {
     title: "1. Introduction",
-    body: "Infinity Africa provides payment infrastructure tools for merchants in Tanzania, including payment collection, payment links, invoices, dynamic QR codes, API integrations, transaction monitoring, and merchant wallet visibility. By creating an account or using any Infinity Africa service, you agree to these Terms of Service.",
+    body: "InfinityPay provides payment infrastructure tools for merchants in Tanzania, including payment collection, payment links, invoices, dynamic QR codes, API integrations, transaction monitoring, and merchant wallet visibility. By creating an account or using any InfinityPay service, you agree to these Terms of Service.",
   },
   {
     title: "2. Eligibility",
-    body: "To use Infinity Africa, merchants must provide accurate and complete business information and comply with all applicable Tanzanian laws, regulations, and verification requirements. Infinity Africa may decline or restrict service to any business that does not meet these requirements.",
+    body: "To use InfinityPay, merchants must provide accurate and complete business information and comply with all applicable Tanzanian laws, regulations, and verification requirements. InfinityPay may decline or restrict service to any business that does not meet these requirements.",
   },
   {
     title: "3. Account Registration",
-    body: "To use Infinity Africa's services, merchants must create an account, submit onboarding details about their business, provide any compliance information or documents Infinity Africa requests during review, and accept these Terms of Service and the Privacy Policy. Live access to collections, payment links, API keys, and withdrawals is granted only after Infinity Africa approves the merchant account.",
+    body: "To use InfinityPay's services, merchants must create an account, submit onboarding details about their business, provide any compliance information or documents InfinityPay requests during review, and accept these Terms of Service and the Privacy Policy. Live access to collections, payment links, API keys, and withdrawals is granted only after InfinityPay approves the merchant account.",
   },
   {
     title: "4. Merchant Verification",
-    body: "Before activating full account functionality, Infinity Africa may review a merchant's National Identification Authority (NIDA) details, Taxpayer Identification Number (TIN) certificate, business licence, business information, and other compliance details. Infinity Africa may request additional information or documents at any time to complete or maintain verification.",
+    body: "Before activating full account functionality, InfinityPay may review a merchant's National Identification Authority (NIDA) details, Taxpayer Identification Number (TIN) certificate, business licence, business information, and other compliance details. InfinityPay may request additional information or documents at any time to complete or maintain verification.",
   },
   {
     title: "5. Merchant Responsibilities",
-    body: "Merchants are responsible for providing accurate customer and payment information, conducting lawful business activity, maintaining secure access to their account and credentials, and ensuring correct and responsible use of Infinity Africa's APIs and services.",
+    body: "Merchants are responsible for providing accurate customer and payment information, conducting lawful business activity, maintaining secure access to their account and credentials, and ensuring correct and responsible use of InfinityPay's APIs and services.",
   },
   {
     title: "6. Payment Collections",
-    body: "Infinity Africa supports payment collection through methods such as Push USSD, STK Push, Selcom Pesa Push, and Dynamic QR, where available. Availability of specific collection methods may vary by mobile network operator, provider, and merchant configuration.",
+    body: "InfinityPay supports payment collection through methods such as Push USSD, STK Push, Selcom Pesa Push, and Dynamic QR, where available. Availability of specific collection methods may vary by mobile network operator, provider, and merchant configuration.",
   },
   {
     title: "7. Payment Links and Invoices",
-    body: "Merchants may create payment links and invoices, including customer details, itemized amounts, expiry times, and built-in Pay Now links. Infinity Africa provides tracking of payment status for links and invoices created through the merchant portal or API.",
+    body: "Merchants may create payment links and invoices, including customer details, itemized amounts, expiry times, and built-in Pay Now links. InfinityPay provides tracking of payment status for links and invoices created through the merchant portal or API.",
   },
   {
     title: "8. Merchant Wallet and Withdrawals",
@@ -42,11 +42,11 @@ const SECTIONS: { title: string; body: string; items?: string[] }[] = [
   },
   {
     title: "9. API Usage",
-    body: "Merchants and developers may integrate websites, mobile apps, ecommerce platforms, and web apps using Infinity Africa's REST APIs and signed webhooks. API access is granted through API keys, which must be kept confidential and used in accordance with Infinity Africa's API documentation.",
+    body: "Merchants and developers may integrate websites, mobile apps, ecommerce platforms, and web apps using InfinityPay's REST APIs and signed webhooks. API access is granted through API keys, which must be kept confidential and used in accordance with InfinityPay's API documentation.",
   },
   {
     title: "10. Prohibited Activities",
-    body: "Merchants may not use Infinity Africa for:",
+    body: "Merchants may not use InfinityPay for:",
     items: [
       "Fraud or attempted fraud of any kind, including fraudulent transactions",
       "Sale of illegal goods or services",
@@ -54,7 +54,7 @@ const SECTIONS: { title: string; body: string; items?: string[] }[] = [
       "Unauthorized or unauthenticated transactions, including unauthorized charges",
       "Submission of fake, altered, or fraudulent documents",
       "Misrepresentation of products or services offered to customers",
-      "Abuse, probing, or unauthorized use of Infinity Africa's APIs or payment links",
+      "Abuse, probing, or unauthorized use of InfinityPay's APIs or payment links",
       "Any activity that violates applicable Tanzanian law or payment network rules",
     ],
   },
@@ -64,23 +64,23 @@ const SECTIONS: { title: string; body: string; items?: string[] }[] = [
   },
   {
     title: "12. Webhooks and Transaction Status",
-    body: "Transaction status shown in the merchant portal or delivered via webhook may depend on payment provider callbacks, reconciliation processes, and settlement confirmation. Infinity Africa is not responsible for delays caused by third-party providers or network operators.",
+    body: "Transaction status shown in the merchant portal or delivered via webhook may depend on payment provider callbacks, reconciliation processes, and settlement confirmation. InfinityPay is not responsible for delays caused by third-party providers or network operators.",
   },
   {
     title: "13. Account Suspension or Termination",
-    body: "Infinity Africa may suspend, restrict, or terminate a merchant account in cases of suspected fraud, compliance issues, misuse of the platform, or violation of these Terms, with or without prior notice where required to protect Infinity Africa, its merchants, or customers.",
+    body: "InfinityPay may suspend, restrict, or terminate a merchant account in cases of suspected fraud, compliance issues, misuse of the platform, or violation of these Terms, with or without prior notice where required to protect InfinityPay, its merchants, or customers.",
   },
   {
     title: "14. Limitation of Liability",
-    body: "Infinity Africa provides its platform on an \"as available\" basis and is not liable for indirect, incidental, or consequential damages arising from use of the platform, including delays or failures caused by third-party payment providers, mobile network operators, banking partners, or events outside Infinity Africa's reasonable control.",
+    body: "InfinityPay provides its platform on an \"as available\" basis and is not liable for indirect, incidental, or consequential damages arising from use of the platform, including delays or failures caused by third-party payment providers, mobile network operators, banking partners, or events outside InfinityPay's reasonable control.",
   },
   {
     title: "15. Changes to Terms",
-    body: "Infinity Africa may update these Terms of Service from time to time. Merchants should review this page periodically. Continued use of Infinity Africa's services after changes take effect constitutes acceptance of the revised Terms.",
+    body: "InfinityPay may update these Terms of Service from time to time. Merchants should review this page periodically. Continued use of InfinityPay's services after changes take effect constitutes acceptance of the revised Terms.",
   },
   {
     title: "16. Fraud Monitoring and Transaction Review",
-    body: "Infinity Africa may monitor transactions for suspicious activity, using automated rules and manual review. Infinity Africa may flag a transaction for review, place it under review, and request supporting documents from the merchant involved. While a review is ongoing, Infinity Africa may restrict or delay access to funds related to the flagged transaction or, where the risk is high, temporarily restrict a merchant's withdrawals more broadly. Merchants must cooperate promptly and honestly with any review request.",
+    body: "InfinityPay may monitor transactions for suspicious activity, using automated rules and manual review. InfinityPay may flag a transaction for review, place it under review, and request supporting documents from the merchant involved. While a review is ongoing, InfinityPay may restrict or delay access to funds related to the flagged transaction or, where the risk is high, temporarily restrict a merchant's withdrawals more broadly. Merchants must cooperate promptly and honestly with any review request.",
   },
   {
     title: "17. Supporting Documents",
@@ -88,7 +88,7 @@ const SECTIONS: { title: string; body: string; items?: string[] }[] = [
   },
   {
     title: "18. Customer Disputes and Chargebacks",
-    body: "Customers may report transaction issues, product or service disputes, unauthorized payments, duplicate payments, or refund requests directly to Infinity Africa. Where a report is received, Infinity Africa may notify the merchant involved and request a response or supporting evidence. A merchant may be required to refund a customer where Infinity Africa determines it is appropriate. Infinity Africa may assist in reviewing a dispute but does not guarantee any particular outcome.",
+    body: "Customers may report transaction issues, product or service disputes, unauthorized payments, duplicate payments, or refund requests directly to InfinityPay. Where a report is received, InfinityPay may notify the merchant involved and request a response or supporting evidence. A merchant may be required to refund a customer where InfinityPay determines it is appropriate. InfinityPay may assist in reviewing a dispute but does not guarantee any particular outcome.",
   },
   {
     title: "19. Refunds",
@@ -96,7 +96,7 @@ const SECTIONS: { title: string; body: string; items?: string[] }[] = [
   },
   {
     title: "20. Contact Information",
-    body: "For questions about these Terms of Service, contact Infinity Africa using the details below.",
+    body: "For questions about these Terms of Service, contact InfinityPay using the details below.",
   },
 ];
 
@@ -161,8 +161,8 @@ export default function TermsPage() {
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
                   <Icon name="language" className="text-[18px] text-primary-container" />
-                  <a href="https://infinityafrica.net" className="hover:text-primary-container transition-colors">
-                    infinityafrica.net
+                  <a href="https://infinitypay.me" className="hover:text-primary-container transition-colors">
+                    infinitypay.me
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">

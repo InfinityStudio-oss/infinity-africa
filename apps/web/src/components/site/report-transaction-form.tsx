@@ -68,7 +68,7 @@ export function ReportTransactionForm() {
         </div>
         <h3 className="text-xl font-semibold text-on-surface mb-2">Report received</h3>
         <p className="text-sm text-on-surface-variant max-w-md mx-auto">
-          Your report has been received. Infinity Africa will review the transaction and contact the merchant where
+          Your report has been received. InfinityPay will review the transaction and contact the merchant where
           necessary.
         </p>
       </div>

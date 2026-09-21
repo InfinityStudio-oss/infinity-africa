@@ -32,8 +32,8 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("MOCK_PROVIDER_FAILURE_RATE", "0")
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
-    monkeypatch.setenv("INVOICE_EMAIL_FROM", "Infinity Africa Invoices <invoice@infinityafrica.net>")
-    monkeypatch.setenv("EMAIL_FROM", "Infinity Africa <notification@infinityafrica.net>")
+    monkeypatch.setenv("INVOICE_EMAIL_FROM", "InfinityPay Invoices <invoice@infinitypay.me>")
+    monkeypatch.setenv("EMAIL_FROM", "InfinityPay <notification@infinitypay.me>")
     get_settings.cache_clear()
     get_selcom_client.cache_clear()
     yield
@@ -421,7 +421,7 @@ def test_invoice_email_uses_the_invoice_sender_address(fake_client, fake_resend)
     _send(invoice["id"], admin_id)
 
     assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["from"] == "Infinity Africa Invoices <invoice@infinityafrica.net>"
+    assert fake_resend.calls[0]["from"] == "InfinityPay Invoices <invoice@infinitypay.me>"
     assert fake_resend.calls[0]["to"] == ["amina@example.com"]
     assert fake_resend.calls[0]["subject"].startswith("Invoice from ")
     assert fake_resend.calls[0]["reply_to"] == "info@infinityafrica.net"
@@ -429,7 +429,7 @@ def test_invoice_email_uses_the_invoice_sender_address(fake_client, fake_resend)
 
 def test_invoice_email_falls_back_to_email_from_when_invoice_email_from_is_unset(fake_client, fake_resend, monkeypatch):
     monkeypatch.setenv("INVOICE_EMAIL_FROM", "")
-    monkeypatch.setenv("EMAIL_FROM", "Infinity Africa <notification@infinityafrica.net>")
+    monkeypatch.setenv("EMAIL_FROM", "InfinityPay <notification@infinitypay.me>")
     get_settings.cache_clear()
 
     merchant_id, admin_id = _merchant_and_admin(fake_client)
@@ -437,7 +437,7 @@ def test_invoice_email_falls_back_to_email_from_when_invoice_email_from_is_unset
 
     _send(invoice["id"], admin_id)
 
-    assert fake_resend.calls[0]["from"] == "Infinity Africa <notification@infinityafrica.net>"
+    assert fake_resend.calls[0]["from"] == "InfinityPay <notification@infinitypay.me>"
     get_settings.cache_clear()
 
 

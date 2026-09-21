@@ -1,4 +1,4 @@
-# Infinity Africa
+# InfinityPay
 
 Payment infrastructure for merchants — collections, payment links, invoices,
 and disbursements.

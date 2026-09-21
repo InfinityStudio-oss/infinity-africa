@@ -1,6 +1,6 @@
 """Public, unauthenticated dispute/chargeback reporting —
 POST /v1/public/disputes/report. A customer reports an issue with a
-merchant's product/service or a payment they didn't authorize; Infinity Africa
+merchant's product/service or a payment they didn't authorize; InfinityPay
 notifies the merchant and reviews. Mirrors payment_links.py's public_router
 pattern (no auth dependency at all — this is deliberately open to anyone).
 """

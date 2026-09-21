@@ -230,7 +230,7 @@ export function OnboardingForm({
             className="mt-0.5 h-4 w-4 rounded border-outline-variant text-primary-container focus:ring-primary-container"
           />
           <span>
-            I agree to the Infinity Africa{" "}
+            I agree to the InfinityPay{" "}
             <Link href="/terms" target="_blank" className="font-semibold text-primary-container hover:underline">
               Terms of Service
             </Link>
@@ -249,7 +249,7 @@ export function OnboardingForm({
             className="mt-0.5 h-4 w-4 rounded border-outline-variant text-primary-container focus:ring-primary-container"
           />
           <span>
-            I agree to the Infinity Africa{" "}
+            I agree to the InfinityPay{" "}
             <Link href="/privacy" target="_blank" className="font-semibold text-primary-container hover:underline">
               Privacy Policy
             </Link>

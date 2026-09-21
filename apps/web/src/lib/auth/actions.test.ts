@@ -41,7 +41,7 @@ vi.mock("@/lib/onboarding/api", () => ({
 }));
 
 vi.mock("next/headers", () => ({
-  headers: async () => new Map([["host", "infinityafrica.net"]]),
+  headers: async () => new Map([["host", "infinitypay.me"]]),
 }));
 
 class RedirectError extends Error {
@@ -88,7 +88,7 @@ async function importActions() {
 beforeEach(() => {
   vi.clearAllMocks();
   isSupabaseConfigured.mockReturnValue(true);
-  process.env.NEXT_PUBLIC_SITE_URL = "https://infinityafrica.net";
+  process.env.NEXT_PUBLIC_SITE_URL = "https://infinitypay.me";
 });
 
 // --- signupWithBusinessAction (combined signup) -----------------------
@@ -119,7 +119,7 @@ describe("signupWithBusinessAction", () => {
 
     const state = await signupWithBusinessAction(null, form(VALID_SIGNUP));
 
-    expect(state?.notice).toMatch(/verify your email, then wait for Infinity Africa approval/i);
+    expect(state?.notice).toMatch(/verify your email, then wait for InfinityPay approval/i);
     expect(state?.awaitingEmailVerification).toBe(true);
     expect(submitMerchantSignup).toHaveBeenCalledWith(
       expect.objectContaining({

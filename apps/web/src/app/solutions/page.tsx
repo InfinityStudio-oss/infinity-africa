@@ -9,8 +9,8 @@ import { SectionHeading } from "@/components/site/section-heading";
 import { SolutionCard } from "@/components/site/solution-card";
 
 export const metadata = {
-  title: "Solutions | Infinity Africa",
-  description: "Every way Infinity Africa helps Tanzanian merchants collect and manage payments — from mobile money collections to secure API integration.",
+  title: "Solutions | InfinityPay",
+  description: "Every way InfinityPay helps Tanzanian merchants collect and manage payments — from mobile money collections to secure API integration.",
 };
 
 const SOLUTIONS = [
@@ -76,7 +76,7 @@ export default function SolutionsPage() {
             <SectionHeading
               eyebrow="Solutions"
               title="Everything Your Business Needs to Get Paid"
-              description="From mobile money collections to secure API integration, Infinity Africa gives Tanzanian merchants one platform for every payment flow."
+              description="From mobile money collections to secure API integration, InfinityPay gives Tanzanian merchants one platform for every payment flow."
             />
           </div>
         </section>

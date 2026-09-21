@@ -25,7 +25,7 @@ const DOC_LINKS = [
 export function DeveloperDocsView() {
   return (
     <div className="space-y-8">
-      <PageHeader title="Developer Docs" description="Everything you need to integrate the Infinity Africa API into your app." />
+      <PageHeader title="Developer Docs" description="Everything you need to integrate the InfinityPay API into your app." />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {DOC_LINKS.map((doc) => (

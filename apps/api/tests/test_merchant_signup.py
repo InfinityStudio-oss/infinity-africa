@@ -28,8 +28,8 @@ _NIDA_DIGITS = "19900101123451234512"
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret-do-not-use")
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
-    monkeypatch.setenv("APP_URL", "https://infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
+    monkeypatch.setenv("APP_URL", "https://infinitypay.me")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -159,11 +159,15 @@ def test_signup_duplicate_email_conflicts(fake_client):
 def test_signup_notifies_ceo_with_masked_nida_not_full(fake_client, fake_resend):
     _post(_form())
 
-    ceo_calls = [c for c in fake_resend.calls if c["to"] == ["ceo@infinityafrica.net"]]
+    ceo_calls = [c for c in fake_resend.calls if c["to"] == ["ceo@infinitypay.me"]]
     assert len(ceo_calls) == 1
     ceo = ceo_calls[0]
     assert ceo["subject"] == "New merchant signup submitted"
-    assert ceo["from"] == "Infinity Africa <notification@infinityafrica.net>"
+    # EMAIL_FROM/EMAIL_REPLY_TO aren't overridden by this test, so these
+    # reflect settings.py's actual defaults: brand renamed to InfinityPay,
+    # but the sending domain deliberately stays on infinityafrica.net until
+    # infinitypay.me is verified in Resend — see docs/email-delivery.md.
+    assert ceo["from"] == "InfinityPay <notification@infinityafrica.net>"
     assert ceo["reply_to"] == "info@infinityafrica.net"
     assert "4512" in ceo["html"]
     assert _NIDA_DIGITS not in ceo["html"]
@@ -173,11 +177,11 @@ def test_signup_notifies_ceo_with_masked_nida_not_full(fake_client, fake_resend)
 
 def test_signup_does_not_send_approval_email(fake_client, fake_resend):
     _post(_form())
-    approval_calls = [c for c in fake_resend.calls if c["subject"] == "Your Infinity Africa account has been approved"]
+    approval_calls = [c for c in fake_resend.calls if c["subject"] == "Your InfinityPay account has been approved"]
     assert approval_calls == []
     verify_calls = [c for c in fake_resend.calls if c["subject"] == "Confirm your email address"]
     assert len(verify_calls) == 1
-    assert verify_calls[0]["to"] != ["ceo@infinityafrica.net"]
+    assert verify_calls[0]["to"] != ["ceo@infinitypay.me"]
 
 
 def test_signup_does_not_log_full_nida(fake_client, caplog):

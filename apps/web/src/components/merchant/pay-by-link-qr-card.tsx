@@ -11,7 +11,7 @@ import { Icon } from "@/components/portal/icon";
 const QR_INSTRUCTION = "Scan with your camera or barcode scanner to open the Pay by Link page.";
 const QR_PRINT_HELPER =
   "Print this on a poster, table tent, or receipt — anyone who scans it with a phone camera or barcode scanner lands on your Pay by Link page.";
-const QR_PDF_FOOTER = "Secure payments powered by Infinity Africa.";
+const QR_PDF_FOOTER = "Secure payments powered by InfinityPay.";
 
 async function generateQrPdf({
   merchantName,
@@ -68,7 +68,7 @@ async function generateQrPdf({
 
   doc.setFontSize(9);
   doc.setTextColor("#999999");
-  doc.text("Powered by Infinity Africa", centerX, pageHeight - 14, { align: "center" });
+  doc.text("Powered by InfinityPay", centerX, pageHeight - 14, { align: "center" });
 
   doc.save(`pay-by-link-${slug}.pdf`);
 }

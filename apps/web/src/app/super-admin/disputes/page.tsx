@@ -4,7 +4,7 @@ import { DisputesTable } from "@/components/super-admin/disputes-table";
 import { listAdminDisputes } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Disputes | Infinity Africa Super Admin",
+  title: "Disputes | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminDisputesPage() {

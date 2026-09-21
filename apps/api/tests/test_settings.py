@@ -25,21 +25,35 @@ def test_cors_origins_defaults_to_localhost():
 
 
 def test_cors_origins_parses_a_json_array(monkeypatch):
-    monkeypatch.setenv("CORS_ORIGINS", '["https://infinityafrica.net","https://www.infinityafrica.net"]')
+    monkeypatch.setenv("CORS_ORIGINS", '["https://infinitypay.me","https://www.infinitypay.me"]')
     settings = Settings()
-    assert settings.cors_origins == ["https://infinityafrica.net", "https://www.infinityafrica.net"]
+    assert settings.cors_origins == ["https://infinitypay.me", "https://www.infinitypay.me"]
 
 
 def test_cors_origins_parses_a_comma_separated_string(monkeypatch):
-    monkeypatch.setenv("CORS_ORIGINS", "https://infinityafrica.net, https://www.infinityafrica.net")
+    monkeypatch.setenv("CORS_ORIGINS", "https://infinitypay.me, https://www.infinitypay.me")
     settings = Settings()
-    assert settings.cors_origins == ["https://infinityafrica.net", "https://www.infinityafrica.net"]
+    assert settings.cors_origins == ["https://infinitypay.me", "https://www.infinitypay.me"]
 
 
 def test_cors_origins_single_origin_comma_separated(monkeypatch):
-    monkeypatch.setenv("CORS_ORIGINS", "https://infinityafrica.net")
+    monkeypatch.setenv("CORS_ORIGINS", "https://infinitypay.me")
     settings = Settings()
-    assert settings.cors_origins == ["https://infinityafrica.net"]
+    assert settings.cors_origins == ["https://infinitypay.me"]
+
+
+def test_cors_origins_allows_the_old_domain_alongside_the_new_one_during_migration(monkeypatch):
+    """Brand/domain migration backward compat: the old infinityafrica.net
+    origin must keep being accepted alongside the new infinitypay.me one
+    for as long as Railway's CORS_ORIGINS lists both — see
+    docs/MVP_LAUNCH_CHECKLIST.md."""
+    monkeypatch.setenv(
+        "CORS_ORIGINS",
+        '["https://infinitypay.me","https://www.infinitypay.me","https://infinityafrica.net","https://www.infinityafrica.net"]',
+    )
+    settings = Settings()
+    assert "https://infinitypay.me" in settings.cors_origins
+    assert "https://infinityafrica.net" in settings.cors_origins
 
 
 def test_cors_origins_blank_string_parses_to_empty_list(monkeypatch):
@@ -92,7 +106,10 @@ def test_email_from_defaults_to_the_notification_address():
     gets built next should read this same setting rather than hardcoding
     a sender)."""
     settings = Settings()
-    assert settings.email_from == "Infinity Africa <notification@infinityafrica.net>"
+    # Brand migrated to InfinityPay, but the sending domain deliberately
+    # stays on infinityafrica.net until infinitypay.me is verified in
+    # Resend — see settings.py's email_from comment / docs/email-delivery.md.
+    assert settings.email_from == "InfinityPay <notification@infinityafrica.net>"
 
 
 def test_invoice_email_from_defaults_to_email_from_when_unset():
@@ -101,24 +118,24 @@ def test_invoice_email_from_defaults_to_email_from_when_unset():
 
 
 def test_invoice_email_from_uses_invoice_email_from_when_set(monkeypatch):
-    monkeypatch.setenv("INVOICE_EMAIL_FROM", "Infinity Africa Invoices <invoice@infinityafrica.net>")
+    monkeypatch.setenv("INVOICE_EMAIL_FROM", "InfinityPay Invoices <invoice@infinityafrica.net>")
     settings = Settings()
-    assert settings.invoice_email_from == "Infinity Africa Invoices <invoice@infinityafrica.net>"
+    assert settings.invoice_email_from == "InfinityPay Invoices <invoice@infinityafrica.net>"
     # The general sender is untouched by setting the invoice-specific one.
-    assert settings.email_from == "Infinity Africa <notification@infinityafrica.net>"
+    assert settings.email_from == "InfinityPay <notification@infinityafrica.net>"
 
 
 def test_app_url_falls_back_to_public_app_url_when_unset(monkeypatch):
-    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinityafrica.net")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinitypay.me")
     settings = Settings()
-    assert settings.app_url == "https://infinityafrica.net"
+    assert settings.app_url == "https://infinitypay.me"
 
 
 def test_app_url_uses_its_own_value_when_set(monkeypatch):
-    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinityafrica.net")
-    monkeypatch.setenv("APP_URL", "https://www.infinityafrica.net")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinitypay.me")
+    monkeypatch.setenv("APP_URL", "https://www.infinitypay.me")
     settings = Settings()
-    assert settings.app_url == "https://www.infinityafrica.net"
+    assert settings.app_url == "https://www.infinitypay.me"
 
 
 def test_email_reply_to_defaults_to_the_info_address():

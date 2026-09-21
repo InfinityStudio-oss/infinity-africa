@@ -14,7 +14,7 @@ export default function PaymentLinksApiPage() {
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Payment Links API</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
         Generate a secure, shareable checkout URL for a fixed amount — no website required on your end. Share it via
-        SMS, WhatsApp, or email; the customer pays it on Infinity Africa&apos;s own payment page, where they choose
+        SMS, WhatsApp, or email; the customer pays it on InfinityPay&apos;s own payment page, where they choose
         Mobile Money Push, Selcom Pesa, or Scan QR / TanQR themselves. This is the same underlying resource{" "}
         <a href="/developers/collections" className="text-primary font-semibold hover:underline">
           POST /v1/collections
@@ -24,7 +24,7 @@ export default function PaymentLinksApiPage() {
       </p>
 
       <Callout tone="warning" title="Selcom Hosted Checkout is not used">
-        &quot;Infinity Africa&apos;s payment page&quot; above means Infinity&apos;s own <code className="font-mono text-xs">/pay/…</code> page,
+        &quot;InfinityPay&apos;s payment page&quot; above means Infinity&apos;s own <code className="font-mono text-xs">/pay/…</code> page,
         not a redirect to Selcom&apos;s hosted checkout — that product is currently inactive platform-wide (see the{" "}
         <a href="/developers/go-live-checklist" className="text-primary font-semibold hover:underline">
           Go-Live Checklist
@@ -69,7 +69,7 @@ export default function PaymentLinksApiPage() {
     "expires_at": "2026-08-24T00:00:00Z",
     "status": "ACTIVE",
     "public_slug": "PLK-7X29QK",
-    "public_url": "https://pay.infinityafrica.net/pay/PLK-7X29QK",
+    "public_url": "https://pay.infinitypay.me/pay/PLK-7X29QK",
     "created_at": "2026-08-14T09:00:00Z",
     "updated_at": "2026-08-14T09:00:00Z"
   }

@@ -19,8 +19,13 @@ recognized and has no effect. `app/main.py` passes it straight to
 **Accepted formats** — either works, pick whichever is easier to type
 correctly into Railway's env var UI:
 
-- JSON array: `CORS_ORIGINS=["https://infinityafrica.net","https://www.infinityafrica.net"]`
-- Comma-separated: `CORS_ORIGINS=https://infinityafrica.net,https://www.infinityafrica.net`
+- JSON array: `CORS_ORIGINS=["https://infinitypay.me","https://www.infinitypay.me"]`
+- Comma-separated: `CORS_ORIGINS=https://infinitypay.me,https://www.infinitypay.me`
+
+Brand/domain migration: keep the old `https://infinityafrica.net` /
+`https://www.infinityafrica.net` origins listed alongside the new ones
+until the old domain's redirect is confirmed and no real traffic still
+arrives with that `Origin` header.
 
 **Never `"*"` in a deployed environment.** `allow_credentials=True` means a
 wildcard origin is both meaningless (browsers reject the combination) and a
@@ -36,7 +41,7 @@ Vercel preview deployments against the live backend) the preview URL
 pattern:
 
 ```
-CORS_ORIGINS=["https://infinityafrica.net","https://www.infinityafrica.net","https://<vercel-preview-url>.vercel.app"]
+CORS_ORIGINS=["https://infinitypay.me","https://www.infinitypay.me","https://infinityafrica.net","https://www.infinityafrica.net","https://<vercel-preview-url>.vercel.app"]
 ```
 
 Local dev keeps the `.env.example` default: `CORS_ORIGINS=["http://localhost:3000"]`.
@@ -51,7 +56,7 @@ actual deployed frontend origin:
 
 ```bash
 curl -i -X OPTIONS "$API_URL/v1/merchant/me" \
-  -H "Origin: https://infinityafrica.net" \
+  -H "Origin: https://infinitypay.me" \
   -H "Access-Control-Request-Method: GET" \
   -H "Access-Control-Request-Headers: authorization,content-type"
 ```
@@ -59,7 +64,7 @@ curl -i -X OPTIONS "$API_URL/v1/merchant/me" \
 Expected response:
 
 - `access-control-allow-origin` header is present and **exactly matches**
-  the `Origin` sent (`https://infinityafrica.net`) — CORS middleware always
+  the `Origin` sent (`https://infinitypay.me`) — CORS middleware always
   echoes back the specific matched origin, never a wildcard, when
   `allow_credentials=True`.
 - `access-control-allow-credentials: true` is present.
@@ -130,7 +135,7 @@ python apps/api/scripts/test_selcom_disbursement_sandbox.py \
   --recipient-name "Sandbox Test" \
   --amount 1000 \
   --purpose "Sandbox withdrawal test" \
-  --remarks "Infinity Africa sandbox direct test"
+  --remarks "InfinityPay sandbox direct test"
 ```
 
 For Selcom's own known-good sandbox sample recipients (internal

@@ -12,33 +12,34 @@ const SITE_DESCRIPTION =
 const OG_DESCRIPTION =
   "Payment infrastructure for African merchants, payment links, invoices, collections, wallet ledger, and merchant tools.";
 
-// Versioned filename (v2, not the original infinity-logo-v2.png — that file
-// is the OLD glossy stock-art mark, never actually used anywhere in the live
-// app; see apps/web/scripts/generate-og-image.mjs) so Discord/WhatsApp/X's
-// own link-preview caches, keyed by URL, pick up the new image on next
-// crawl rather than continuing to serve an old cached copy of the same
-// filename indefinitely.
-const OG_IMAGE_URL = "https://infinityafrica.net/og/infinity-africa-og-v2.png";
+// Versioned filename (v1 under the InfinityPay brand — supersedes the old
+// infinity-africa-og-v2.png, itself the successor to the original
+// infinity-logo-v2.png glossy stock-art mark, never actually used anywhere
+// in the live app; see apps/web/scripts/generate-og-image.mjs) so
+// Discord/WhatsApp/X's own link-preview caches, keyed by URL, pick up the
+// new image on next crawl rather than continuing to serve an old cached
+// copy of the same filename indefinitely.
+const OG_IMAGE_URL = "https://infinitypay.me/og/infinitypay-og-v1.png";
 
 export const metadata: Metadata = {
-  title: "Infinity Africa | Payment Infrastructure for African Merchants",
+  title: "InfinityPay | Payment Infrastructure for African Merchants",
   description: SITE_DESCRIPTION,
-  metadataBase: new URL("https://infinityafrica.net"),
+  metadataBase: new URL("https://infinitypay.me"),
   alternates: {
-    canonical: "https://infinityafrica.net/",
+    canonical: "https://infinitypay.me/",
   },
   openGraph: {
-    title: "Infinity Africa",
+    title: "InfinityPay",
     description: OG_DESCRIPTION,
-    url: "https://infinityafrica.net/",
-    siteName: "Infinity Africa",
-    images: [{ url: OG_IMAGE_URL, width: 1200, height: 630, alt: "Infinity Africa" }],
+    url: "https://infinitypay.me/",
+    siteName: "InfinityPay",
+    images: [{ url: OG_IMAGE_URL, width: 1200, height: 630, alt: "InfinityPay" }],
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Infinity Africa",
+    title: "InfinityPay",
     description: "Payment infrastructure for African merchants.",
     images: [OG_IMAGE_URL],
   },

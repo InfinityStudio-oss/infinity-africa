@@ -1,4 +1,4 @@
-"""Disbursements: requesting a payout from a merchant's Infinity Africa balance,
+"""Disbursements: requesting a payout from a merchant's InfinityPay balance,
 and reading back what's been recorded.
 
 Flat resource routes — there's no merchant_id path segment, matching the

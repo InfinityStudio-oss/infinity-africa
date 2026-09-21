@@ -6,7 +6,7 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { UsersView } from "@/components/merchant/users-view";
 
 export const metadata = {
-  title: "Team | Infinity Africa",
+  title: "Team | InfinityPay",
 };
 
 export default async function MerchantUsersPage() {

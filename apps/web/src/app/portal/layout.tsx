@@ -7,7 +7,7 @@ import { PendingVerificationBanner } from "@/components/portal/pending-verificat
 import { AccountStatus } from "@infinity/shared";
 
 export const metadata = {
-  title: "Merchant Portal | Infinity Africa",
+  title: "Merchant Portal | InfinityPay",
   robots: { index: false, follow: false },
 };
 

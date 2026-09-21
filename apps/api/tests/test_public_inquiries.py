@@ -31,7 +31,7 @@ _VALID_PAYLOAD = {
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
-    monkeypatch.setenv("CEO_EMAIL", "ceo@infinityafrica.net")
+    monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -72,8 +72,8 @@ def test_inquiry_notifies_the_ceo(fake_client, fake_resend):
 
     assert response.status_code == 200
     assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["to"] == ["ceo@infinityafrica.net"]
-    assert fake_resend.calls[0]["subject"] == "New Infinity Africa inquiry received"
+    assert fake_resend.calls[0]["to"] == ["ceo@infinitypay.me"]
+    assert fake_resend.calls[0]["subject"] == "New InfinityPay inquiry received"
     assert "Amani Mushi" in fake_resend.calls[0]["html"]
     assert "Amani Traders Ltd" in fake_resend.calls[0]["html"]
     assert "amani@example.com" in fake_resend.calls[0]["html"]

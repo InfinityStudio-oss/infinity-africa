@@ -65,7 +65,7 @@ class CollectionSource(StrEnum):
 
 
 class DisbursementMethod(StrEnum):
-    """How a merchant receives payouts from their Infinity Africa balance."""
+    """How a merchant receives payouts from their InfinityPay balance."""
 
     SELCOM_PESA = "SELCOM_PESA"
     MOBILE_MONEY = "MOBILE_MONEY"

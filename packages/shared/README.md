@@ -1,6 +1,6 @@
 # @infinity/shared
 
-Shared TypeScript constants and enums used across Infinity Africa frontend
+Shared TypeScript constants and enums used across InfinityPay frontend
 surfaces (`apps/web`): collection methods, disbursement methods, transaction
 statuses, invoice statuses, payment link statuses, and webhook event names.
 Values mirror the CHECK constraints in `supabase/migrations`.

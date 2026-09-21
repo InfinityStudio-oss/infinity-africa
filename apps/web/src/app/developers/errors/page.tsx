@@ -14,7 +14,7 @@ const ERRORS: Array<{ status: number; code: string; meaning: string }> = [
   { status: 409, code: "idempotency_key_reused", meaning: "The same Idempotency-Key was sent with a different request body." },
   { status: 409, code: "insufficient_balance", meaning: "A disbursement amount exceeds your current available balance." },
   { status: 422, code: "validation_error", meaning: "The request body failed validation — see error.details for the field-level breakdown." },
-  { status: 500, code: "internal_error", meaning: "Something went wrong on Infinity Africa's side. Safe to retry; contact us if it persists." },
+  { status: 500, code: "internal_error", meaning: "Something went wrong on InfinityPay's side. Safe to retry; contact us if it persists." },
 ];
 
 export default function ErrorCodesPage() {

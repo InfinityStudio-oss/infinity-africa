@@ -6,7 +6,7 @@ import { MerchantUsersTable } from "@/components/super-admin/merchant-users-tabl
 import { listAdminMerchantUsers } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Merchant Users | Infinity Africa Super Admin",
+  title: "Merchant Users | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminMerchantUsersPage() {
@@ -21,7 +21,7 @@ export default async function SuperAdminMerchantUsersPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Merchant Users" description="View user accounts across every merchant on the Infinity Africa platform." />
+      <PageHeader title="Merchant Users" description="View user accounts across every merchant on the InfinityPay platform." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="group" label="Total Users" value={counts.total.toLocaleString()} />

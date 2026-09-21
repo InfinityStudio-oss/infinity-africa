@@ -52,19 +52,19 @@ python scripts/test_selcom_disbursement_sandbox.py \
   --preset selcom \
   --amount 1000 \
   --purpose "Sandbox internal transfer test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 
 python scripts/test_selcom_disbursement_sandbox.py \
   --preset bank \
   --amount 1000 \
   --purpose "Sandbox bank withdrawal test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 
 python scripts/test_selcom_disbursement_sandbox.py \
   --preset wallet \
   --amount 1000 \
   --purpose "Sandbox wallet withdrawal test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 ```
 
 A manual `--recipient-fi-code`/`--recipient-account`/`--recipient-name`
@@ -139,17 +139,17 @@ running locally, just prefixed with `railway ssh --`:
 railway ssh -- python scripts/test_selcom_disbursement_sandbox.py \
   --preset selcom --amount 1000 \
   --purpose "Sandbox internal transfer test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 
 railway ssh -- python scripts/test_selcom_disbursement_sandbox.py \
   --preset bank --amount 1000 \
   --purpose "Sandbox bank withdrawal test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 
 railway ssh -- python scripts/test_selcom_disbursement_sandbox.py \
   --preset wallet --amount 1000 \
   --purpose "Sandbox wallet withdrawal test" \
-  --remarks "Infinity Africa sandbox test"
+  --remarks "InfinityPay sandbox test"
 ```
 
 If the container's working directory ever isn't the app root, wrap it:

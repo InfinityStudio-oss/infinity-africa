@@ -5,7 +5,7 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "Payment Links | Infinity Africa",
+  title: "Payment Links | InfinityPay",
   description: "Create shareable payment links with amount, customer phone, description, and expiry — let customers pay however suits them best.",
 };
 
@@ -66,7 +66,7 @@ export default function PaymentLinksPage() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-on-primary/70">Payment Request</p>
                     <span className="flex shrink-0 items-center gap-1">
                       <Icon name="all_inclusive" className="text-on-primary text-[15px]" />
-                      <span className="text-xs font-bold tracking-tight text-on-primary">Infinity Africa</span>
+                      <span className="text-xs font-bold tracking-tight text-on-primary">InfinityPay</span>
                     </span>
                   </div>
                   <p className="mt-2 text-3xl font-bold">TZS 25,000.00</p>

@@ -189,7 +189,7 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
     return collection
 
 
-_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinityafrica.net"
+_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
 
 
 async def execute_wallet_push_collection(
@@ -228,7 +228,7 @@ async def execute_wallet_push_collection(
     authenticated with one) and the legacy Merchant Portal dashboard
     push endpoint (source defaults to DASHBOARD_REQUEST) — `source`
     always reflects which one actually called this, never guessed here."""
-    buyer_name = customer_name or "Infinity Africa Customer"
+    buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 
     order = await create_checkout_order_minimal(

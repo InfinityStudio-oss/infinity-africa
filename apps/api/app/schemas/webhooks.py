@@ -23,8 +23,8 @@ class WebhookEventResponse(BaseModel):
 class SelcomWebhookPayload(BaseModel):
     """Body of an inbound POST /v1/webhooks/selcom delivery. Selcom only
     ever reports on its own domain events — collections and disbursements —
-    since it has no concept of Infinity Africa's payment_link/invoice entities;
-    payment_link.paid/invoice.paid are separate, *outbound* events Infinity Africa
+    since it has no concept of InfinityPay's payment_link/invoice entities;
+    payment_link.paid/invoice.paid are separate, *outbound* events InfinityPay
     enqueues as a consequence of resolving a linked collection, not
     something Selcom itself sends. A real Selcom callback has its own
     documented shape — this is a reasonable placeholder the mock provider's

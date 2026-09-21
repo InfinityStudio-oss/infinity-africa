@@ -364,7 +364,7 @@ def test_notification_email_uses_required_sender_and_reply_to(fake_client, fake_
     _stk_push_and_resolve(admin_id, merchant_id)
 
     call = next(c for c in fake_resend.calls if c["to"] == ["owner@example.com"])
-    assert call["from"] == "Infinity Africa <notification@infinityafrica.net>"
+    assert call["from"] == "InfinityPay <notification@infinityafrica.net>"
     assert call["reply_to"] == "info@infinityafrica.net"
 
 

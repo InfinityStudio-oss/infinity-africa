@@ -204,7 +204,7 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
       setState("awaiting_confirmation");
     } catch {
       setState("failed");
-      setErrorMessage("We couldn't reach Infinity Africa. Check your connection and try again.");
+      setErrorMessage("We couldn't reach InfinityPay. Check your connection and try again.");
     }
   }
 
@@ -350,7 +350,7 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
           <p className="text-xs font-semibold uppercase tracking-wide text-on-primary/70">Payment Request</p>
           <span className="flex shrink-0 items-center gap-1.5">
             <Icon name="all_inclusive" className="text-on-primary text-[18px]" />
-            <span className="text-sm font-bold tracking-tight text-on-primary">Infinity Africa</span>
+            <span className="text-sm font-bold tracking-tight text-on-primary">InfinityPay</span>
           </span>
         </div>
         <p className="mt-2 text-3xl font-bold">{formatCurrency(link.amount, link.currency)}</p>

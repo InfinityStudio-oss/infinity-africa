@@ -5,7 +5,7 @@ import { fetchPublicPayByLink } from "@/lib/pay-by-link";
 import { fetchPublicPaymentLink, type PaymentLinkStatus, type PublicPaymentLink } from "@/lib/payment-links";
 
 export const metadata = {
-  title: "Pay | Infinity Africa",
+  title: "Pay | InfinityPay",
 };
 
 const NON_ACTIVE_COPY: Record<Exclude<PaymentLinkStatus, "ACTIVE">, { title: string; message: string }> = {
@@ -72,7 +72,7 @@ export default async function CustomerPaymentPage({
 
         <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-on-surface-variant">
           <LockIcon />
-          Powered by Infinity Africa
+          Powered by InfinityPay
         </p>
       </div>
     </div>

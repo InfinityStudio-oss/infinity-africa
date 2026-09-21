@@ -21,7 +21,7 @@ export function OverviewWelcome({ accountStatus }: { accountStatus: AccountStatu
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Welcome to Infinity Africa" description={`Account status: ${ACCOUNT_STATUS_LABELS[accountStatus]}`} />
+      <PageHeader title="Welcome to InfinityPay" description={`Account status: ${ACCOUNT_STATUS_LABELS[accountStatus]}`} />
 
       <Card>
         <div className="flex items-start gap-4">

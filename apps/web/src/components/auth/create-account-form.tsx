@@ -77,7 +77,7 @@ function SignupComplete({ email, notice, canResend }: { email: string; notice?: 
         <>
           <p className="text-sm text-on-surface-variant">
             We sent a verification link to <span className="font-semibold text-on-surface">{email}</span>. Confirm your
-            email, then wait for Infinity Africa to review and approve your account. The link can take a minute to
+            email, then wait for InfinityPay to review and approve your account. The link can take a minute to
             arrive — check your spam folder too.
           </p>
           <form action={resendAction}>
@@ -205,7 +205,7 @@ export function CreateAccountForm() {
             name: "agreedToTerms",
             node: (
               <span>
-                I agree to the Infinity Africa{" "}
+                I agree to the InfinityPay{" "}
                 <Link href="/terms" target="_blank" className="font-semibold text-primary-container hover:underline">
                   Terms of Service
                 </Link>
@@ -216,7 +216,7 @@ export function CreateAccountForm() {
             name: "agreedToPrivacy",
             node: (
               <span>
-                I agree to the Infinity Africa{" "}
+                I agree to the InfinityPay{" "}
                 <Link href="/privacy" target="_blank" className="font-semibold text-primary-container hover:underline">
                   Privacy Policy
                 </Link>

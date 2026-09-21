@@ -96,7 +96,7 @@ async function apiWrite<T>(path: string, method: "POST" | "PATCH", input?: unkno
       body: input !== undefined ? JSON.stringify(input) : undefined,
     });
   } catch {
-    throw new AdminApiError("Couldn't reach Infinity Africa. Check your connection and try again.");
+    throw new AdminApiError("Couldn't reach InfinityPay. Check your connection and try again.");
   }
 
   const body: ApiEnvelope<T> = await res.json();

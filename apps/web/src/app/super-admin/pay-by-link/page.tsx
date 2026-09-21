@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format";
 import { listAdminPayByLinks } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Pay by Link | Infinity Africa Super Admin",
+  title: "Pay by Link | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminPayByLinkPage() {

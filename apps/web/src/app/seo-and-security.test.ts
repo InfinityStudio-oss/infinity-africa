@@ -51,7 +51,7 @@ describe("robots.ts", () => {
   });
 
   it("points at the production sitemap", () => {
-    expect(robots().sitemap).toBe("https://infinityafrica.net/sitemap.xml");
+    expect(robots().sitemap).toBe("https://infinitypay.me/sitemap.xml");
   });
 });
 
@@ -60,10 +60,10 @@ describe("sitemap.ts", () => {
   const urls = entries.map((entry) => entry.url);
 
   it("includes the homepage and public marketing/developer-docs pages", () => {
-    expect(urls).toContain("https://infinityafrica.net/");
-    expect(urls).toContain("https://infinityafrica.net/solutions");
-    expect(urls).toContain("https://infinityafrica.net/developers");
-    expect(urls).toContain("https://infinityafrica.net/developers/webhooks");
+    expect(urls).toContain("https://infinitypay.me/");
+    expect(urls).toContain("https://infinitypay.me/solutions");
+    expect(urls).toContain("https://infinitypay.me/developers");
+    expect(urls).toContain("https://infinitypay.me/developers/webhooks");
   });
 
   it("never includes a private, authenticated, or transaction-specific path", () => {
@@ -90,9 +90,9 @@ describe("sitemap.ts", () => {
     }
   });
 
-  it("gives every URL an absolute https://infinityafrica.net origin", () => {
+  it("gives every URL an absolute https://infinitypay.me origin", () => {
     for (const url of urls) {
-      expect(url.startsWith("https://infinityafrica.net")).toBe(true);
+      expect(url.startsWith("https://infinitypay.me")).toBe(true);
     }
   });
 });
@@ -117,8 +117,8 @@ describe("next.config.ts security headers", () => {
 describe("root layout.tsx metadata", () => {
   const layoutSource = source("layout.tsx");
 
-  it("uses the versioned v2 Open Graph/Twitter image at the recommended absolute URL", () => {
-    expect(layoutSource).toContain("https://infinityafrica.net/og/infinity-africa-og-v2.png");
+  it("uses the versioned v1 Open Graph/Twitter image at the recommended absolute URL", () => {
+    expect(layoutSource).toContain("https://infinitypay.me/og/infinitypay-og-v1.png");
   });
 
   it("never references the old logo file in social metadata", () => {
@@ -138,7 +138,7 @@ describe("root layout.tsx metadata", () => {
   });
 
   it("declares a canonical URL", () => {
-    expect(layoutSource).toContain("https://infinityafrica.net/");
+    expect(layoutSource).toContain("https://infinitypay.me/");
     expect(layoutSource).toMatch(/canonical:/);
   });
 });

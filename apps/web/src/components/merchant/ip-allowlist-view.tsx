@@ -67,7 +67,7 @@ export function IpAllowlistView() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <h3 className="text-2xl font-semibold text-on-background">Add a Server IP</h3>
           <p className="text-sm text-on-surface-variant -mt-3">
-            Add your own server&rsquo;s IP address or CIDR block — Infinity Africa never generates these for you. A new
+            Add your own server&rsquo;s IP address or CIDR block — InfinityPay never generates these for you. A new
             entry starts <span className="font-medium">Pending Approval</span> until reviewed.
           </p>
 

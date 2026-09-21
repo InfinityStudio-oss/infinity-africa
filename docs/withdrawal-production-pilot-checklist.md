@@ -226,7 +226,7 @@ correct the request signing code is.
 
 1. Check the transaction's status directly in Selcom's own Business
    portal/dashboard.
-2. Compare against Infinity Africa's own `disbursements` row status.
+2. Compare against InfinityPay's own `disbursements` row status.
 3. Confirm the `ledger_entries` for this transaction are balanced (debits
    == credits) and match the expected amount + fee split.
 4. Confirm the merchant wallet balance reflects exactly what's expected —

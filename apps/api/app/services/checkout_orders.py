@@ -39,7 +39,7 @@ from app.services.selcom_checkout.client import (
 # outright. Revisit if Selcom's own account settings ever make this
 # field genuinely optional, or if the checkout page starts collecting a
 # real email.
-_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinityafrica.net"
+_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
 
 
 async def create_checkout_order_minimal(
@@ -136,7 +136,7 @@ async def get_or_create_checkout_order_for_payment_link(client: Client, *, payme
         return existing
 
     buyer_email = payment_link.get("customer_email") or f"payment-link-{payment_link['id']}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
-    buyer_name = payment_link.get("customer_name") or "Infinity Africa Customer"
+    buyer_name = payment_link.get("customer_name") or "InfinityPay Customer"
 
     return await create_checkout_order_minimal(
         client,

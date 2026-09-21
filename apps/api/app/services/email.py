@@ -150,10 +150,10 @@ def _mask_identifier(value: str) -> str:
 
 
 def _email_shell(*, body_html: str) -> str:
-    """Wraps `body_html` in the Infinity Africa branded header/footer
+    """Wraps `body_html` in the InfinityPay branded header/footer
     every transactional email shares — dark green header band (∞ mark +
     wordmark), white content area, light-gray footer with a help-contact
-    line and "Powered by Infinity Africa". Table-based HTML with inline
+    line and "Powered by InfinityPay". Table-based HTML with inline
     styles throughout — the only layout approach that renders consistently
     across real email clients (Gmail, Outlook, Apple Mail strip <style>
     blocks and most CSS unless it's inline). The header band sets both the
@@ -174,7 +174,7 @@ def _email_shell(*, body_html: str) -> str:
             <tr>
               <td bgcolor="#04332a" style="background-color:#04332a;padding:24px 28px;">
                 <span style="font-size:20px;color:#9cf5c1;vertical-align:middle;">&#8734;</span>
-                <span style="font-size:18px;font-weight:700;color:#ffffff;vertical-align:middle;margin-left:6px;">Infinity Africa</span>
+                <span style="font-size:18px;font-weight:700;color:#ffffff;vertical-align:middle;margin-left:6px;">InfinityPay</span>
               </td>
             </tr>
             <tr>
@@ -185,7 +185,7 @@ def _email_shell(*, body_html: str) -> str:
             </tr>
             <tr>
               <td style="padding:16px 28px;background-color:#f9fafb;text-align:center;">
-                <p style="margin:0;font-size:12px;color:#9ca3af;">Powered by Infinity Africa</p>
+                <p style="margin:0;font-size:12px;color:#9ca3af;">Powered by InfinityPay</p>
               </td>
             </tr>
           </table>
@@ -258,7 +258,7 @@ def _render_invoice_email_html(*, merchant: dict, invoice: dict, items: list[dic
     <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Payment Request</p>
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Invoice {invoice.get("invoice_number", "")} from {business_name}</h1>
     <p style="margin:0 0 20px;font-size:14px;color:#374151;">Hi {customer_name},</p>
-    <p style="margin:0 0 20px;font-size:14px;color:#374151;">{business_name} has sent you an invoice via Infinity Africa. You can review the details below and pay securely online.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#374151;">{business_name} has sent you an invoice via InfinityPay. You can review the details below and pay securely online.</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 8px;">
       <tr>
         <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Amount due</td>
@@ -289,7 +289,7 @@ def send_invoice_email(
     settings = get_settings()
     recipient = invoice["customer_email"]
     business_name = merchant.get("business_name") or "Your merchant"
-    subject = f"Invoice from {business_name} via Infinity Africa"
+    subject = f"Invoice from {business_name} via InfinityPay"
     sender = settings.invoice_email_from
     html = _render_invoice_email_html(merchant=merchant, invoice=invoice, items=items, payment_url=payment_url)
 
@@ -343,12 +343,12 @@ def send_staff_invite_email(
     settings = get_settings()
     business_name = merchant.get("business_name") or "your merchant account"
     role_label = invited_role.replace("_", " ").title()
-    subject = "You're invited to Infinity Africa Merchant Portal"
+    subject = "You're invited to InfinityPay Merchant Portal"
     sender = settings.email_from
 
     body = f"""
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">You're invited to join {business_name}</h1>
-    <p style="margin:0 0 16px;font-size:14px;color:#374151;">You've been invited to the Infinity Africa Merchant Portal as <strong>{role_label}</strong> for <strong>{business_name}</strong>.</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">You've been invited to the InfinityPay Merchant Portal as <strong>{role_label}</strong> for <strong>{business_name}</strong>.</p>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;">Accept the invitation below to set your password and get started.</p>
     {_cta_button(accept_url, "Accept Invitation")}
     <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">This invite link expires after a limited time — if it's expired, ask an admin at {business_name} to send a new one.</p>
@@ -411,12 +411,12 @@ def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -
 
     reset_url = result.properties.action_link
     settings = get_settings()
-    subject = "Reset your Infinity Africa password"
+    subject = "Reset your InfinityPay password"
     sender = settings.email_from
 
     body = f"""
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Reset your password</h1>
-    <p style="margin:0 0 16px;font-size:14px;color:#374151;">We received a request to reset the password for your Infinity Africa account.</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">We received a request to reset the password for your InfinityPay account.</p>
     {_cta_button(reset_url, "Reset Password")}
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">If you did not request this, you can ignore this email.</p>
     """
@@ -467,7 +467,7 @@ def send_email_verification_email(client: Client, *, email: str, action_link: st
 
     body = f"""
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Confirm your email address</h1>
-    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Thanks for signing up with Infinity Africa. Confirm your
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Thanks for signing up with InfinityPay. Confirm your
     email address to finish creating your merchant account.</p>
     {_cta_button(action_link, "Confirm email address")}
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">After you confirm, our team reviews your business details
@@ -564,7 +564,7 @@ def send_payment_receipt_email(client: Client, *, merchant: dict, transaction: d
     currency = transaction.get("currency") or collection.get("currency") or "TZS"
     amount = transaction.get("gross_amount") or collection.get("amount")
     receipt_number = f"RCPT-{str(collection['id']).replace('-', '')[-8:].upper()}"
-    subject = "Your payment receipt from Infinity Africa"
+    subject = "Your payment receipt from InfinityPay"
     sender = settings.email_from
 
     receipt_link_block = ""
@@ -650,7 +650,7 @@ def send_inquiry_notification_email(client: Client, *, inquiry: dict) -> dict | 
     if not settings.ceo_email:
         return None
 
-    subject = "New Infinity Africa inquiry received"
+    subject = "New InfinityPay inquiry received"
     sender = settings.email_from
     rows = "".join(
         f"""
@@ -750,7 +750,7 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
     settings = get_settings()
     business_name = merchant.get("business_name") or "there"
     merchant_code = merchant.get("merchant_code")
-    subject = "Your Infinity Africa account has been approved"
+    subject = "Your InfinityPay account has been approved"
     sender = settings.email_from
 
     services_list = "".join(
@@ -769,10 +769,10 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
     )
 
     body = f"""
-    <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Welcome to Infinity Africa, {business_name}!</h1>
+    <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Welcome to InfinityPay, {business_name}!</h1>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;">Your account is approved and ready to go.</p>
     {merchant_id_row}
-    <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">With Infinity Africa you can</p>
+    <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">With InfinityPay you can</p>
     <ul style="margin:0 0 8px;padding-left:20px;">
       {services_list}
     </ul>
@@ -884,7 +884,7 @@ def send_merchant_signup_notification_email(
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       {rows_html}
     </table>
-    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Supporting KYC documents (TIN certificate, business licence, etc.) are collected offline by Infinity Africa if needed.</p>
+    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Supporting KYC documents (TIN certificate, business licence, etc.) are collected offline by InfinityPay if needed.</p>
     {_cta_button(review_url, "Review Submission")}
     """
     html = _email_shell(body_html=body)
@@ -1040,7 +1040,7 @@ def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursemen
     merchant_code = merchant.get("merchant_code")
     amount = disbursement.get("amount")
     currency = disbursement.get("currency") or "TZS"
-    subject = "Your Infinity Africa withdrawal is successful"
+    subject = "Your InfinityPay withdrawal is successful"
     sender = settings.email_from
     portal_url = f"{settings.app_url}/merchant/withdrawals"
 
@@ -1135,7 +1135,7 @@ def send_payment_link_customer_email(client: Client, *, merchant: dict, payment_
     description = payment_link.get("description")
     reference = payment_link.get("merchant_reference")
     payment_url = build_public_url(payment_link["public_slug"])
-    subject = f"Payment request from {business_name} via Infinity Africa"
+    subject = f"Payment request from {business_name} via InfinityPay"
     sender = settings.email_from
 
     rows: list[tuple[str, str]] = [("Amount", _money(amount, currency))]

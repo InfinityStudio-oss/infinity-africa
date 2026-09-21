@@ -39,9 +39,9 @@ from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
 from app.services.crud import execute_maybe_single, insert_row, update_row
 
-SUPER_ADMIN_EMAIL_DEFAULT = "ceo@infinityafrica.net"
+SUPER_ADMIN_EMAIL_DEFAULT = "ceo@infinitypay.me"
 MERCHANT_EMAIL_DEFAULT = "paulmasanja008@gmail.com"
-MERCHANT_BUSINESS_NAME_DEFAULT = "Infinity Africa Test Merchant"
+MERCHANT_BUSINESS_NAME_DEFAULT = "InfinityPay Test Merchant"
 MERCHANT_CONTACT_PHONE_DEFAULT = "+255747730270"
 
 _LIST_USERS_PAGE_SIZE = 200

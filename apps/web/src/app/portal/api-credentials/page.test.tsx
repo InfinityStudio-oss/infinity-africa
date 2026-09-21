@@ -32,6 +32,6 @@ describe("ApiCredentialsPage", () => {
 
   it("sets the page title via metadata, not a rendered heading override", async () => {
     const pageModule = await import("./page");
-    expect(pageModule.metadata.title).toBe("API Credentials | Infinity Africa");
+    expect(pageModule.metadata.title).toBe("API Credentials | InfinityPay");
   });
 });

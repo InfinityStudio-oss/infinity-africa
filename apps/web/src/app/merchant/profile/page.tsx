@@ -7,7 +7,7 @@ import { PortalShell } from "@/components/portal/portal-shell";
 import { ProfileView } from "@/components/merchant/profile-view";
 
 export const metadata = {
-  title: "Profile | Infinity Africa",
+  title: "Profile | InfinityPay",
 };
 
 export default async function MerchantProfilePage() {

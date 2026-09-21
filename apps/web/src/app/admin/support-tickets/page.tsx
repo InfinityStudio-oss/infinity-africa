@@ -8,7 +8,7 @@ import { listSupportTickets } from "@/lib/admin/api";
 import { ticketPriorityBadge, ticketStatusBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Support Tickets | Infinity Africa Super Admin",
+  title: "Support Tickets | InfinityPay Super Admin",
 };
 
 export default async function SupportTicketsPage() {
@@ -19,7 +19,7 @@ export default async function SupportTicketsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Support Tickets" description="Merchant support requests escalated to the Infinity Africa platform team." />
+      <PageHeader title="Support Tickets" description="Merchant support requests escalated to the InfinityPay platform team." />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard icon="confirmation_number" label="Open Tickets" value={open.toLocaleString()} />

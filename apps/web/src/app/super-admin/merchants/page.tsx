@@ -4,7 +4,7 @@ import { MerchantsTable } from "@/components/super-admin/merchants-table";
 import { listAdminMerchants } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Merchants | Infinity Africa Super Admin",
+  title: "Merchants | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminMerchantsPage() {
@@ -19,7 +19,7 @@ export default async function SuperAdminMerchantsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Merchant Management" description="Onboard, verify, and manage merchants on the Infinity Africa platform." />
+      <PageHeader title="Merchant Management" description="Onboard, verify, and manage merchants on the InfinityPay platform." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="store" label="Total Merchants" value={counts.total.toLocaleString()} />

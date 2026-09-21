@@ -1947,7 +1947,7 @@ def create_my_merchant_user(
         # (duplicate email, invalid email, rate limit, etc) with no stable
         # subclass to catch narrowly.
         raise ConflictError(
-            f"Couldn't invite this person — the email may already be registered with Infinity Africa. ({exc})"
+            f"Couldn't invite this person — the email may already be registered with InfinityPay. ({exc})"
         ) from exc
 
     invited_user = result.user

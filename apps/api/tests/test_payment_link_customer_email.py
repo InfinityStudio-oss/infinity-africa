@@ -27,7 +27,7 @@ client = TestClient(app)
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
-    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinityafrica.net")
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://infinitypay.me")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -79,7 +79,7 @@ def test_email_sent_when_customer_email_provided(fake_client, fake_resend):
     assert link["customer_email_sent"] is True
     assert len(fake_resend.calls) == 1
     assert fake_resend.calls[0]["to"] == ["jane@example.com"]
-    assert fake_resend.calls[0]["subject"] == "Payment request from Masanja Traders via Infinity Africa"
+    assert fake_resend.calls[0]["subject"] == "Payment request from Masanja Traders via InfinityPay"
 
 
 def test_email_contains_the_real_pay_now_url(fake_client, fake_resend):
@@ -89,8 +89,8 @@ def test_email_contains_the_real_pay_now_url(fake_client, fake_resend):
 
     html = fake_resend.calls[0]["html"]
     assert link["public_url"] in html
-    assert link["public_url"] == f"https://infinityafrica.net/pay/{link['public_slug']}"
-    assert "pay.infinityafrica.net" not in html
+    assert link["public_url"] == f"https://infinitypay.me/pay/{link['public_slug']}"
+    assert "pay.infinitypay.me" not in html
 
 
 def test_no_email_when_customer_email_is_missing(fake_client, fake_resend):

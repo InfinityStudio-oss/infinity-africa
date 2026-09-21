@@ -4,7 +4,7 @@ import { PaymentLinksView } from "@/components/merchant/payment-links-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Payment Links | Infinity Africa",
+  title: "Payment Links | InfinityPay",
 };
 
 export default async function PaymentLinksPage() {

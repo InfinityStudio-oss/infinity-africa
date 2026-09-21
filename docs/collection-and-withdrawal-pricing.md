@@ -107,7 +107,7 @@ on-page notice.
 
 ### If a real provider disbursement cost needs tracking later
 
-Selcom (or any future payout provider) may charge Infinity Africa a real
+Selcom (or any future payout provider) may charge InfinityPay a real
 cost per payout. That cost is an **internal platform cost** — it must
 never be deducted from what a merchant receives unless a deliberate,
 separate future policy change says otherwise. Nothing in this codebase

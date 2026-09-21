@@ -26,14 +26,14 @@ export default function DisbursementsApiPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">API Reference</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Disbursements API</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-6 max-w-2xl">
-        Send money out of your Infinity Africa balance — to a Selcom Pesa wallet, a mobile money number, or a bank account.
-        Available balance is validated before anything is created, and every withdrawal is reviewed by an Infinity Africa
+        Send money out of your InfinityPay balance — to a Selcom Pesa wallet, a mobile money number, or a bank account.
+        Available balance is validated before anything is created, and every withdrawal is reviewed by an InfinityPay
         Super Admin before it reaches Selcom.
       </p>
 
       <div className="mb-10 max-w-2xl space-y-4">
         <Callout title="Withdrawals vs. Disbursements">
-          In the Infinity Africa dashboard, merchants see this feature as <strong>Withdrawals</strong>. In the API, the
+          In the InfinityPay dashboard, merchants see this feature as <strong>Withdrawals</strong>. In the API, the
           technical endpoint may use <code className="font-mono text-xs">disbursements</code> for
           payment-provider compatibility. Internally, withdrawal approvals call the{" "}
           <strong>Selcom Business Disbursement API</strong> — that name only ever appears in backend/internal
@@ -41,7 +41,7 @@ export default function DisbursementsApiPage() {
         </Callout>
         <Callout tone="warning" title="Every withdrawal needs Super Admin approval — no exceptions">
           Submitting a withdrawal never calls Selcom. It always comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code>,
-          regardless of amount or method. Selcom is only ever contacted once an Infinity Africa Super Admin approves the
+          regardless of amount or method. Selcom is only ever contacted once an InfinityPay Super Admin approves the
           request in the dashboard.
         </Callout>
       </div>
@@ -71,7 +71,7 @@ export default function DisbursementsApiPage() {
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           Any phone-based destination (Selcom Pesa, mobile money) must be a Tanzanian number in the form{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">255XXXXXXXXX</code> —
-          country code, no leading zero, <strong>no plus sign</strong>. Infinity Africa normalizes
+          country code, no leading zero, <strong>no plus sign</strong>. InfinityPay normalizes
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">0747730270</code>,{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">747730270</code>, and{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">+255747730270</code> to
@@ -242,7 +242,7 @@ export default function DisbursementsApiPage() {
         <Callout title="Every withdrawal is held for manual review">
           A withdrawal always comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code> with{" "}
           <code className="font-mono text-xs">requires_approval: true</code> and is <em>not</em> sent to Selcom until
-          an Infinity Africa Super Admin approves it in the dashboard. Poll{" "}
+          an InfinityPay Super Admin approves it in the dashboard. Poll{" "}
           <code className="font-mono text-xs">GET .../merchant/withdrawals</code> or listen for{" "}
           <code className="font-mono text-xs">disbursement.success</code>/<code className="font-mono text-xs">disbursement.failed</code> to
           know the outcome.

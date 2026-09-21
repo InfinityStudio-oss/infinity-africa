@@ -62,7 +62,7 @@ export default function AdminSettingsPage() {
         <form onSubmit={(event) => event.preventDefault()} className="grid sm:grid-cols-2 gap-5">
           <div>
             <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Platform Name</label>
-            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" defaultValue="Infinity Africa" type="text" />
+            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" defaultValue="InfinityPay" type="text" />
           </div>
           <div>
             <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Support Email</label>

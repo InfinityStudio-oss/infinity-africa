@@ -33,7 +33,7 @@ export function OverviewDashboard({ overview }: { overview: MerchantOverview }) 
     <div className="space-y-8">
       <PageHeader
         title={`Welcome back, ${overview.merchant.business_name}`}
-        description="Here's what's happening with your Infinity Africa account."
+        description="Here's what's happening with your InfinityPay account."
         action={
           <div className="flex flex-col items-start md:items-end gap-1.5">
             <StatusBadge label={KYC_LABEL[kycStatus] ?? kycStatus} tone={KYC_TONE[kycStatus] ?? "neutral"} dot />

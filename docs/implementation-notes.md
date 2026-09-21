@@ -1,7 +1,7 @@
 # Implementation Notes
 
 Placeholder for architecture decisions, open questions, and implementation
-notes as Infinity Africa is built out.
+notes as InfinityPay is built out.
 
 ## Stack
 
@@ -30,11 +30,11 @@ Supabase CLI (`supabase db push`). Summary:
 - **merchants** / **merchant_users** — tenants and their Supabase Auth team members.
 - **customers** — a merchant's own customers.
 - **api_keys** — hashed merchant API credentials (plaintext shown once, never stored).
-- **settlement_accounts** — Infinity Africa's own platform-level bank/provider accounts.
+- **settlement_accounts** — InfinityPay's own platform-level bank/provider accounts.
 - **payment_links** / **invoices** / **invoice_items** — the documents merchants send customers.
 - **collections** — attempts to pull money from a customer (`USSD_PUSH`, `STK_PUSH`,
   `SELCOM_PESA_PUSH`, `DYNAMIC_QR`); `merchant_reference` is the merchant's
-  own order/reference, kept distinct from Infinity Africa's own `transactions.reference`.
+  own order/reference, kept distinct from InfinityPay's own `transactions.reference`.
 - **disbursements** — payouts to a merchant (`SELCOM_PESA`, `MOBILE_MONEY`, `BANK_ACCOUNT`);
   `status` is its own uppercase `PENDING`/`PROCESSING`/`SUCCESS`/`FAILED`/`REVERSED`
   vocabulary, distinct from the lowercase `TransactionStatus` its settling
@@ -106,7 +106,7 @@ decisions, at every layer:
   pass; otherwise requires active membership with an allowed role — mirrors
   the RLS OR-policy), `require_super_admin`, and `verify_api_key` (a
   *separate* credential from Supabase Auth, for a merchant's own backend
-  calling Infinity Africa directly — hashed the same way as `api_keys.hashed_key`).
+  calling InfinityPay directly — hashed the same way as `api_keys.hashed_key`).
   `get_merchant_actor`/`require_role` expect `merchant_id` as a path
   segment (most routers); `get_authenticated_caller` +
   `authorize_merchant_action` are the same two rules split apart, for flat
@@ -190,7 +190,7 @@ single Postgres transaction that one `client.rpc(...)` call constitutes —
 called from `services/ledger.py`'s `_post_entries()`. Balance direction
 follows the standard convention: asset/expense accounts increase on debit;
 liability/equity/revenue accounts (including `merchant_wallet`, modeled as
-a liability — Infinity Africa owes the merchant that balance) increase on credit.
+a liability — InfinityPay owes the merchant that balance) increase on credit.
 
 `POST /v1/webhooks/selcom` is where a real Selcom callback would land.
 Handling, in order: (1) the raw request body is read via `Request.body()`
@@ -205,7 +205,7 @@ short-circuits as `{"status": "duplicate"}` rather than reprocessing (an
 invalid signature is stored `status: 'failed'` and rejected `401`); (4)
 `event_type` (`collection.success`/`collection.failed`/
 `disbursement.success`/`disbursement.failed` — the only things Selcom
-itself would ever report, having no concept of Infinity Africa's
+itself would ever report, having no concept of InfinityPay's
 payment_link/invoice entities) is dispatched by `provider_reference` to
 the existing `resolve_collection_from_callback`/
 `resolve_disbursement_from_callback`, reusing all of the collection/

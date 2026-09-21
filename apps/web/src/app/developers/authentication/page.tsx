@@ -13,7 +13,7 @@ export default function AuthenticationPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">API Key Authentication</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        Every server-to-server call to Infinity Africa is authenticated with an API key — a long-lived credential scoped to
+        Every server-to-server call to InfinityPay is authenticated with an API key — a long-lived credential scoped to
         your merchant account. There&apos;s no OAuth dance, no token refresh: generate a key once, send it on every
         request.
       </p>
@@ -31,12 +31,12 @@ export default function AuthenticationPage() {
             </p>
           </div>
           <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-5">
-            <h3 className="text-sm font-bold text-on-surface mb-1.5">Dashboard session — for the Infinity Africa portal only</h3>
+            <h3 className="text-sm font-bold text-on-surface mb-1.5">Dashboard session — for the InfinityPay portal only</h3>
             <p className="text-sm text-on-surface-variant leading-relaxed">
               The merchant dashboard itself authenticates with a Supabase Auth session token, also sent as{" "}
               <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">Authorization: Bearer &lt;access_token&gt;</code> —
-              Infinity Africa tells the two apart by prefix, not by header. You won&apos;t use this in your own integration
-              — it&apos;s only relevant if you&apos;re embedding the Infinity Africa dashboard itself.
+              InfinityPay tells the two apart by prefix, not by header. You won&apos;t use this in your own integration
+              — it&apos;s only relevant if you&apos;re embedding the InfinityPay dashboard itself.
             </p>
           </div>
         </div>
@@ -83,9 +83,9 @@ export default function AuthenticationPage() {
 }`}</CodeBlock>
         </div>
         <Callout tone="warning" title="Copy the plaintext key now — it won't be shown again">
-          <code className="font-mono text-xs">plaintext_key</code> is only ever returned once, on creation. Infinity Africa
+          <code className="font-mono text-xs">plaintext_key</code> is only ever returned once, on creation. InfinityPay
           stores only a SHA-256 hash — never the plaintext, never a recoverable/encrypted form — so there is no
-          &ldquo;reveal&rdquo; button anywhere, including for Infinity Africa staff. If you lose a key, there&apos;s exactly one fix:
+          &ldquo;reveal&rdquo; button anywhere, including for InfinityPay staff. If you lose a key, there&apos;s exactly one fix:
           rotate it (see below).
         </Callout>
       </section>
@@ -138,7 +138,7 @@ export default function AuthenticationPage() {
         <p className="text-sm text-on-surface-variant leading-relaxed">
           Both are self-service — creating a Sandbox key never requires approval. A Live key is also created directly
           from the dashboard, the moment your business account is approved, KYC-verified, and has pricing assigned;
-          there is no separate &ldquo;request production access&rdquo; step or waiting on Infinity Africa staff. Before that,
+          there is no separate &ldquo;request production access&rdquo; step or waiting on InfinityPay staff. Before that,
           creating a Live key returns:
         </p>
         <CodeBlock language="json — 403 response">{`{
@@ -157,7 +157,7 @@ export default function AuthenticationPage() {
           more likely to end up logged somewhere:
         </p>
         <CodeBlock language="http">{`GET /v1/transactions/TXN-4821AB HTTP/1.1
-Host: api.infinityafrica.net
+Host: api.infinitypay.me
 Authorization: Bearer inf_live_9f2a1c3bd8e7...`}</CodeBlock>
       </section>
 
@@ -202,7 +202,7 @@ Authorization: Bearer inf_live_9f2a1c3bd8e7...`}</CodeBlock>
         <Callout tone="warning" title="Never ship an API key to a browser, mobile app bundle, or public repo">
           A key embedded in client-side JavaScript, a mobile app binary, or committed source code can be extracted by
           anyone. Keep API keys on your server; have your website, ecommerce platform, or mobile app call your own
-          backend, which then calls Infinity Africa — never call Infinity Africa directly from code that ships to a customer&apos;s
+          backend, which then calls InfinityPay — never call InfinityPay directly from code that ships to a customer&apos;s
           device or browser.
         </Callout>
       </section>

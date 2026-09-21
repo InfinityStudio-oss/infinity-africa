@@ -32,7 +32,7 @@ export default function robots(): MetadataRoute.Robots {
         "/v1",
       ],
     },
-    sitemap: "https://infinityafrica.net/sitemap.xml",
-    host: "https://infinityafrica.net",
+    sitemap: "https://infinitypay.me/sitemap.xml",
+    host: "https://infinitypay.me",
   };
 }

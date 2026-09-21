@@ -10,7 +10,7 @@ import {
 } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Collection Pricing Rules | Infinity Africa Super Admin",
+  title: "Collection Pricing Rules | InfinityPay Super Admin",
 };
 
 export default async function SuperAdminPricingRulesPage({

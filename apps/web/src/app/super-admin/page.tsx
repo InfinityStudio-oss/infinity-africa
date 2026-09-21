@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from "@/lib/format";
 import { getAdminOverview, listAdminAuditLogs } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Dashboard | Infinity Africa Super Admin",
+  title: "Dashboard | InfinityPay Super Admin",
 };
 
 const MODULES = [
@@ -34,7 +34,7 @@ export default async function SuperAdminCommandCenterPage() {
       {!overview ? (
         <Card>
           <p className="text-sm text-on-surface-variant">
-            Couldn&apos;t reach Infinity Africa to load platform metrics. Check that apps/api is running and reachable.
+            Couldn&apos;t reach InfinityPay to load platform metrics. Check that apps/api is running and reachable.
           </p>
         </Card>
       ) : (

@@ -41,7 +41,7 @@ from app.services.selcom_checkout.client import (
 )
 
 _METHOD_LABEL = "SELCOM_PESA_PUSH"
-_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinityafrica.net"
+_PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
 
 
 async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_link: dict, buyer_phone: str) -> dict:
@@ -174,7 +174,7 @@ async def execute_selcompesa_push_collection(
     reuse against here, only the router's own Idempotency-Key replay.
 
     customer_phone is required — a push has nowhere to go without one."""
-    buyer_name = customer_name or "Infinity Africa Customer"
+    buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 
     order = await create_checkout_order_minimal(

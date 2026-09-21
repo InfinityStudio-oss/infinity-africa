@@ -104,7 +104,7 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
               <div className="absolute right-0 top-11 z-50 w-72 bg-surface border border-surface-container-highest rounded-lg shadow-ambient overflow-hidden">
                 <div className="px-4 py-3 border-b border-surface-container-highest">
                   <p className="text-sm font-semibold text-on-background">Need help?</p>
-                  <p className="text-xs text-on-surface-variant mt-0.5">Reach the Infinity Africa team directly.</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">Reach the InfinityPay team directly.</p>
                 </div>
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2 bg-surface-container-low border border-surface-container-highest rounded-lg px-3 py-2.5">

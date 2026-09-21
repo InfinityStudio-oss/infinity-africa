@@ -4,7 +4,7 @@ import { InvoicesView } from "@/components/merchant/invoices-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Invoices | Infinity Africa",
+  title: "Invoices | InfinityPay",
 };
 
 export default async function InvoicesPage() {

@@ -7,7 +7,7 @@ import { Header } from "@/components/site/header";
 import { Footer } from "@/components/site/footer";
 
 export const metadata = {
-  title: "Merchant Onboarding | Infinity Africa",
+  title: "Merchant Onboarding | InfinityPay",
 };
 
 export default async function OnboardingPage() {

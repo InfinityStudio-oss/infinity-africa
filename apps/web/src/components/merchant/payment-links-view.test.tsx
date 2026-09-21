@@ -18,7 +18,7 @@ const link: PaymentLink = {
   expires_at: null,
   status: PaymentLinkStatus.ACTIVE,
   public_slug: "abc123",
-  public_url: "https://pay.infinityafrica.co/pay/abc123",
+  public_url: "https://infinitypay.me/pay/abc123",
   merchant_reference: null,
   success_redirect_url: null,
   failure_redirect_url: null,

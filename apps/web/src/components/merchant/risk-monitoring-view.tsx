@@ -116,7 +116,7 @@ export function RiskMonitoringView() {
     <div className="space-y-8">
       <PageHeader
         title="Risk Monitoring"
-        description="Transactions flagged for review and any supporting documents Infinity Africa has requested."
+        description="Transactions flagged for review and any supporting documents InfinityPay has requested."
       />
 
       {openAlerts.length > 0 && (
@@ -126,7 +126,7 @@ export function RiskMonitoringView() {
             <div>
               <h3 className="font-semibold text-on-background mb-1">Transaction under review</h3>
               <p className="text-sm text-on-surface-variant">
-                Please submit any supporting documents requested by Infinity Africa below. Withdrawals may be temporarily
+                Please submit any supporting documents requested by InfinityPay below. Withdrawals may be temporarily
                 restricted while a high-risk transaction is under review.
               </p>
             </div>
@@ -192,7 +192,7 @@ export function RiskMonitoringView() {
             <EmptyState
               icon="folder_shared"
               heading="No document requests"
-              body="Infinity Africa hasn't asked for supporting documents on any transaction."
+              body="InfinityPay hasn't asked for supporting documents on any transaction."
               actionLabel=""
             />
           </div>

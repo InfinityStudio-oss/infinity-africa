@@ -8,7 +8,7 @@ import { listAdminPaymentLinks } from "@/lib/admin/live-api";
 import { adminPaymentLinkBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Payment Links | Infinity Africa Super Admin",
+  title: "Payment Links | InfinityPay Super Admin",
 };
 
 const SOURCE_LABELS: Record<string, string> = {

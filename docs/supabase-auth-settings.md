@@ -1,5 +1,14 @@
 # Supabase Auth settings — merchant signup & email verification
 
+> **Brand/domain migration**: the platform's public domain is moving from
+> `infinityafrica.net` (Infinity Africa) to `infinitypay.me` (InfinityPay).
+> **Add** the new `infinitypay.me` redirect URLs below alongside the
+> existing `infinityafrica.net` ones — do **not** remove the old ones yet.
+> Site URL should only move to `https://infinitypay.me` once the old
+> domain's redirect is confirmed working end to end (so a verification/
+> reset link opened from an old, already-sent email still lands
+> correctly). See `docs/MVP_LAUNCH_CHECKLIST.md`.
+
 These are **dashboard settings**, not code. They must be set on the
 production Supabase project (`vtwnhxwtnllgispjbkaz`) for the merchant
 signup → email verification → onboarding flow to work end to end. Code
@@ -16,11 +25,20 @@ entry — Supabase silently refuses to redirect anywhere not on the list.
 
 | Setting | Value |
 | --- | --- |
-| **Site URL** | `https://infinityafrica.net` |
+| **Site URL** | `https://infinityafrica.net` today; move to `https://infinitypay.me` once the redirect below is confirmed working end to end |
 
-**Redirect URLs** (allow-list — add every one):
+**Redirect URLs** (allow-list — add every one; keep the old
+`infinityafrica.net` entries until the domain migration is complete, do
+not remove them yet):
 
 ```
+https://infinitypay.me/auth/callback
+https://infinitypay.me/onboarding
+https://infinitypay.me/merchant/login
+https://infinitypay.me/merchant/reset-password
+https://infinitypay.me/admin-login/reset-password
+https://infinitypay.me/merchant/invite/accept
+
 https://infinityafrica.net/auth/callback
 https://infinityafrica.net/onboarding
 https://infinityafrica.net/merchant/login
@@ -29,9 +47,10 @@ https://infinityafrica.net/admin-login/reset-password
 https://infinityafrica.net/merchant/invite/accept
 ```
 
-If the site is also served on `www.`, add the `www.` variant of each.
-For Vercel preview deployments, add `https://*.vercel.app/auth/callback`
-(or the specific preview host) while testing.
+If the site is also served on `www.`, add the `www.` variant of each
+(for both domains). For Vercel preview deployments, add
+`https://*.vercel.app/auth/callback` (or the specific preview host) while
+testing.
 
 ## App environment variables
 
@@ -41,10 +60,10 @@ These are already documented in `apps/web/.env.example` /
 
 | Var | Where | Value (prod) |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SITE_URL` | `apps/web` | `https://infinityafrica.net` — used to build the `emailRedirectTo` sent to Supabase at signup (`lib/auth/actions.ts`). Falls back to the request host if unset. |
+| `NEXT_PUBLIC_SITE_URL` | `apps/web` | `https://infinitypay.me` — used to build the `emailRedirectTo` sent to Supabase at signup (`lib/auth/actions.ts`). Falls back to the request host if unset. |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `apps/web` | public project URL + anon key only |
-| `CEO_EMAIL` | `apps/api` | `ceo@infinityafrica.net` — merchant signup/business-submission notification recipient. If unset, that notification is silently skipped (never sent anywhere else). |
-| `APP_URL` | `apps/api` | `https://infinityafrica.net` — base URL in the approval / welcome email to the merchant. |
+| `CEO_EMAIL` | `apps/api` | `ceo@infinityafrica.net` — merchant signup/business-submission notification recipient. If unset, that notification is silently skipped (never sent anywhere else). Stays on the old domain until `infinitypay.me` is verified in Resend — see `docs/email-delivery.md`. |
+| `APP_URL` | `apps/api` | `https://infinitypay.me` — base URL in the approval / welcome email to the merchant. |
 
 ## The flow, once the above is set
 

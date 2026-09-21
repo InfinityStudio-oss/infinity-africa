@@ -150,10 +150,10 @@ def test_upsert_auth_user_creates_once_then_updates_on_rerun():
     client = _FakeAuthClient()
 
     first_id = upsert_auth_user(
-        client, email="ceo@infinityafrica.net", password="first-password", extra_metadata={"role": "SUPER_ADMIN"}
+        client, email="ceo@infinitypay.me", password="first-password", extra_metadata={"role": "SUPER_ADMIN"}
     )
     second_id = upsert_auth_user(
-        client, email="ceo@infinityafrica.net", password="second-password", extra_metadata={"role": "SUPER_ADMIN"}
+        client, email="ceo@infinitypay.me", password="second-password", extra_metadata={"role": "SUPER_ADMIN"}
     )
 
     assert first_id == second_id

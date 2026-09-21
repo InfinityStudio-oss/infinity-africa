@@ -3,7 +3,7 @@ import { StatusCard } from "@/components/payment-link/status-card";
 import { fetchPublicCollectionReceipt } from "@/lib/payment-links";
 
 export const metadata = {
-  title: "Receipt | Infinity Africa",
+  title: "Receipt | InfinityPay",
 };
 
 export default async function PaymentReceiptPage({

@@ -4,7 +4,7 @@ directly against SelcomCheckoutHTTPClient, bypassing every merchant-
 facing/customer validation layer.
 
 **This script sends a REAL push to a REAL phone number and, if the
-customer approves it, moves REAL money.** Infinity Africa has no Selcom
+customer approves it, moves REAL money.** InfinityPay has no Selcom
 Checkout sandbox — SELCOM_CHECKOUT_BASE_URL is always a production
 endpoint with production credentials. Unlike
 scripts/test_selcom_checkout_create_order_minimal.py (which only creates
@@ -43,8 +43,8 @@ Usage (not run automatically by anyone/anything other than a human who
 explicitly types this out):
 
     python apps/api/scripts/test_selcom_checkout_wallet_payment.py \\
-      --buyer-email test@infinityafrica.net \\
-      --buyer-name "Infinity Africa Test Customer" \\
+      --buyer-email test@infinitypay.me \\
+      --buyer-name "InfinityPay Test Customer" \\
       --buyer-phone 255747730270 \\
       --amount 1000 \\
       --confirm-live-payment

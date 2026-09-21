@@ -4,7 +4,7 @@ import { WithdrawalsView } from "@/components/merchant/withdrawals-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Withdrawals | Infinity Africa",
+  title: "Withdrawals | InfinityPay",
 };
 
 export default async function WithdrawalsPage() {

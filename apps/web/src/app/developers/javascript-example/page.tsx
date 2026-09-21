@@ -28,7 +28,7 @@ export default function JavaScriptExamplePage() {
 
       <section className="my-10">
         <h2 className="text-xl font-semibold text-on-surface mb-3">A small client wrapper</h2>
-        <CodeBlock language="javascript — infinity-client.js">{`const BASE_URL = process.env.INFINITY_BASE_URL ?? "https://api.infinityafrica.net";
+        <CodeBlock language="javascript — infinity-client.js">{`const BASE_URL = process.env.INFINITY_BASE_URL ?? "https://api.infinitypay.me";
 const API_KEY = process.env.INFINITY_API_KEY;
 
 async function infinityRequest(method, path, { body, idempotencyKey } = {}) {

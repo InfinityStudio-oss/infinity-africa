@@ -5,7 +5,7 @@ import { CustomersTable } from "@/components/super-admin/customers-table";
 import { listAdminCustomers, listAdminMerchants } from "@/lib/admin/live-api";
 
 export const metadata = {
-  title: "Customers | Infinity Africa Super Admin",
+  title: "Customers | InfinityPay Super Admin",
 };
 
 interface SuperAdminCustomersPageProps {
@@ -32,7 +32,7 @@ export default async function SuperAdminCustomersPage({ searchParams }: SuperAdm
     <div className="space-y-8">
       <PageHeader
         title="Customers"
-        description="Everyone who has paid an Infinity Africa merchant, across the whole platform."
+        description="Everyone who has paid an InfinityPay merchant, across the whole platform."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
