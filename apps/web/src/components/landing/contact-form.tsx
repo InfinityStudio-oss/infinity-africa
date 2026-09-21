@@ -57,7 +57,7 @@ export function ContactForm() {
       setStatus("sent");
     } catch {
       setStatus("error");
-      showError("Something went wrong sending your message. Please try again, or email info@infinityafrica.net directly.");
+      showError("Something went wrong sending your message. Please try again, or email info@infinitypay.me directly.");
     }
   }
 

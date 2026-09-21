@@ -12,7 +12,7 @@ import { createSupportTicket, listSupportTickets } from "@/lib/portal/api";
 import type { SupportTicket } from "@/lib/portal/types";
 
 const CONTACT_CARDS = [
-  { icon: "mail", label: "Email", value: "info@infinityafrica.net", href: "mailto:info@infinityafrica.net" },
+  { icon: "mail", label: "Email", value: "info@infinitypay.me", href: "mailto:info@infinitypay.me" },
   { icon: "call", label: "Phone / WhatsApp", value: "+255 747 730 270", href: "https://wa.me/255747730270" },
   { icon: "location_on", label: "Location", value: "Mbezi Luis - Ubungo - Dar es Salaam", href: null },
 ];

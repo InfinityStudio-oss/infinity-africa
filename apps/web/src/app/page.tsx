@@ -285,7 +285,7 @@ export default function Home() {
           <div className="max-w-[1280px] mx-auto">
             <SectionHeading eyebrow="Contact" title="Let's Talk" description="Have questions about integration, pricing, or getting your business set up? Our team in Dar es Salaam is ready to help." />
             <div className="grid sm:grid-cols-3 gap-6 mt-10 max-w-3xl mx-auto">
-              <ContactCard icon="mail" label="Business Email" value="info@infinityafrica.net" href="mailto:info@infinityafrica.net" />
+              <ContactCard icon="mail" label="Business Email" value="info@infinitypay.me" href="mailto:info@infinitypay.me" />
               <ContactCard icon="call" label="Customer Support" value="+255 747 730 270" href="https://wa.me/255747730270" />
               <ContactCard icon="location_on" label="Headquarters" value="Mbezi Luis - Ubungo - Dar es Salaam" />
             </div>

@@ -45,14 +45,14 @@ export function AuthSplitLayout({
           <ul className="space-y-2.5 text-sm text-on-primary/90">
             <li className="flex items-center gap-2.5">
               <Icon name="mail" className="text-[18px] text-on-primary/70" />
-              <a href="mailto:help@infinityafrica.net" className="hover:text-on-primary transition-colors">
-                help@infinityafrica.net
+              <a href="mailto:help@infinitypay.me" className="hover:text-on-primary transition-colors">
+                help@infinitypay.me
               </a>
             </li>
             <li className="flex items-center gap-2.5">
               <Icon name="mail" className="text-[18px] text-on-primary/70" />
-              <a href="mailto:info@infinityafrica.net" className="hover:text-on-primary transition-colors">
-                info@infinityafrica.net
+              <a href="mailto:info@infinitypay.me" className="hover:text-on-primary transition-colors">
+                info@infinitypay.me
               </a>
             </li>
             <li className="flex items-center gap-2.5">

@@ -66,7 +66,7 @@ export default function AdminSettingsPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Support Email</label>
-            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" defaultValue="info@infinityafrica.net" type="email" />
+            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" defaultValue="info@infinitypay.me" type="email" />
           </div>
           <div>
             <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Support Phone</label>

@@ -78,6 +78,6 @@ describe("ContactForm", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send Message" }));
 
-    expect(await screen.findByText(/info@infinityafrica\.net/)).toBeInTheDocument();
+    expect(await screen.findByText(/info@infinitypay\.me/)).toBeInTheDocument();
   });
 });

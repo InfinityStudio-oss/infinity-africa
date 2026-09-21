@@ -26,7 +26,7 @@ describe("AuthSplitLayout", () => {
     render(<AuthSplitLayout>form content</AuthSplitLayout>);
 
     expect(screen.getAllByText("InfinityPay").length).toBeGreaterThan(0);
-    expect(screen.getByText("help@infinityafrica.net")).toBeInTheDocument();
+    expect(screen.getByText("help@infinitypay.me")).toBeInTheDocument();
     expect(screen.getByText("+255 747 730 270")).toBeInTheDocument();
     expect(screen.getByText("Mbezi - Ubungo - Dar es Salaam")).toBeInTheDocument();
     expect(screen.getByText("Back to website")).toBeInTheDocument();

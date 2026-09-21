@@ -23,7 +23,7 @@ export default function ContactPage() {
               description="Have questions about integration, pricing, or getting your business set up? Our team in Dar es Salaam is ready to help — for merchants and developers alike."
             />
             <a
-              href="mailto:info@infinityafrica.net?subject=Talk%20to%20Sales"
+              href="mailto:info@infinitypay.me?subject=Talk%20to%20Sales"
               className="inline-flex items-center gap-2 bg-primary-container text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity shadow-ambient mt-8"
             >
               Talk to Sales
@@ -43,9 +43,9 @@ export default function ContactPage() {
               <div className="bg-surface-container border border-outline-variant/40 rounded-2xl p-8">
                 <h3 className="text-xs font-semibold text-primary-container uppercase tracking-wide mb-6">Connect With Us</h3>
                 <div className="space-y-5">
-                  <ContactCard icon="mail" label="Business Email" value="info@infinityafrica.net" href="mailto:info@infinityafrica.net" />
-                  <ContactCard icon="support_agent" label="Help" value="help@infinityafrica.net" href="mailto:help@infinityafrica.net" />
-                  <ContactCard icon="headset_mic" label="Support" value="info@infinityafrica.net" href="mailto:info@infinityafrica.net" />
+                  <ContactCard icon="mail" label="Business Email" value="info@infinitypay.me" href="mailto:info@infinitypay.me" />
+                  <ContactCard icon="support_agent" label="Help" value="help@infinitypay.me" href="mailto:help@infinitypay.me" />
+                  <ContactCard icon="headset_mic" label="Support" value="info@infinitypay.me" href="mailto:info@infinitypay.me" />
                   <ContactCard icon="call" label="Phone / WhatsApp" value="+255 747 730 270" href="https://wa.me/255747730270" />
                   <ContactCard icon="location_on" label="Location" value="Mbezi Luis - Ubungo - Dar es Salaam" />
                 </div>

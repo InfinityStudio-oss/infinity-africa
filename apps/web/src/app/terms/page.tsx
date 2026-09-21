@@ -137,20 +137,20 @@ export default function TermsPage() {
               <ul className="space-y-3">
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
                   <Icon name="mail" className="text-[18px] text-primary-container" />
-                  <a href="mailto:info@infinityafrica.net" className="hover:text-primary-container transition-colors">
-                    info@infinityafrica.net
+                  <a href="mailto:info@infinitypay.me" className="hover:text-primary-container transition-colors">
+                    info@infinitypay.me
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
                   <Icon name="support_agent" className="text-[18px] text-primary-container" />
-                  <a href="mailto:help@infinityafrica.net" className="hover:text-primary-container transition-colors">
-                    help@infinityafrica.net
+                  <a href="mailto:help@infinitypay.me" className="hover:text-primary-container transition-colors">
+                    help@infinitypay.me
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
                   <Icon name="headset_mic" className="text-[18px] text-primary-container" />
-                  <a href="mailto:info@infinityafrica.net" className="hover:text-primary-container transition-colors">
-                    info@infinityafrica.net
+                  <a href="mailto:info@infinitypay.me" className="hover:text-primary-container transition-colors">
+                    info@infinitypay.me
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
