@@ -1,11 +1,8 @@
 # Transactional email (Resend)
 
-> **Brand/domain migration in progress**: the product is now **InfinityPay**
-> (was Infinity Africa), and the long-term domain is `infinitypay.me` (was
-> `infinityafrica.net`). Email templates already say InfinityPay, but every
-> sender/reply-to/CEO address below **stays on `infinityafrica.net` until
-> `infinitypay.me` is verified in Resend** — see "Sender addresses" below.
-> Do not switch `EMAIL_FROM`/`INVOICE_EMAIL_FROM`/`EMAIL_REPLY_TO`/
+> Every sender/reply-to/CEO address below stays on `infinityafrica.net`
+> until `infinitypay.me` is verified in Resend — see "Sender addresses"
+> below. Do not switch `EMAIL_FROM`/`INVOICE_EMAIL_FROM`/`EMAIL_REPLY_TO`/
 > `CEO_EMAIL` to `@infinitypay.me` in Railway before that verification is
 > confirmed; doing so would make transactional email fail to send or land
 > in spam.

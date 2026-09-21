@@ -54,12 +54,6 @@ class Settings(BaseSettings):
     # (Railway's env var UI makes typing JSON-with-quotes error-prone). Use
     # the `cors_origins` property below, never this field, to read the
     # parsed list.
-    #
-    # Brand/domain migration (Infinity Africa/infinityafrica.net ->
-    # InfinityPay/infinitypay.me): Railway's live CORS_ORIGINS must keep
-    # BOTH the new and old domains (apex + www, both) until the old domain
-    # is confirmed redirecting and no real traffic hits the API with the
-    # old Origin header anymore — see docs/MVP_LAUNCH_CHECKLIST.md.
     cors_origins_raw: str = Field(
         default='["http://localhost:3000"]', validation_alias="CORS_ORIGINS"
     )
@@ -267,15 +261,10 @@ class Settings(BaseSettings):
     # rather than silently no-op'ing, since a caller (e.g. "send invoice")
     # needs to know delivery didn't happen.
     #
-    # Brand/domain migration note: the product is now "InfinityPay" (was
-    # "Infinity Africa"), and the long-term sending domain is
-    # infinitypay.me (was infinityafrica.net) — but the defaults below
-    # deliberately keep the OLD infinityafrica.net domain (only the
-    # display name changed to InfinityPay) because infinitypay.me is not
-    # yet verified in Resend (SPF/DKIM/DMARC). Switching the domain before
-    # verification would make every transactional email fail to send or
-    # land in spam. Flip these two env vars to the @infinitypay.me
-    # addresses in Railway once Resend confirms the new domain — see
+    # The defaults below use infinityafrica.net, not infinitypay.me — that's
+    # the currently Resend-verified sending domain (SPF/DKIM/DMARC).
+    # Sending from an unverified domain fails outright or lands in spam, so
+    # don't change these until infinitypay.me is verified in Resend — see
     # docs/email-delivery.md.
     resend_api_key: str = ""
     # Default sender for every transactional email EXCEPT invoice payment
@@ -303,12 +292,10 @@ class Settings(BaseSettings):
     # General site base URL for links inside emails (distinct from
     # public_app_url, which specifically builds the /pay/{slug} payment
     # link — see app/services/payment_links.py::build_public_url). Falls
-    # back to public_app_url when blank. Production (Railway) should be
-    # set to https://infinitypay.me — unlike the EMAIL_FROM/EMAIL_REPLY_TO/
-    # CEO_EMAIL sender addresses above, this is just a link target, not a
-    # Resend-verified sending domain, so it can move to the new domain
-    # immediately (old infinityafrica.net links keep working via the
-    # DNS/Vercel redirect — see docs/MVP_LAUNCH_CHECKLIST.md).
+    # back to public_app_url when blank. Production (Railway): https://infinitypay.me
+    # — unlike the EMAIL_FROM/EMAIL_REPLY_TO/CEO_EMAIL sender addresses
+    # above, this is just a link target, not a Resend-verified sending
+    # domain, so it isn't gated the same way.
     app_url_raw: str = Field(default="", validation_alias="APP_URL")
 
     @property

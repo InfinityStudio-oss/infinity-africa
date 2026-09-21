@@ -42,20 +42,6 @@ def test_cors_origins_single_origin_comma_separated(monkeypatch):
     assert settings.cors_origins == ["https://infinitypay.me"]
 
 
-def test_cors_origins_allows_the_old_domain_alongside_the_new_one_during_migration(monkeypatch):
-    """Brand/domain migration backward compat: the old infinityafrica.net
-    origin must keep being accepted alongside the new infinitypay.me one
-    for as long as Railway's CORS_ORIGINS lists both — see
-    docs/MVP_LAUNCH_CHECKLIST.md."""
-    monkeypatch.setenv(
-        "CORS_ORIGINS",
-        '["https://infinitypay.me","https://www.infinitypay.me","https://infinityafrica.net","https://www.infinityafrica.net"]',
-    )
-    settings = Settings()
-    assert "https://infinitypay.me" in settings.cors_origins
-    assert "https://infinityafrica.net" in settings.cors_origins
-
-
 def test_cors_origins_blank_string_parses_to_empty_list(monkeypatch):
     monkeypatch.setenv("CORS_ORIGINS", "")
     settings = Settings()

@@ -59,10 +59,9 @@ export function Footer() {
         </div>
         <div>
           <h4 className="text-xs font-semibold text-on-primary uppercase tracking-wider mb-4">Contact</h4>
-          {/* Contact addresses stay on the old infinityafrica.net domain
-              until infinitypay.me mailboxes/DNS are verified — switching
-              early would break real support email delivery. See
-              docs/email-delivery.md. */}
+          {/* These addresses use the domain currently verified for mail
+              (see docs/email-delivery.md) — not necessarily the same
+              domain the site itself is served from below. */}
           <ul className="space-y-4">
             <li className="flex items-start gap-2.5">
               <Icon name="mail" className="text-[18px] text-on-primary/70 mt-0.5" />
@@ -90,10 +89,6 @@ export function Footer() {
             </li>
             <li className="flex items-start gap-2.5">
               <Icon name="language" className="text-[18px] text-on-primary/70 mt-0.5" />
-              {/* Site itself has already moved to the new domain — unlike
-                  the mailto addresses above, this isn't gated on Resend
-                  domain verification. The old infinityafrica.net keeps
-                  working via a DNS/Vercel redirect in the meantime. */}
               <a className="text-base text-on-primary/90 hover:text-on-primary transition-colors" href="https://infinitypay.me">
                 infinitypay.me
               </a>

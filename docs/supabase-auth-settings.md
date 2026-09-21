@@ -1,13 +1,11 @@
 # Supabase Auth settings — merchant signup & email verification
 
-> **Brand/domain migration**: the platform's public domain is moving from
-> `infinityafrica.net` (Infinity Africa) to `infinitypay.me` (InfinityPay).
-> **Add** the new `infinitypay.me` redirect URLs below alongside the
-> existing `infinityafrica.net` ones — do **not** remove the old ones yet.
-> Site URL should only move to `https://infinitypay.me` once the old
-> domain's redirect is confirmed working end to end (so a verification/
-> reset link opened from an old, already-sent email still lands
-> correctly). See `docs/MVP_LAUNCH_CHECKLIST.md`.
+> The platform's domain is `infinitypay.me` (was `infinityafrica.net`).
+> The old `infinityafrica.net` redirect URLs below are kept in the
+> allow-list only so a verification/reset/invite link already sent to a
+> real inbox before the switch still resolves — remove them once you're
+> confident no such old link is still unopened (a few weeks is usually
+> enough). Everything else should just use `infinitypay.me`.
 
 These are **dashboard settings**, not code. They must be set on the
 production Supabase project (`vtwnhxwtnllgispjbkaz`) for the merchant
@@ -25,11 +23,10 @@ entry — Supabase silently refuses to redirect anywhere not on the list.
 
 | Setting | Value |
 | --- | --- |
-| **Site URL** | `https://infinityafrica.net` today; move to `https://infinitypay.me` once the redirect below is confirmed working end to end |
+| **Site URL** | `https://infinitypay.me` |
 
 **Redirect URLs** (allow-list — add every one; keep the old
-`infinityafrica.net` entries until the domain migration is complete, do
-not remove them yet):
+`infinityafrica.net` entries temporarily, see the note above):
 
 ```
 https://infinitypay.me/auth/callback

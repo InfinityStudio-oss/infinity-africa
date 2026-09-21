@@ -22,11 +22,6 @@ correctly into Railway's env var UI:
 - JSON array: `CORS_ORIGINS=["https://infinitypay.me","https://www.infinitypay.me"]`
 - Comma-separated: `CORS_ORIGINS=https://infinitypay.me,https://www.infinitypay.me`
 
-Brand/domain migration: keep the old `https://infinityafrica.net` /
-`https://www.infinityafrica.net` origins listed alongside the new ones
-until the old domain's redirect is confirmed and no real traffic still
-arrives with that `Origin` header.
-
 **Never `"*"` in a deployed environment.** `allow_credentials=True` means a
 wildcard origin is both meaningless (browsers reject the combination) and a
 real credential-leak risk. `Settings` refuses to construct at all if
@@ -41,7 +36,7 @@ Vercel preview deployments against the live backend) the preview URL
 pattern:
 
 ```
-CORS_ORIGINS=["https://infinitypay.me","https://www.infinitypay.me","https://infinityafrica.net","https://www.infinityafrica.net","https://<vercel-preview-url>.vercel.app"]
+CORS_ORIGINS=["https://infinitypay.me","https://www.infinitypay.me","https://<vercel-preview-url>.vercel.app"]
 ```
 
 Local dev keeps the `.env.example` default: `CORS_ORIGINS=["http://localhost:3000"]`.

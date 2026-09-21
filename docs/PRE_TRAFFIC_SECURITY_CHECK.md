@@ -1,12 +1,9 @@
 # Pre-traffic production security check
 
-> **Brand/domain migration note (added after this check ran)**: the
-> product/domain has since migrated from Infinity Africa /
-> infinityafrica.net to **InfinityPay** / **infinitypay.me**. Everything
-> below is a dated historical record of the 2026-09-09 pass and
-> intentionally still refers to the old brand/domain as it was configured
-> at that time. Keep the old domain's redirect active during the
-> transition — see `docs/MVP_LAUNCH_CHECKLIST.md`.
+> Note: this is a dated historical record of the 2026-09-09 pass, written
+> while the product was still branded Infinity Africa at infinityafrica.net.
+> It intentionally still refers to that name/domain as configured at the
+> time — the platform has since moved to InfinityPay / infinitypay.me.
 
 **Date:** 2026-09-09
 **Scope:** urgent pre/early-traffic safety inspection — Infinity Africa (now

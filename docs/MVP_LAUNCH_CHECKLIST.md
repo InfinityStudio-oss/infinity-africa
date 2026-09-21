@@ -1,12 +1,5 @@
 # MVP Launch Checklist
 
-> **Product/domain migration**: platform brand/domain migrated from
-> Infinity Africa / infinityafrica.net to **InfinityPay** /
-> **infinitypay.me**. Keep the old domain's redirect active during the
-> transition — don't remove `infinityafrica.net` from `CORS_ORIGINS` or the
-> Supabase redirect allow-list until it's confirmed no real traffic/links
-> still depend on it (see §2 and §8 below, and `docs/supabase-auth-settings.md`).
-
 Consolidated go-live checklist for opening InfinityPay to selected real
 merchants with real collections and real withdrawals. This is the
 platform-wide checklist; it doesn't replace the subsystem-specific docs it
@@ -385,22 +378,17 @@ inline scripts to actually defend against. Documented in
 **Google Search Console checklist**:
 - [ ] Verify `https://infinitypay.me` as a property (DNS TXT record
       or the HTML file Search Console gives you — nothing in this repo
-      needs to change for that step itself). Keep the existing
-      `infinityafrica.net` property too until the redirect migration is
-      confirmed complete.
+      needs to change for that step itself).
 - [ ] Submit `https://infinitypay.me/sitemap.xml` (see `app/sitemap.ts`).
 - [ ] Confirm `https://infinitypay.me/robots.txt` (see `app/robots.ts`)
       shows the expected allow/disallow rules once deployed.
 - [ ] Request indexing for `/` after the first deploy of this pass — the
       title/description/canonical all changed.
 
-**SEO metadata checklist** (`app/layout.tsx`) — as of the 2026-08-30 pass,
-since superseded by the brand/domain migration to InfinityPay/
-infinitypay.me (re-verify each item below against the new values):
-- [x] Title: ~~"Infinity Africa | Payment Infrastructure for African Merchants"~~
-      now "InfinityPay | Payment Infrastructure for African Merchants"
+**SEO metadata checklist** (`app/layout.tsx`):
+- [x] Title: "InfinityPay | Payment Infrastructure for African Merchants"
 - [x] Description matches the brief's suggested copy
-- [x] `alternates.canonical` = ~~`https://infinityafrica.net/`~~ now `https://infinitypay.me/`
+- [x] `alternates.canonical` = `https://infinitypay.me/`
 - [x] Open Graph title/description/url/image/type/siteName all set
 - [x] Twitter card: `summary_large_image`, title, description, image
 
@@ -442,14 +430,13 @@ shows old/blank content after this deploy:
 **Production CORS checklist** — already correct before this pass, just
 confirmed: `app/config/settings.py`'s `_reject_wildcard_cors_outside_development`
 validator refuses `CORS_ORIGINS` containing `"*"` whenever
-`ENVIRONMENT != "development"` (see `tests/test_settings.py`), and Railway's
-live `CORS_ORIGINS` was `https://infinityafrica.net,https://www.infinityafrica.net`
-(§ "CORS blocker resolved", verified live 2026-08-19). No wildcard,
-nothing else, in production. **Action required for the brand/domain
-migration**: update Railway's `CORS_ORIGINS` to include the new domain —
-`https://infinitypay.me,https://www.infinitypay.me,https://infinityafrica.net,https://www.infinityafrica.net`
-— keeping the old domain listed until its redirect is confirmed and no
-real traffic still sends that `Origin` header.
+`ENVIRONMENT != "development"` (see `tests/test_settings.py`). No wildcard,
+nothing else, in production. Railway's `CORS_ORIGINS` should be
+`https://infinitypay.me,https://www.infinitypay.me` — the old
+infinityafrica.net domain doesn't need to be listed here: it redirects to
+infinitypay.me at the DNS/Vercel level before any page or script ever
+loads, so the browser never actually sends a request with the old
+Origin.
 
 **Private route noindex checklist** — every private/authenticated/
 transaction-specific route now carries `robots: { index: false, follow:

@@ -1,10 +1,5 @@
 # MVP Readiness: 30–100 Selected Merchants
 
-> **Brand/domain migration**: product/domain migrated from Infinity Africa
-> / infinityafrica.net to **InfinityPay** / **infinitypay.me**. Keep the
-> old domain's redirect active during the transition — see
-> `docs/MVP_LAUNCH_CHECKLIST.md`.
-
 Readiness review and hardening pass for opening InfinityPay to a
 controlled cohort of 30–100 real merchants using collections, payment
 links, Pay by Link permanent checkout pages, invoices, withdrawals,

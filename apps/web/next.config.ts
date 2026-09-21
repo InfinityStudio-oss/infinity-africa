@@ -79,31 +79,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Brand/domain migration (Infinity Africa/infinityafrica.net ->
-  // InfinityPay/infinitypay.me): a permanent redirect so any old link
-  // already shared (payment links, Pay by Link, invoices, receipts,
-  // bookmarks) keeps landing on the right page under the new domain,
-  // preserving the full path and query string. This only takes effect if
-  // infinityafrica.net is also pointed at this same Vercel deployment as a
-  // domain alias — that DNS/Vercel domain-add step is manual, see
-  // docs/MVP_LAUNCH_CHECKLIST.md. Do not remove until the old domain's
-  // migration is confirmed complete.
-  async redirects() {
-    return [
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "infinityafrica.net" }],
-        destination: "https://infinitypay.me/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "www.infinityafrica.net" }],
-        destination: "https://infinitypay.me/:path*",
-        permanent: true,
-      },
-    ];
-  },
 };
 
 export default nextConfig;

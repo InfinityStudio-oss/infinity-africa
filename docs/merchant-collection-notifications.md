@@ -94,10 +94,8 @@ merchant/internal reference, date, status ("Successful"), a link back to
 InfinityPay", support contact `info@infinityafrica.net`).
 
 **Sender**: `InfinityPay <notification@infinityafrica.net>` (`EMAIL_FROM`)
-— same as most other transactional email, see `docs/email-delivery.md`.
-The sender/reply-to addresses stay on the old `infinityafrica.net` domain
-until `infinitypay.me` is verified in Resend (brand/domain migration —
-see `docs/email-delivery.md`).
+— same as most other transactional email, see `docs/email-delivery.md`
+for why this stays on infinityafrica.net for now.
 **Reply-to**: `info@infinityafrica.net` (`EMAIL_REPLY_TO`).
 
 ## Idempotency
