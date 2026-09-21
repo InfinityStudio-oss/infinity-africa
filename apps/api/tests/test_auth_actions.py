@@ -126,8 +126,8 @@ def test_forgot_password_email_uses_info_as_the_help_contact(fake_client, fake_r
     response = client.post("/v1/auth/forgot-password", json={"email": "amina@example.com"})
 
     assert response.status_code == 200
-    assert "info@infinityafrica.net" in fake_resend.calls[0]["html"]
-    assert "support@infinityafrica.net" not in fake_resend.calls[0]["html"]
+    assert "info@infinitypay.me" in fake_resend.calls[0]["html"]
+    assert "support@infinitypay.me" not in fake_resend.calls[0]["html"]
 
 
 def test_forgot_password_does_not_log_the_reset_token_or_link(fake_client, fake_resend):

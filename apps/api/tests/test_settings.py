@@ -92,10 +92,7 @@ def test_email_from_defaults_to_the_notification_address():
     gets built next should read this same setting rather than hardcoding
     a sender)."""
     settings = Settings()
-    # Brand migrated to InfinityPay, but the sending domain deliberately
-    # stays on infinityafrica.net until infinitypay.me is verified in
-    # Resend — see settings.py's email_from comment / docs/email-delivery.md.
-    assert settings.email_from == "InfinityPay <notification@infinityafrica.net>"
+    assert settings.email_from == "InfinityPay <notification@infinitypay.me>"
 
 
 def test_invoice_email_from_defaults_to_email_from_when_unset():
@@ -104,11 +101,11 @@ def test_invoice_email_from_defaults_to_email_from_when_unset():
 
 
 def test_invoice_email_from_uses_invoice_email_from_when_set(monkeypatch):
-    monkeypatch.setenv("INVOICE_EMAIL_FROM", "InfinityPay Invoices <invoice@infinityafrica.net>")
+    monkeypatch.setenv("INVOICE_EMAIL_FROM", "InfinityPay Invoices <invoice@infinitypay.me>")
     settings = Settings()
-    assert settings.invoice_email_from == "InfinityPay Invoices <invoice@infinityafrica.net>"
+    assert settings.invoice_email_from == "InfinityPay Invoices <invoice@infinitypay.me>"
     # The general sender is untouched by setting the invoice-specific one.
-    assert settings.email_from == "InfinityPay <notification@infinityafrica.net>"
+    assert settings.email_from == "InfinityPay <notification@infinitypay.me>"
 
 
 def test_app_url_falls_back_to_public_app_url_when_unset(monkeypatch):
@@ -126,4 +123,4 @@ def test_app_url_uses_its_own_value_when_set(monkeypatch):
 
 def test_email_reply_to_defaults_to_the_info_address():
     settings = Settings()
-    assert settings.email_reply_to == "info@infinityafrica.net"
+    assert settings.email_reply_to == "info@infinitypay.me"

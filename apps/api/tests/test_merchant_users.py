@@ -261,7 +261,7 @@ def test_invite_uses_resend_branded_email_not_supabase_default(fake_client, monk
     assert response.status_code == 201, response.text
     assert captured["params"]["to"] == ["david@example.com"]
     assert captured["params"]["subject"] == "You're invited to InfinityPay Merchant Portal"
-    assert "info@infinityafrica.net" in captured["params"]["html"]
+    assert "info@infinitypay.me" in captured["params"]["html"]
 
 
 # --- POST /users/{id}/resend-invite --------------------------------------------

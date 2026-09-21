@@ -164,11 +164,9 @@ def test_signup_notifies_ceo_with_masked_nida_not_full(fake_client, fake_resend)
     ceo = ceo_calls[0]
     assert ceo["subject"] == "New merchant signup submitted"
     # EMAIL_FROM/EMAIL_REPLY_TO aren't overridden by this test, so these
-    # reflect settings.py's actual defaults: brand renamed to InfinityPay,
-    # but the sending domain deliberately stays on infinityafrica.net until
-    # infinitypay.me is verified in Resend — see docs/email-delivery.md.
-    assert ceo["from"] == "InfinityPay <notification@infinityafrica.net>"
-    assert ceo["reply_to"] == "info@infinityafrica.net"
+    # reflect settings.py's actual defaults.
+    assert ceo["from"] == "InfinityPay <notification@infinitypay.me>"
+    assert ceo["reply_to"] == "info@infinitypay.me"
     assert "4512" in ceo["html"]
     assert _NIDA_DIGITS not in ceo["html"]
     assert _NIDA not in ceo["html"]

@@ -214,7 +214,7 @@ debited exactly once, at that point.
 Two structurally separate flows, confirmed not to cross:
 
 - **CEO internal notification** — trigger: merchant submits onboarding;
-  recipient: `CEO_EMAIL` (`ceo@infinityafrica.net`); function:
+  recipient: `CEO_EMAIL` (`ceo@infinitypay.me`); function:
   `send_merchant_signup_notification_email`. Never sent to the merchant.
 - **Merchant welcome email** — trigger: merchant verified/approved;
   recipient: the merchant's own `contact_email`; separate function, never
@@ -230,12 +230,10 @@ Two structurally separate flows, confirmed not to cross:
 - `RESEND_API_KEY` is backend/Railway-only; confirmed no
   `NEXT_PUBLIC_RESEND_API_KEY` or any Resend key anywhere under
   `apps/web` (§6/§10 secret scan).
-- Sender: `EMAIL_FROM` (`InfinityPay <notification@infinityafrica.net>` —
-  brand renamed to InfinityPay; sending domain stays on infinityafrica.net
-  until infinitypay.me is verified in Resend, see `docs/email-delivery.md`),
+- Sender: `EMAIL_FROM` (`InfinityPay <notification@infinitypay.me>`),
   invoices use their own visually-distinct `INVOICE_EMAIL_FROM` (falls
   back to `EMAIL_FROM` if unset). Reply-to: `EMAIL_REPLY_TO`
-  (`info@infinityafrica.net`). CEO recipient: `CEO_EMAIL`.
+  (`info@infinitypay.me`). CEO recipient: `CEO_EMAIL`.
 - Confirmed present: CEO signup notification, merchant welcome, CEO
   withdrawal-request notification, merchant withdrawal-success email,
   invoice payment-request email (customer), payment-link customer email

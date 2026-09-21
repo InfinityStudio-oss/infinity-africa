@@ -433,10 +433,8 @@ validator refuses `CORS_ORIGINS` containing `"*"` whenever
 `ENVIRONMENT != "development"` (see `tests/test_settings.py`). No wildcard,
 nothing else, in production. Railway's `CORS_ORIGINS` should be
 `https://infinitypay.me,https://www.infinitypay.me` — the old
-infinityafrica.net domain doesn't need to be listed here: it redirects to
-infinitypay.me at the DNS/Vercel level before any page or script ever
-loads, so the browser never actually sends a request with the old
-Origin.
+infinityafrica.net domain has been fully removed from Vercel (it 404s
+now), so there's no live frontend left that could ever send that Origin.
 
 **Private route noindex checklist** — every private/authenticated/
 transaction-specific route now carries `robots: { index: false, follow:

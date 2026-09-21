@@ -1,24 +1,15 @@
 # Transactional email (Resend)
 
-> Every sender/reply-to/CEO address below stays on `infinityafrica.net`
-> until `infinitypay.me` is verified in Resend — see "Sender addresses"
-> below. Do not switch `EMAIL_FROM`/`INVOICE_EMAIL_FROM`/`EMAIL_REPLY_TO`/
-> `CEO_EMAIL` to `@infinitypay.me` in Railway before that verification is
-> confirmed; doing so would make transactional email fail to send or land
-> in spam.
-
 All outbound transactional email goes through [Resend](https://resend.com),
 via `app/services/email.py`. `RESEND_API_KEY` is backend/Railway-only —
 never set it in `apps/web`/Vercel (and never as `NEXT_PUBLIC_RESEND_API_KEY`
 or any other `NEXT_PUBLIC_*` name), and nothing in `apps/web` imports this
 module or reads that key.
 
-The domain `infinityafrica.net` is verified in Resend (SPF/DKIM/DMARC DNS
+The domain `infinitypay.me` is verified in Resend (SPF/DKIM/DMARC DNS
 records added in Cloudflare — see Resend's own domain-verification page for
 the exact record values if they ever need re-adding; they aren't
-reproduced here since they're config, not code). `infinitypay.me` is not
-verified yet — verifying it (adding the equivalent DNS records) is a
-prerequisite for switching any sender address to the new domain.
+reproduced here since they're config, not code).
 
 ## What's wired up
 
@@ -94,8 +85,8 @@ deployment:
 
 | Email type | Sender | Env var |
 | --- | --- | --- |
-| Invoice payment requests | `InfinityPay Invoices <invoice@infinityafrica.net>` | `INVOICE_EMAIL_FROM` |
-| Everything else (staff invites, password resets, payment receipts, merchant collection notifications, welcome emails, inquiry notifications, withdrawal request/success, payment link delivery) | `InfinityPay <notification@infinityafrica.net>` | `EMAIL_FROM` |
+| Invoice payment requests | `InfinityPay Invoices <invoice@infinitypay.me>` | `INVOICE_EMAIL_FROM` |
+| Everything else (staff invites, password resets, payment receipts, merchant collection notifications, welcome emails, inquiry notifications, withdrawal request/success, payment link delivery) | `InfinityPay <notification@infinitypay.me>` | `EMAIL_FROM` |
 
 If `INVOICE_EMAIL_FROM` isn't set, invoice emails fall back to whatever
 `EMAIL_FROM` is set to (see `Settings.invoice_email_from` in
@@ -104,35 +95,19 @@ invoice-specific sender still sends *something* sane rather than failing
 outright.
 
 **Reply-to** for every email is `EMAIL_REPLY_TO`, which defaults to
-`info@infinityafrica.net` — the customer/merchant support contact shown
-in every template's footer ("Need help? Reach us at..."). This replaced
-an earlier `support@infinityafrica.net` default; every customer-facing
-template and page now shows `info@infinityafrica.net` instead.
+`info@infinitypay.me` — the customer/merchant support contact shown
+in every template's footer ("Need help? Reach us at...").
 
 ## Required Railway/backend env vars
 
 ```
 RESEND_API_KEY=                                                    # backend-only, never in Vercel, never NEXT_PUBLIC_*
-EMAIL_FROM="InfinityPay <notification@infinityafrica.net>"
-INVOICE_EMAIL_FROM="InfinityPay Invoices <invoice@infinityafrica.net>"
-EMAIL_REPLY_TO="info@infinityafrica.net"
-CEO_EMAIL="ceo@infinityafrica.net"
-APP_URL="https://infinitypay.me"
-```
-
-Once `infinitypay.me` is verified in Resend, switch the four sender/
-contact addresses above to:
-
-```
 EMAIL_FROM="InfinityPay <notification@infinitypay.me>"
 INVOICE_EMAIL_FROM="InfinityPay Invoices <invoice@infinitypay.me>"
 EMAIL_REPLY_TO="info@infinitypay.me"
 CEO_EMAIL="ceo@infinitypay.me"
+APP_URL="https://infinitypay.me"
 ```
-
-`APP_URL` above is already on the new domain — it's just a link target
-inside email bodies, not a Resend-verified sending domain, so it isn't
-gated the same way.
 
 `APP_URL` is distinct from the existing `PUBLIC_APP_URL` — `PUBLIC_APP_URL`
 specifically builds the `/pay/{slug}` payment-link URL

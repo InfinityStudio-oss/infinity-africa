@@ -91,12 +91,11 @@ currency, payment method, customer name/phone/email (when available —
 phone always masked, `_mask_identifier`, `•••• 1234`), provider reference,
 merchant/internal reference, date, status ("Successful"), a link back to
 `{APP_URL}/portal/collections`, and the shared branded footer ("Powered by
-InfinityPay", support contact `info@infinityafrica.net`).
+InfinityPay", support contact `info@infinitypay.me`).
 
-**Sender**: `InfinityPay <notification@infinityafrica.net>` (`EMAIL_FROM`)
-— same as most other transactional email, see `docs/email-delivery.md`
-for why this stays on infinityafrica.net for now.
-**Reply-to**: `info@infinityafrica.net` (`EMAIL_REPLY_TO`).
+**Sender**: `InfinityPay <notification@infinitypay.me>` (`EMAIL_FROM`)
+— same as most other transactional email, see `docs/email-delivery.md`.
+**Reply-to**: `info@infinitypay.me` (`EMAIL_REPLY_TO`).
 
 ## Idempotency
 

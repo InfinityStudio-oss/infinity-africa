@@ -210,5 +210,5 @@ def test_receipt_email_uses_info_as_the_help_contact(fake_client, fake_resend):
     _collect(link["public_slug"])
 
     html = fake_resend.calls[0]["html"]
-    assert "info@infinityafrica.net" in html
-    assert "support@infinityafrica.net" not in html
+    assert "info@infinitypay.me" in html
+    assert "support@infinitypay.me" not in html

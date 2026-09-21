@@ -424,7 +424,7 @@ def test_invoice_email_uses_the_invoice_sender_address(fake_client, fake_resend)
     assert fake_resend.calls[0]["from"] == "InfinityPay Invoices <invoice@infinitypay.me>"
     assert fake_resend.calls[0]["to"] == ["amina@example.com"]
     assert fake_resend.calls[0]["subject"].startswith("Invoice from ")
-    assert fake_resend.calls[0]["reply_to"] == "info@infinityafrica.net"
+    assert fake_resend.calls[0]["reply_to"] == "info@infinitypay.me"
 
 
 def test_invoice_email_falls_back_to_email_from_when_invoice_email_from_is_unset(fake_client, fake_resend, monkeypatch):

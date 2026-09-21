@@ -260,18 +260,12 @@ class Settings(BaseSettings):
     # sending is not configured — send_email() raises EmailDeliveryError
     # rather than silently no-op'ing, since a caller (e.g. "send invoice")
     # needs to know delivery didn't happen.
-    #
-    # The defaults below use infinityafrica.net, not infinitypay.me — that's
-    # the currently Resend-verified sending domain (SPF/DKIM/DMARC).
-    # Sending from an unverified domain fails outright or lands in spam, so
-    # don't change these until infinitypay.me is verified in Resend — see
-    # docs/email-delivery.md.
     resend_api_key: str = ""
     # Default sender for every transactional email EXCEPT invoice payment
     # requests (staff invites, password resets, payment receipts, welcome
     # emails, inquiry notifications) — see invoice_email_from below for why
     # invoices use a visually distinct address.
-    email_from: str = "InfinityPay <notification@infinityafrica.net>"
+    email_from: str = "InfinityPay <notification@infinitypay.me>"
     # Sender for invoice payment-request emails specifically — a customer
     # should be able to tell "someone wants to be paid" apart from
     # ordinary account/notification mail at a glance. Falls back to
@@ -280,22 +274,17 @@ class Settings(BaseSettings):
     # rather than failing outright.
     invoice_email_from_raw: str = Field(default="", validation_alias="INVOICE_EMAIL_FROM")
     # Reply-to for every transactional email — the customer/merchant
-    # support contact shown in every template's footer. Same
-    # verify-before-switching gating as email_from above.
-    email_reply_to: str = "info@infinityafrica.net"
+    # support contact shown in every template's footer.
+    email_reply_to: str = "info@infinitypay.me"
     # Where the "contact us" inquiry notification email goes — see
     # app/services/email.py::send_inquiry_notification_email, triggered by
     # POST /v1/public/inquiries. Set via Railway's CEO_EMAIL env var (no
-    # code default) — same domain-verification gating as email_from above
-    # applies to whatever address is configured here.
+    # code default).
     ceo_email: str = ""
     # General site base URL for links inside emails (distinct from
     # public_app_url, which specifically builds the /pay/{slug} payment
     # link — see app/services/payment_links.py::build_public_url). Falls
     # back to public_app_url when blank. Production (Railway): https://infinitypay.me
-    # — unlike the EMAIL_FROM/EMAIL_REPLY_TO/CEO_EMAIL sender addresses
-    # above, this is just a link target, not a Resend-verified sending
-    # domain, so it isn't gated the same way.
     app_url_raw: str = Field(default="", validation_alias="APP_URL")
 
     @property

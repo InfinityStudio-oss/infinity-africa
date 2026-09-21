@@ -189,8 +189,8 @@ def test_approval_sends_a_welcome_email(fake_client, fake_resend):
     assert "Kilimanjaro Fresh Produce" in html
     assert "Request collections" in html
     assert "Generate payment links" in html
-    assert "info@infinityafrica.net" in html
-    assert "support@infinityafrica.net" not in html
+    assert "info@infinitypay.me" in html
+    assert "support@infinitypay.me" not in html
 
 
 def test_approval_succeeds_even_when_welcome_email_delivery_fails(fake_client, fake_resend):
@@ -249,7 +249,7 @@ def test_welcome_email_reply_to_is_info_email(fake_client, fake_resend):
     client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
 
     welcome_call = next(c for c in fake_resend.calls if c["subject"] == "Your InfinityPay account has been approved")
-    assert welcome_call["reply_to"] == "info@infinityafrica.net"
+    assert welcome_call["reply_to"] == "info@infinitypay.me"
 
 
 def test_email_delivery_log_for_welcome_email_uses_merchant_email(fake_client, fake_resend):

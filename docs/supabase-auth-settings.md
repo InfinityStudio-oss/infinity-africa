@@ -1,11 +1,10 @@
 # Supabase Auth settings — merchant signup & email verification
 
-> The platform's domain is `infinitypay.me` (was `infinityafrica.net`).
-> The old `infinityafrica.net` redirect URLs below are kept in the
-> allow-list only so a verification/reset/invite link already sent to a
-> real inbox before the switch still resolves — remove them once you're
-> confident no such old link is still unopened (a few weeks is usually
-> enough). Everything else should just use `infinitypay.me`.
+> The platform's domain is `infinitypay.me`. `infinityafrica.net` has been
+> fully removed from Vercel (any request to it now 404s), so any old
+> `infinityafrica.net/...` entries still in the Redirect URLs allow-list
+> below no longer serve any purpose — they'd only ever redirect to a dead
+> domain — and can be deleted.
 
 These are **dashboard settings**, not code. They must be set on the
 production Supabase project (`vtwnhxwtnllgispjbkaz`) for the merchant
@@ -25,8 +24,11 @@ entry — Supabase silently refuses to redirect anywhere not on the list.
 | --- | --- |
 | **Site URL** | `https://infinitypay.me` |
 
-**Redirect URLs** (allow-list — add every one; keep the old
-`infinityafrica.net` entries temporarily, see the note above):
+**Redirect URLs** (allow-list — every one of these must be present
+*exactly*, no trailing slash, or Supabase silently falls back to the
+bare Site URL instead of redirecting to the real page — this is the
+actual cause if "reset password"/"verify email" links land on the
+homepage instead of the intended form):
 
 ```
 https://infinitypay.me/auth/callback
@@ -35,13 +37,6 @@ https://infinitypay.me/merchant/login
 https://infinitypay.me/merchant/reset-password
 https://infinitypay.me/admin-login/reset-password
 https://infinitypay.me/merchant/invite/accept
-
-https://infinityafrica.net/auth/callback
-https://infinityafrica.net/onboarding
-https://infinityafrica.net/merchant/login
-https://infinityafrica.net/merchant/reset-password
-https://infinityafrica.net/admin-login/reset-password
-https://infinityafrica.net/merchant/invite/accept
 ```
 
 If the site is also served on `www.`, add the `www.` variant of each
@@ -59,7 +54,7 @@ These are already documented in `apps/web/.env.example` /
 | --- | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | `apps/web` | `https://infinitypay.me` — used to build the `emailRedirectTo` sent to Supabase at signup (`lib/auth/actions.ts`). Falls back to the request host if unset. |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `apps/web` | public project URL + anon key only |
-| `CEO_EMAIL` | `apps/api` | `ceo@infinityafrica.net` — merchant signup/business-submission notification recipient. If unset, that notification is silently skipped (never sent anywhere else). Stays on the old domain until `infinitypay.me` is verified in Resend — see `docs/email-delivery.md`. |
+| `CEO_EMAIL` | `apps/api` | `ceo@infinitypay.me` — merchant signup/business-submission notification recipient. If unset, that notification is silently skipped (never sent anywhere else). |
 | `APP_URL` | `apps/api` | `https://infinitypay.me` — base URL in the approval / welcome email to the merchant. |
 
 ## The flow, once the above is set
@@ -103,7 +98,7 @@ These are already documented in `apps/web/.env.example` /
 - [ ] Click the email link → lands on `/onboarding` signed in.
 - [ ] (Mobile) open the same link on a phone → lands on `/merchant/login`
       with the *"email is verified, sign in"* notice; signing in works.
-- [ ] Submit onboarding → `ceo@infinityafrica.net` receives the signup
+- [ ] Submit onboarding → `ceo@infinitypay.me` receives the signup
       notification; merchant status is *Pending Verification*.
 - [ ] Before approval: `/merchant/payment-links`, `/merchant/pay-by-link`,
       `/merchant/withdrawals`, `/merchant/invoices` all redirect to

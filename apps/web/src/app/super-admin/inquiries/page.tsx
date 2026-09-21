@@ -14,7 +14,7 @@ export default async function SuperAdminInquiriesPage() {
     <div className="space-y-8">
       <PageHeader
         title="Inquiries"
-        description="Contact form submissions from the public marketing site. Each one also emails ceo@infinityafrica.net as it arrives — this is the browsable record."
+        description="Contact form submissions from the public marketing site. Each one also emails ceo@infinitypay.me as it arrives — this is the browsable record."
       />
 
       <Card padded={false}>
