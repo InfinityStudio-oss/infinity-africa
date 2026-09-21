@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AuthFragmentRedirect } from "@/components/auth/auth-fragment-redirect";
 import { CTASection } from "@/components/site/cta-section";
 import { ContactCard } from "@/components/site/contact-card";
 import { FeatureGrid } from "@/components/site/feature-grid";
@@ -68,6 +69,7 @@ const SECURITY_POINTS = [
 export default function Home() {
   return (
     <div className="bg-surface text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container">
+      <AuthFragmentRedirect />
       <Header />
 
       <main>
