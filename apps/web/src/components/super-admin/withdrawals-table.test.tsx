@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminWithdrawalRow } from "@/lib/admin/types";
@@ -30,6 +30,8 @@ const pendingRow: AdminWithdrawalRow = {
   destination_identifier: "+255700000000",
   status: "PENDING_ADMIN_APPROVAL",
   requires_approval: true,
+  auto_approved: false,
+  auto_decision_reason: null,
   provider_reference: null,
   total_charges: "1800.00",
   total_reserved_amount: "101800.00",
@@ -102,5 +104,39 @@ describe("WithdrawalsTable", () => {
     await waitFor(() =>
       expect(screen.getByText("Checked 3 · resolved 1 · still pending 2.")).toBeInTheDocument(),
     );
+  });
+
+  it("shows an Auto-Processing badge and the decision reason for an auto-approved withdrawal", async () => {
+    const autoRow: AdminWithdrawalRow = {
+      ...pendingRow,
+      withdrawal_id: "wd-2",
+      status: "PROCESSING",
+      auto_approved: true,
+      auto_decision_reason: "Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits.",
+    };
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[autoRow]} queue={[]} />);
+
+    expect(screen.getByText("Auto-Processing")).toBeInTheDocument();
+    expect(
+      screen.getByText("Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows plain Processing (no auto label) for a manually-approved withdrawal", async () => {
+    const manualRow: AdminWithdrawalRow = {
+      ...pendingRow,
+      withdrawal_id: "wd-3",
+      status: "PROCESSING",
+      auto_approved: false,
+    };
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[manualRow]} queue={[]} />);
+
+    // Scoped to the table: "Processing" is also one of the status-filter
+    // button labels above it, so an unscoped getByText matches both.
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Processing")).toBeInTheDocument();
+    expect(table.queryByText("Auto-Processing")).not.toBeInTheDocument();
   });
 });

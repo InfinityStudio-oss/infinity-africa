@@ -216,14 +216,49 @@ Two structurally separate flows, confirmed not to cross:
 - **CEO internal notification** — trigger: merchant submits onboarding;
   recipient: `CEO_EMAIL` (`ceo@infinitypay.me`); function:
   `send_merchant_signup_notification_email`. Never sent to the merchant.
+  Never gated by any of the §17 email-volume flags (Part 5's "keep" list
+  explicitly excludes it).
 - **Merchant welcome email** — trigger: merchant verified/approved;
   recipient: the merchant's own `contact_email`; separate function, never
-  reused for the CEO notification and never sent to the CEO.
+  reused for the CEO notification and never sent to the CEO. Also never
+  gated by an email-volume flag.
 - A merchant record with no usable email logs a delivery failure — it
   does not silently redirect to the CEO's inbox.
 - Email failures are always best-effort around the underlying business
   action (signup submission, approval) — a Resend outage never blocks or
   reverts a successful signup/approval.
+
+**Get Started (combined signup) flow** — `POST /v1/onboarding/signup`
+(public, unauthenticated), backing the public site's "Get Started" →
+`/create-account` page. Creates the Supabase Auth user itself
+(service_role) with `email_confirm: false`, then the merchant record
+(`status: "pending"`, `kyc_status: "unverified"`) and onboarding
+submission (`review_status: PENDING_VERIFICATION`) in the same call as
+the older two-step `/onboarding` flow (`create_merchant_onboarding`,
+shared). Sends the email-verification link (InfinityPay's own branded
+email, never Supabase's default) only when the account isn't already
+confirmed. **Email verification and Super Admin approval are two
+independent gates** — verifying only proves the merchant controls that
+inbox; a verified-but-not-yet-approved merchant can log in
+(`merchant_gate.require_approved_merchant` and
+`disbursements._check_merchant_is_verified` both still block every
+financial action — see §5, "Merchant onboarding checklist"). Never
+auto-approved by any code path.
+
+## 17a. Email-volume reduction flags (2026-09-22)
+
+Three independent flags, each defaulting `false` (the reduced-volume
+state), each gating exactly one email category and nothing else:
+
+| Flag | Gates | Never affects |
+|---|---|---|
+| `SEND_CUSTOMER_RECEIPT_EMAILS` | `send_payment_receipt_email` (customer receipt after a successful collection) | Payment success, wallet credit, in-portal receipt page, merchant collection-notification email (§17, separately gated) |
+| `SEND_WITHDRAWAL_REQUEST_EMAILS` | `send_withdrawal_request_notification_email` (CEO "please review" email per withdrawal request) | The request itself, its audit log, Super Admin queue visibility |
+| `SEND_MERCHANT_WITHDRAWAL_EMAILS` | `send_withdrawal_success_email` (merchant "your withdrawal succeeded" email) | The in-app notification (`notify_merchant`) and outbound webhook, both unconditional |
+
+None of the three ever gates: email verification, password reset, staff
+invite, merchant approval/welcome email, the CEO merchant-signup
+notification, or any security-alert email.
 
 ## 7. Resend and notification readiness
 

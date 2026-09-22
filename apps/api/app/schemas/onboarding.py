@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime
 
@@ -24,7 +25,14 @@ class OnboardingMerchantAccountCreate(BaseModel):
     `nida_number` is a plain str here (not format-validated at the schema
     layer) so the service can raise the dedicated `nida_required` /
     `nida_invalid` error codes the frontend keys off — see
-    app/core/nida.py and app/services/onboarding.py."""
+    app/core/nida.py and app/services/onboarding.py.
+
+    legal_business_name/business_email/business_phone/notes are all
+    optional here (not just at the Get Started form's UI layer) so the
+    older two-step /onboarding form — which doesn't collect them — keeps
+    working unchanged; app/services/onboarding.py falls back to the
+    account owner's own email/phone when business_email/business_phone
+    are blank."""
 
     business_name: str
     nature_of_business: str
@@ -36,6 +44,10 @@ class OnboardingMerchantAccountCreate(BaseModel):
     nida_number: str = ""
     tin_number: str | None = None
     expected_monthly_volume: str | None = None
+    legal_business_name: str | None = None
+    business_email: str | None = None
+    business_phone: str | None = None
+    notes: str | None = None
     services_needed: list[ServiceNeeded] = Field(min_length=1)
     accepted_terms: bool
     accepted_privacy: bool
@@ -44,6 +56,20 @@ class OnboardingMerchantAccountCreate(BaseModel):
     @classmethod
     def _check_phone(cls, value: str) -> str:
         return validate_and_normalize_phone(value)
+
+    @field_validator("business_phone")
+    @classmethod
+    def _check_business_phone(cls, value: str | None) -> str | None:
+        return validate_and_normalize_phone(value) if value else None
+
+    @field_validator("business_email")
+    @classmethod
+    def _check_business_email(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        if not re.match(_EMAIL_PATTERN, value):
+            raise ValueError("Enter a valid business email address")
+        return value
 
 
 class OnboardingSignupCreate(OnboardingMerchantAccountCreate):
@@ -105,6 +131,11 @@ class OnboardingSubmissionResponse(BaseModel):
     merchant_id: uuid.UUID
     merchant_code: str | None = None
     business_name: str
+    # legal_name lives on merchants (not this submission's own table) —
+    # the registered/legal business name if different from the
+    # trading/display business_name above. Optional; most merchants leave
+    # it blank.
+    legal_name: str | None = None
     owner_email: str
     contact_phone: str | None = None
     nature_of_business: str
@@ -112,6 +143,10 @@ class OnboardingSubmissionResponse(BaseModel):
     physical_address: str
     region_city: str
     website_url: str | None = None
+    # Optional free-text notes/description from the signup form —
+    # distinct from nature_of_business (required, a business-type
+    # description) above.
+    notes: str | None = None
     # Masked — last 4 digits only (e.g. "1234"). The full NIDA number is
     # never returned by the API, only this. None for pre-NIDA submissions.
     nida_last4: str | None = None

@@ -109,7 +109,8 @@ const SIGNUP_SUCCESS_NO_VERIFY =
 export async function signupWithBusinessAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
 
-  const fullName = get("fullName");
+  const firstName = get("firstName");
+  const lastName = get("lastName");
   const email = get("email");
   const phone = get("phone");
   const nidaNumber = get("nidaNumber");
@@ -117,15 +118,15 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
   const businessName = get("businessName");
+  const legalBusinessName = get("legalBusinessName");
   const businessCategory = get("businessCategory");
-  const natureOfBusiness = get("natureOfBusiness");
+  const businessEmail = get("businessEmail");
+  const businessPhone = get("businessPhone");
   const physicalAddress = get("physicalAddress");
   const regionCity = get("regionCity");
+  const tinNumber = get("tinNumber");
   const websiteOrAppLink = get("websiteOrAppLink");
-
-  const tinCertRaw = formData.get("tinCertificate");
-  const tinCertificate = tinCertRaw instanceof File && tinCertRaw.size > 0 && tinCertRaw.name ? tinCertRaw : null;
-  const ALLOWED_DOC_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
+  const notes = get("notes");
 
   const servicesNeeded = formData
     .getAll("servicesNeeded")
@@ -137,19 +138,25 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const confirmedAccurate = formData.get("confirmedAccurate") === "on";
 
   const values: Record<string, string> = {
-    fullName,
+    firstName,
+    lastName,
     email,
     phone,
     businessName,
+    legalBusinessName,
     businessCategory,
-    natureOfBusiness,
+    businessEmail,
+    businessPhone,
     physicalAddress,
     regionCity,
+    tinNumber,
     websiteOrAppLink,
+    notes,
   };
 
   const errors: Record<string, string[]> = {};
-  if (!fullName) errors.fullName = ["Your name is required."];
+  if (!firstName) errors.firstName = ["First name is required."];
+  if (!lastName) errors.lastName = ["Last name is required."];
   if (!email) errors.email = ["Email address is required."];
   else if (!isEmail(email)) errors.email = ["Enter a valid email address."];
   if (!phone) errors.phone = ["Phone number is required."];
@@ -163,15 +170,13 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   else if (confirmPassword !== password) errors.confirmPassword = ["Passwords do not match."];
 
   if (!businessName) errors.businessName = ["Business name is required."];
-  if (!businessCategory) errors.businessCategory = ["Business category is required."];
-  if (!natureOfBusiness) errors.natureOfBusiness = ["Nature of business is required."];
-  if (!physicalAddress) errors.physicalAddress = ["Physical address is required."];
+  if (!businessCategory) errors.businessCategory = ["Business type is required."];
+  if (!businessEmail) errors.businessEmail = ["Business email is required."];
+  else if (!isEmail(businessEmail)) errors.businessEmail = ["Enter a valid business email address."];
+  if (!businessPhone) errors.businessPhone = ["Business phone is required."];
+  if (!physicalAddress) errors.physicalAddress = ["Business address is required."];
   if (!regionCity) errors.regionCity = ["Region/city is required."];
   if (servicesNeeded.length === 0) errors.servicesNeeded = ["Select at least one service you need."];
-
-  if (tinCertificate && !ALLOWED_DOC_TYPES.has(tinCertificate.type)) {
-    errors.tinCertificate = ["TIN certificate must be a PDF, JPG, or PNG file."];
-  }
 
   if (!agreedToTerms) errors.agreedToTerms = ["You must agree to the Terms of Service."];
   if (!agreedToPrivacy) errors.agreedToPrivacy = ["You must agree to the Privacy Policy."];
@@ -183,25 +188,31 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
 
   let result;
   try {
-    result = await submitMerchantSignup(
-      {
-        full_name: fullName,
-        email,
-        password,
-        contact_phone: phone,
-        nida_number: nidaNumber,
-        business_name: businessName,
-        business_category: businessCategory,
-        nature_of_business: natureOfBusiness,
-        physical_address: physicalAddress,
-        region_city: regionCity,
-        website_url: websiteOrAppLink || null,
-        services_needed: servicesNeeded,
-        accepted_terms: agreedToTerms,
-        accepted_privacy: agreedToPrivacy,
-      },
-      tinCertificate,
-    );
+    result = await submitMerchantSignup({
+      full_name: `${firstName} ${lastName}`.trim(),
+      email,
+      password,
+      contact_phone: phone,
+      nida_number: nidaNumber,
+      business_name: businessName,
+      legal_business_name: legalBusinessName || null,
+      business_category: businessCategory,
+      // Required by the backend, but no longer a separate visible field on
+      // this form (see Part 1 of the Get Started brief) — notes doubles
+      // as it when provided, falling back to the business type so the
+      // NOT NULL column is always satisfied without asking twice.
+      nature_of_business: notes || businessCategory,
+      business_email: businessEmail,
+      business_phone: businessPhone,
+      physical_address: physicalAddress,
+      region_city: regionCity,
+      tin_number: tinNumber || null,
+      website_url: websiteOrAppLink || null,
+      notes: notes || null,
+      services_needed: servicesNeeded,
+      accepted_terms: agreedToTerms,
+      accepted_privacy: agreedToPrivacy,
+    });
   } catch (err) {
     if (err instanceof OnboardingApiError) {
       if (err.code === "nida_required" || err.code === "nida_invalid") {

@@ -75,17 +75,28 @@ _configure_logging(settings.log_level)
 
 logger = logging.getLogger("infinity.scheduler")
 
-if not settings.require_admin_approval_for_all_withdrawals:
-    # See Settings.require_admin_approval_for_all_withdrawals's own
-    # docstring: this flag documents an architectural invariant, it
-    # cannot actually disable approval (no code path exists for that) —
-    # a False value here means someone misconfigured Railway, not that
-    # withdrawals are actually unapproved. Loud and early so it's caught
-    # in deploy logs immediately rather than discovered during an audit.
+if not settings.require_admin_approval_for_all_withdrawals and settings.auto_withdrawals_enabled:
+    # Both flags being set is what actually enables withdrawal automation
+    # — see Settings.auto_withdrawals_enabled's own docstring for the
+    # full eligibility rules that still apply. Loud and early, same as
+    # the warning below, so an operator sees this in deploy logs the
+    # moment it takes effect rather than discovering it during an audit.
     logging.getLogger("infinity.config").warning(
-        "REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS is set to false, but no code path in this "
-        "service can actually skip Super Admin approval for a withdrawal — this setting has no "
-        "effect other than this warning. Fix the misconfigured env var."
+        "Withdrawal automation is ENABLED (REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false and "
+        "AUTO_WITHDRAWALS_ENABLED=true) — eligible withdrawals will reach Selcom without a Super "
+        "Admin approving them first. Confirm AUTO_WITHDRAWAL_MAX_AMOUNT_TZS/"
+        "AUTO_WITHDRAWAL_DAILY_LIMIT_TZS are set deliberately, not left at defaults."
+    )
+elif not settings.require_admin_approval_for_all_withdrawals:
+    # The belt-and-suspenders case: someone flipped this flag without
+    # also enabling auto_withdrawals_enabled — automation is still fully
+    # off (every withdrawal still needs a human), so this has no effect
+    # beyond the misconfiguration itself being worth flagging.
+    logging.getLogger("infinity.config").warning(
+        "REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS is set to false, but AUTO_WITHDRAWALS_ENABLED "
+        "is not — every withdrawal still requires Super Admin approval exactly as before. This "
+        "combination has no effect other than this warning. Set AUTO_WITHDRAWALS_ENABLED=true too "
+        "if withdrawal automation is actually intended, or revert this var if not."
     )
 
 

@@ -85,14 +85,21 @@ export function adminInvoiceBadge(status: AdminInvoiceRow["status"]): BadgeProps
   }
 }
 
-export function adminWithdrawalBadge(status: AdminWithdrawalRow["status"]): BadgeProps {
+/** autoApproved distinguishes an auto-processed withdrawal (skipped Super
+ * Admin approval via the automated eligibility check) from an ordinary
+ * manually-approved one — same underlying "PROCESSING" status either way,
+ * just a different badge label so it's visible at a glance which path a
+ * withdrawal took. See AdminWithdrawalRow.auto_approved. */
+export function adminWithdrawalBadge(status: AdminWithdrawalRow["status"], autoApproved?: boolean): BadgeProps {
   switch (status) {
     case "PENDING_ADMIN_APPROVAL":
       return { label: "Pending Approval", tone: "pending" };
     case "INFO_REQUESTED":
       return { label: "Information Requested", tone: "pending", icon: "info" };
     case "PROCESSING":
-      return { label: "Processing", tone: "pending" };
+      return autoApproved
+        ? { label: "Auto-Processing", tone: "pending", icon: "bolt" }
+        : { label: "Processing", tone: "pending" };
     case "SUCCESS":
       return { label: "Successful", tone: "positive-solid", icon: "check" };
     case "FAILED":

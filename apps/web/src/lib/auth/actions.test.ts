@@ -64,7 +64,8 @@ function form(fields: Record<string, string>): FormData {
 }
 
 const VALID_SIGNUP = {
-  fullName: "Amani Mushi",
+  firstName: "Amani",
+  lastName: "Mushi",
   email: "amani@shop.co.tz",
   phone: "+255700000000",
   nidaNumber: "19900101-12345-12345-12",
@@ -72,7 +73,8 @@ const VALID_SIGNUP = {
   confirmPassword: "Str0ng!pass",
   businessName: "Amani Traders",
   businessCategory: "Retail",
-  natureOfBusiness: "Online retail",
+  businessEmail: "hello@amanitraders.co.tz",
+  businessPhone: "+255711222333",
   physicalAddress: "Mbezi",
   regionCity: "Dar es Salaam",
   servicesNeeded: "PAYMENT_LINKS",
@@ -108,6 +110,52 @@ describe("signupWithBusinessAction", () => {
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
+  it("requires both first and last name", async () => {
+    const { signupWithBusinessAction } = await importActions();
+    const state = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, firstName: "", lastName: "" }));
+    expect(state?.errors?.firstName?.[0]).toMatch(/first name is required/i);
+    expect(state?.errors?.lastName?.[0]).toMatch(/last name is required/i);
+    expect(submitMerchantSignup).not.toHaveBeenCalled();
+  });
+
+  it("requires a valid business email, distinct from the owner's own email", async () => {
+    const { signupWithBusinessAction } = await importActions();
+    const missing = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessEmail: "" }));
+    expect(missing?.errors?.businessEmail?.[0]).toMatch(/business email is required/i);
+
+    const invalid = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessEmail: "not-an-email" }));
+    expect(invalid?.errors?.businessEmail?.[0]).toMatch(/valid business email/i);
+    expect(submitMerchantSignup).not.toHaveBeenCalled();
+  });
+
+  it("requires a business phone", async () => {
+    const { signupWithBusinessAction } = await importActions();
+    const state = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessPhone: "" }));
+    expect(state?.errors?.businessPhone?.[0]).toMatch(/business phone is required/i);
+    expect(submitMerchantSignup).not.toHaveBeenCalled();
+  });
+
+  it("combines first and last name into full_name, and derives nature_of_business from notes/business type", async () => {
+    submitMerchantSignup.mockResolvedValue({
+      merchant_id: "m1",
+      merchant_code: "MER-1",
+      account_status: "PENDING_VERIFICATION",
+      email_confirmation_required: true,
+    });
+    const { signupWithBusinessAction } = await importActions();
+
+    await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, notes: "Also sells on Instagram" }));
+    expect(submitMerchantSignup).toHaveBeenCalledWith(
+      expect.objectContaining({ full_name: "Amani Mushi", nature_of_business: "Also sells on Instagram", notes: "Also sells on Instagram" }),
+    );
+
+    submitMerchantSignup.mockClear();
+    await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, notes: "" }));
+    expect(submitMerchantSignup).toHaveBeenCalledWith(
+      expect.objectContaining({ nature_of_business: "Retail", notes: null }),
+    );
+  });
+
   it("on success (email confirmation required) shows the verify-then-wait message and offers resend", async () => {
     submitMerchantSignup.mockResolvedValue({
       merchant_id: "m1",
@@ -123,12 +171,14 @@ describe("signupWithBusinessAction", () => {
     expect(state?.awaitingEmailVerification).toBe(true);
     expect(submitMerchantSignup).toHaveBeenCalledWith(
       expect.objectContaining({
+        full_name: "Amani Mushi",
         email: "amani@shop.co.tz",
         nida_number: "19900101-12345-12345-12",
         business_name: "Amani Traders",
+        business_email: "hello@amanitraders.co.tz",
+        business_phone: "+255711222333",
         accepted_terms: true,
       }),
-      null, // no TIN certificate in this form
     );
   });
 

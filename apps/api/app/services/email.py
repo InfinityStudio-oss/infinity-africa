@@ -554,11 +554,14 @@ def send_payment_receipt_email(client: Client, *, merchant: dict, transaction: d
     which itself wraps this call in try/except for defense in depth) —
     a receipt email failing to send must never fail the payment itself.
     Returns None (logging the failure) rather than raising."""
+    settings = get_settings()
+    if not settings.send_customer_receipt_emails:
+        return None
+
     customer_email, public_slug = _resolve_collection_customer_email(client, collection)
     if not customer_email:
         return None
 
-    settings = get_settings()
     business_name = merchant.get("business_name") or "Merchant"
     merchant_code = merchant.get("merchant_code")
     currency = transaction.get("currency") or collection.get("currency") or "TZS"
@@ -823,6 +826,7 @@ def send_merchant_signup_notification_email(
     business_category: str | None = None,
     business_location: str | None = None,
     nida_masked: str | None = None,
+    tin_number: str | None = None,
     submitted_at: str | None = None,
 ) -> dict | None:
     """Best-effort — never raises. Called right after a *new* onboarding
@@ -863,6 +867,7 @@ def send_merchant_signup_notification_email(
         ("Merchant email", contact_email),
         ("Phone number", contact_phone or "—"),
         ("NIDA number", nida_masked or "—"),
+        ("TIN", tin_number or "—"),
         ("Business type/category", business_type or "—"),
         ("Business location", business_location or "—"),
         ("Submitted", submitted_at or "—"),
@@ -934,7 +939,7 @@ def send_withdrawal_request_notification_email(
     is already saved by the time this runs, so a failed notification must
     never be mistaken for a failed withdrawal request."""
     settings = get_settings()
-    if not settings.ceo_email:
+    if not settings.send_withdrawal_request_emails or not settings.ceo_email:
         return None
 
     business_name = merchant.get("business_name") or "A merchant"

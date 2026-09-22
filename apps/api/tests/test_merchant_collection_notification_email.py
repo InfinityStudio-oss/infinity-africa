@@ -54,6 +54,12 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     monkeypatch.setenv("SELCOM_WEBHOOK_SECRET", _SELCOM_WEBHOOK_SECRET)
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
+    # This file's own tests rely on the customer receipt email still firing
+    # right before the merchant notification (see module docstring) — the
+    # 2026-09 email-volume reduction defaults SEND_CUSTOMER_RECEIPT_EMAILS
+    # to false, which would otherwise silently drop that first call and
+    # shift every fake_resend.calls[n] index this file asserts on.
+    monkeypatch.setenv("SEND_CUSTOMER_RECEIPT_EMAILS", "true")
     get_settings.cache_clear()
     get_selcom_client.cache_clear()
     yield

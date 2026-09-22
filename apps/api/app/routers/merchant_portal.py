@@ -1064,10 +1064,14 @@ async def create_my_withdrawal(
     """Merchant-admin only — a deliberate tightening vs. the existing
     /v1/disbursements/{method} routes, which also allow MERCHANT_STAFF.
 
-    Always creates PENDING_ADMIN_APPROVAL, fee recalculated and frozen
-    server-side (never trusts a client-supplied fee) — Selcom is never
-    called from this path; only a Super Admin's approval
-    (app/routers/admin_withdrawals.py) ever reaches the provider."""
+    Always *creates* PENDING_ADMIN_APPROVAL, fee recalculated and frozen
+    server-side (never trusts a client-supplied fee). It stays pending for
+    a Super Admin (app/routers/admin_withdrawals.py) unless withdrawal
+    automation is enabled and this request passes the eligibility check,
+    in which case execute_disbursement auto-processes it inline — see
+    app/services/disbursements.py::execute_disbursement. Automation is off
+    by default, so the historical "always needs a human" behavior is what
+    a deployment gets unless it deliberately opts in."""
     # ENABLE_WITHDRAWALS kill switch — checked first, before auth-independent
     # idempotency bookkeeping, exactly like the /v1/disbursements/{method}
     # routes and require_merchant_api_keys_enabled() above. Was missing here,

@@ -125,12 +125,12 @@ export function CreateAccountForm() {
       )}
 
       <section className="space-y-6">
-        <h2 className={sectionHeadingClass}>Your account</h2>
+        <h2 className={sectionHeadingClass}>Account owner</h2>
         <div className="grid sm:grid-cols-2 gap-6">
-          <Field name="fullName" label="Your Name" autoComplete="name" placeholder="e.g. Amani Mushi" defaultValue={v.fullName} errors={err.fullName} />
-          <Field name="email" label="Email Address" type="email" autoComplete="off" placeholder="you@business.co.tz" defaultValue={v.email} errors={err.email} />
+          <Field name="firstName" label="First Name" autoComplete="given-name" placeholder="Amani" defaultValue={v.firstName} errors={err.firstName} />
+          <Field name="lastName" label="Last Name" autoComplete="family-name" placeholder="Mushi" defaultValue={v.lastName} errors={err.lastName} />
+          <Field name="email" label="Work Email" type="email" autoComplete="off" placeholder="you@business.co.tz" defaultValue={v.email} errors={err.email} />
           <Field name="phone" label="Phone Number" type="tel" autoComplete="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.phone} errors={err.phone} />
-          <Field name="nidaNumber" label="NIDA Number" placeholder="20-digit National ID number" defaultValue={v.nidaNumber} errors={err.nidaNumber} />
         </div>
         <div className="grid sm:grid-cols-2 gap-6">
           <div>
@@ -144,36 +144,35 @@ export function CreateAccountForm() {
       </section>
 
       <section className="space-y-6">
-        <h2 className={sectionHeadingClass}>Your business</h2>
+        <h2 className={sectionHeadingClass}>Business details</h2>
         <div className="grid sm:grid-cols-2 gap-6">
-          <Field name="businessName" label="Business Name" defaultValue={v.businessName} errors={err.businessName} />
-          <Field name="businessCategory" label="Business Category" placeholder="e.g. Retail, Logistics, Restaurant" defaultValue={v.businessCategory} errors={err.businessCategory} />
+          <Field name="businessName" label="Business / Trading Name" defaultValue={v.businessName} errors={err.businessName} />
+          <Field name="legalBusinessName" label="Legal Business Name" optional defaultValue={v.legalBusinessName} errors={err.legalBusinessName} />
         </div>
-        <Field name="natureOfBusiness" label="Nature of Business" placeholder="Briefly describe what your business does" defaultValue={v.natureOfBusiness} errors={err.natureOfBusiness} />
         <div className="grid sm:grid-cols-2 gap-6">
-          <Field name="physicalAddress" label="Physical Address" defaultValue={v.physicalAddress} errors={err.physicalAddress} />
+          <Field name="businessCategory" label="Business Type" placeholder="e.g. Retail, Logistics, Restaurant" defaultValue={v.businessCategory} errors={err.businessCategory} />
+          <Field name="nidaNumber" label="NIDA Number" placeholder="20-digit National ID number" defaultValue={v.nidaNumber} errors={err.nidaNumber} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-6">
+          <Field name="businessEmail" label="Business Email" type="email" placeholder="hello@business.co.tz" defaultValue={v.businessEmail} errors={err.businessEmail} />
+          <Field name="businessPhone" label="Business Phone" type="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.businessPhone} errors={err.businessPhone} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-6">
+          <Field name="physicalAddress" label="Business Address" defaultValue={v.physicalAddress} errors={err.physicalAddress} />
           <Field name="regionCity" label="Region / City" defaultValue={v.regionCity} errors={err.regionCity} />
         </div>
-        <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
-
-        <div>
-          <label htmlFor="tinCertificate" className={labelClass}>
-            TIN Certificate <span className="normal-case font-normal text-outline">(optional)</span>
-          </label>
-          <input
-            id="tinCertificate"
-            name="tinCertificate"
-            type="file"
-            accept="application/pdf,image/jpeg,image/png"
-            className="w-full text-xs text-on-surface-variant file:mr-3 file:rounded-lg file:border-0 file:bg-surface-container file:px-3 file:py-2 file:text-xs file:font-medium file:text-on-surface"
-          />
-          <p className="mt-1.5 text-xs text-on-surface-variant">PDF, JPG, or PNG. You can also send this later if you don&apos;t have it now.</p>
-          {err.tinCertificate?.map((msg) => (
-            <p key={msg} className={errorClass}>
-              {msg}
-            </p>
-          ))}
+        <div className="grid sm:grid-cols-2 gap-6">
+          <Field name="tinNumber" label="TIN" optional placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
+          <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
         </div>
+        <Field
+          name="notes"
+          label="Notes / Description"
+          optional
+          placeholder="Anything else you'd like InfinityPay to know about your business"
+          defaultValue={v.notes}
+          errors={err.notes}
+        />
       </section>
 
       <section className="space-y-4">

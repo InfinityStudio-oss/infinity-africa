@@ -35,6 +35,12 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
     monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
+    # This whole file is specifically about these two withdrawal emails —
+    # the 2026-09 email-volume reduction defaults both to false. The
+    # dedicated flag tests in test_withdrawal_automation.py cover the
+    # disabled-by-default case instead of duplicating it here.
+    monkeypatch.setenv("SEND_WITHDRAWAL_REQUEST_EMAILS", "true")
+    monkeypatch.setenv("SEND_MERCHANT_WITHDRAWAL_EMAILS", "true")
     get_settings.cache_clear()
     get_selcom_business_client.cache_clear()
     yield

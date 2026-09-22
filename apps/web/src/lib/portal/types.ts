@@ -174,6 +174,11 @@ export interface Disbursement {
   bank_name: string | null;
   status: DisbursementStatus;
   requires_approval: boolean;
+  // True if this withdrawal skipped Super Admin approval via the
+  // automated eligibility check — approved_by/approved_at stay null in
+  // that case, since no human approved it.
+  auto_approved: boolean;
+  auto_decision_reason: string | null;
   approved_by: string | null;
   approved_at: string | null;
   rejected_by: string | null;

@@ -30,6 +30,12 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("MOCK_PROVIDER_FAILURE_RATE", "0")
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
+    # This whole file is specifically about the customer receipt email —
+    # the 2026-09 email-volume reduction defaults SEND_CUSTOMER_RECEIPT_EMAILS
+    # to false, so every test here opts back in; the one test that cares
+    # about the disabled case (test_receipt_email_not_sent_when_disabled_by_flag)
+    # overrides this back to false itself.
+    monkeypatch.setenv("SEND_CUSTOMER_RECEIPT_EMAILS", "true")
     get_settings.cache_clear()
     get_selcom_client.cache_clear()
     yield
@@ -93,6 +99,23 @@ def test_receipt_email_sent_after_a_successful_payment(fake_client, fake_resend)
     assert "Masanja Traders" in html
     assert "27048391" in html
     assert "Successful" in html
+
+
+def test_receipt_email_not_sent_when_disabled_by_flag(fake_client, fake_resend, monkeypatch):
+    monkeypatch.setenv("SEND_CUSTOMER_RECEIPT_EMAILS", "false")
+    get_settings.cache_clear()
+    merchant = create_merchant(fake_client, business_name="Masanja Traders", merchant_code="27048391")
+    merchant_id = uuid.UUID(merchant["id"])
+    admin_id = uuid.uuid4()
+    make_merchant_member(fake_client, merchant_id, admin_id, "MERCHANT_ADMIN")
+    link = _create_link(merchant_id, admin_id, customer_email="jane@example.com")
+
+    result = _collect(link["public_slug"])
+
+    # The payment itself, and the wallet credit behind it, are entirely
+    # unaffected by this flag — only the email is gated.
+    assert result["status"] == "successful"
+    assert len(fake_resend.calls) == 0
 
 
 def test_receipt_email_includes_a_working_receipt_link(fake_client, fake_resend):

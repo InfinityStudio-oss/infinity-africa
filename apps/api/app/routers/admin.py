@@ -879,6 +879,8 @@ def list_admin_withdrawals(
             destination_identifier=row["destination_identifier"],
             status=row["status"],
             requires_approval=row["requires_approval"],
+            auto_approved=row.get("auto_approved") or False,
+            auto_decision_reason=row.get("auto_decision_reason"),
             provider_reference=row.get("provider_reference"),
             total_charges=row.get("total_charges") or Decimal(0),
             total_reserved_amount=row.get("total_reserved_amount"),

@@ -94,14 +94,14 @@ export async function getOnboardingStatus(accessToken?: string): Promise<Onboard
 }
 
 /** Combined signup — unauthenticated (no Authorization header), sent as
- * multipart/form-data so it can carry the optional TIN certificate file.
- * The backend creates the Supabase Auth user itself. Surfaces the backend
- * error `code` (nida_required / nida_invalid / conflict / …) so the
- * caller can attach the message to the right field. */
-export async function submitMerchantSignup(
-  input: MerchantSignupInput,
-  tinCertificate?: File | null,
-): Promise<MerchantSignupResult> {
+ * multipart/form-data (no file is collected by the Get Started form
+ * anymore — KYC documents are handled offline — but the backend endpoint
+ * still accepts multipart for its own optional tin_certificate param, so
+ * this keeps using FormData rather than switching to JSON). The backend
+ * creates the Supabase Auth user itself. Surfaces the backend error
+ * `code` (nida_required / nida_invalid / conflict / …) so the caller can
+ * attach the message to the right field. */
+export async function submitMerchantSignup(input: MerchantSignupInput): Promise<MerchantSignupResult> {
   const fd = new FormData();
   fd.set("full_name", input.full_name);
   fd.set("email", input.email);
@@ -117,8 +117,11 @@ export async function submitMerchantSignup(
   fd.set("accepted_privacy", String(input.accepted_privacy));
   if (input.website_url) fd.set("website_url", input.website_url);
   if (input.tin_number) fd.set("tin_number", input.tin_number);
+  if (input.legal_business_name) fd.set("legal_business_name", input.legal_business_name);
+  if (input.business_email) fd.set("business_email", input.business_email);
+  if (input.business_phone) fd.set("business_phone", input.business_phone);
+  if (input.notes) fd.set("notes", input.notes);
   for (const service of input.services_needed) fd.append("services_needed", service);
-  if (tinCertificate && tinCertificate.size > 0) fd.set("tin_certificate", tinCertificate);
 
   let res: Response;
   try {

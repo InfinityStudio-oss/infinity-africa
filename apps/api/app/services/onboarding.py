@@ -89,6 +89,7 @@ def _submission_data(payload: OnboardingMerchantAccountCreate, *, nida_number: s
         "nida_number": nida_number,
         "tin_number": payload.tin_number or None,
         "expected_monthly_volume": payload.expected_monthly_volume or None,
+        "notes": payload.notes or None,
         "services_needed": [s.value for s in payload.services_needed],
         "accepted_terms": True,
         "accepted_privacy": True,
@@ -134,7 +135,12 @@ def create_merchant_onboarding(
             client,
             "merchants",
             merchant_id,
-            {"business_name": payload.business_name, "contact_phone": payload.contact_phone},
+            {
+                "business_name": payload.business_name,
+                "legal_name": payload.legal_business_name,
+                "contact_email": payload.business_email or user.email,
+                "contact_phone": payload.business_phone or payload.contact_phone,
+            },
         )
         update_row(
             client,
@@ -159,10 +165,16 @@ def create_merchant_onboarding(
         "merchants",
         {
             "business_name": payload.business_name,
+            "legal_name": payload.legal_business_name,
             "country": "TZ",
             "currency": "TZS",
-            "contact_email": user.email,
-            "contact_phone": payload.contact_phone,
+            # Business email/phone are distinct from the account owner's
+            # own login email/phone (payload.contact_phone, the auth
+            # user's own metadata) — falls back to the owner's when the
+            # Get Started form's business_email/business_phone are blank
+            # (the older two-step /onboarding form never sends them).
+            "contact_email": payload.business_email or user.email,
+            "contact_phone": payload.business_phone or payload.contact_phone,
             "status": "pending",
             "kyc_status": "unverified",
             "merchant_code": generate_merchant_code(client),
@@ -220,6 +232,7 @@ def create_merchant_onboarding(
             business_category=payload.business_category,
             business_location=business_location,
             nida_masked=mask_nida(nida),
+            tin_number=payload.tin_number,
             submitted_at=submitted_at,
         )
     except Exception:  # noqa: BLE001, S110
@@ -445,6 +458,7 @@ def _to_submission_row(submission: dict, merchant: dict, documents: list[dict]) 
         "merchant_id": submission["merchant_id"],
         "merchant_code": merchant.get("merchant_code"),
         "business_name": merchant.get("business_name", ""),
+        "legal_name": merchant.get("legal_name"),
         # `or ""`, not `.get(..., "")` — the merchant row can have the key
         # present but set to None (contact_email is DB-required today, but
         # this response must never 500 if that's ever not true — see
@@ -457,6 +471,7 @@ def _to_submission_row(submission: dict, merchant: dict, documents: list[dict]) 
         "physical_address": submission["physical_address"],
         "region_city": submission["region_city"],
         "website_url": submission.get("website_url"),
+        "notes": submission.get("notes"),
         # Never the full NIDA — only the last 4 digits reach the API response.
         "nida_last4": nida_last4(submission.get("nida_number")),
         "tin_number": submission.get("tin_number"),

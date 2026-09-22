@@ -178,7 +178,11 @@ export function WithdrawalsView() {
       setNotes("");
       setQuote(null);
       setQuotedFor(null);
-      setSuccess("Withdrawal request submitted for approval.");
+      setSuccess(
+        disbursement.auto_approved
+          ? "Withdrawal submitted for processing."
+          : "Withdrawal submitted for review.",
+      );
     } catch (err) {
       // InsufficientBalanceError already carries the backend's safe message;
       // withdrawalErrorMessage() handles every other structured backend
@@ -411,7 +415,7 @@ export function WithdrawalsView() {
             disabled={submitting || !quote || quoteIsStale || exceedsBalance}
           >
             <Icon name="send" className="text-[20px]" />
-            {submitting ? "Confirming…" : "Confirm Withdrawal"}
+            {submitting ? "Submitting…" : "Request Withdrawal"}
           </button>
         </form>
       </Card>

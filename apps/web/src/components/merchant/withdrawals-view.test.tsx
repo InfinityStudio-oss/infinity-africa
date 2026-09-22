@@ -36,7 +36,7 @@ vi.mock("@/lib/portal/api", () => ({
 }));
 
 /** Fill the form and get past the mandatory "Check Balance" gate so the
- * "Confirm Withdrawal" button is enabled. */
+ * "Request Withdrawal" button is enabled. */
 async function fillFormAndCheckBalance() {
   fireEvent.change(screen.getByPlaceholderText("+255 7XX XXX XXX or account no."), {
     target: { value: "255657878545" },
@@ -99,7 +99,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Confirm Withdrawal"));
+    fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await waitFor(() =>
       expect(
@@ -118,7 +118,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Confirm Withdrawal"));
+    fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await waitFor(() =>
       expect(
@@ -129,7 +129,7 @@ describe("WithdrawalsView", () => {
     expect(screen.queryByText(/postgres exception/)).not.toBeInTheDocument();
   });
 
-  it("shows the approval-pending success message and does not surface any payout detail", async () => {
+  it("shows the review-pending success message (not auto-processed) and does not surface any payout detail", async () => {
     createDisbursement.mockResolvedValueOnce({
       id: "d1",
       method: "SELCOM_PESA",
@@ -137,20 +137,48 @@ describe("WithdrawalsView", () => {
       currency: "TZS",
       destination_name: "Masanja",
       status: "PENDING_ADMIN_APPROVAL",
+      auto_approved: false,
       initiated_at: new Date().toISOString(),
     });
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Confirm Withdrawal"));
+    fireEvent.click(screen.getByText("Request Withdrawal"));
 
-    await waitFor(() =>
-      expect(screen.getByText("Withdrawal request submitted for approval.")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Withdrawal submitted for review.")).toBeInTheDocument());
     expect(createDisbursement).toHaveBeenCalledWith(
       expect.objectContaining({ amount: "100000", method: "SELCOM_PESA", destination_name: "Masanja" }),
     );
+  });
+
+  it("shows the processing success message when the withdrawal was auto-approved", async () => {
+    createDisbursement.mockResolvedValueOnce({
+      id: "d1",
+      method: "SELCOM_PESA",
+      amount: "100000.00",
+      currency: "TZS",
+      destination_name: "Masanja",
+      status: "PROCESSING",
+      auto_approved: true,
+      initiated_at: new Date().toISOString(),
+    });
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() => expect(screen.getByText("Withdrawal submitted for processing.")).toBeInTheDocument());
+  });
+
+  it("never mentions CEO or email approval in withdrawal-facing text", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    const { container } = render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Withdrawals")).toBeInTheDocument());
+    expect(container.textContent).not.toMatch(/CEO/i);
+    expect(container.textContent).not.toMatch(/email approval/i);
   });
 
   it("never shows the literal word 'Disbursement' in merchant-facing text", async () => {

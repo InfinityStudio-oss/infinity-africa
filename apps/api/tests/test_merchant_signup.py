@@ -197,3 +197,56 @@ def test_signup_is_rate_limited(fake_client):
 
     response = _post(_form())
     assert response.status_code == 429
+
+
+# --- New Get Started fields: legal name / business email+phone / notes ------
+
+
+def test_signup_saves_legal_business_name_and_business_contact_details(fake_client):
+    form = _form(
+        legal_business_name="Amani Traders Company Limited",
+        business_email="hello@amanitraders.co.tz",
+        business_phone="+255711222333",
+        notes="Also sells online via Instagram.",
+    )
+    response = _post(form)
+    assert response.status_code == 201, response.text
+    merchant_id = response.json()["data"]["merchant_id"]
+
+    merchant = next(m for m in fake_client.table("merchants")._table.rows if m["id"] == str(merchant_id))
+    assert merchant["legal_name"] == "Amani Traders Company Limited"
+    # Business email/phone are distinct from the owner's own login
+    # email/contact_phone — never silently overwritten by them.
+    assert merchant["contact_email"] == "hello@amanitraders.co.tz"
+    assert merchant["contact_email"] != form["email"]
+    assert merchant["contact_phone"] == "255711222333"
+
+    submission = next(
+        s for s in fake_client.table("onboarding_submissions")._table.rows if s["merchant_id"] == str(merchant_id)
+    )
+    assert submission["notes"] == "Also sells online via Instagram."
+
+
+def test_signup_falls_back_to_owner_email_and_phone_when_business_ones_are_blank(fake_client):
+    form = _form()  # no legal_business_name/business_email/business_phone/notes
+    response = _post(form)
+    assert response.status_code == 201, response.text
+    merchant_id = response.json()["data"]["merchant_id"]
+
+    merchant = next(m for m in fake_client.table("merchants")._table.rows if m["id"] == str(merchant_id))
+    assert merchant["legal_name"] is None
+    assert merchant["contact_email"] == form["email"]
+    assert merchant["contact_phone"] == "255700000000"
+
+    submission = next(
+        s for s in fake_client.table("onboarding_submissions")._table.rows if s["merchant_id"] == str(merchant_id)
+    )
+    assert submission["notes"] is None
+
+
+def test_signup_ceo_notification_includes_tin_when_provided(fake_client, fake_resend):
+    _post(_form(tin_number="123-456-789"))
+
+    ceo_calls = [c for c in fake_resend.calls if c["to"] == ["ceo@infinitypay.me"]]
+    assert len(ceo_calls) == 1
+    assert "123-456-789" in ceo_calls[0]["html"]

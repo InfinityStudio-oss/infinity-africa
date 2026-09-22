@@ -38,12 +38,18 @@ export default async function OnboardingDetailPage(props: PageProps<"/super-admi
       <Card>
         <h3 className="text-lg font-semibold text-on-surface mb-4">Business Details</h3>
         <dl className="grid sm:grid-cols-2 gap-5 text-sm">
+          {submission.legal_name && (
+            <div>
+              <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Legal Business Name</dt>
+              <dd className="mt-1 text-on-surface">{submission.legal_name}</dd>
+            </div>
+          )}
           <div>
-            <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Owner Email</dt>
+            <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Business Email</dt>
             <dd className="mt-1 text-on-surface">{submission.owner_email}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Contact Phone</dt>
+            <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Business Phone</dt>
             <dd className="mt-1 text-on-surface">{submission.contact_phone ?? "—"}</dd>
           </div>
           <div>
@@ -84,6 +90,12 @@ export default async function OnboardingDetailPage(props: PageProps<"/super-admi
             <div>
               <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Website / App Link</dt>
               <dd className="mt-1 text-on-surface">{submission.website_url}</dd>
+            </div>
+          )}
+          {submission.notes && (
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Notes</dt>
+              <dd className="mt-1 text-on-surface whitespace-pre-wrap">{submission.notes}</dd>
             </div>
           )}
           <div>

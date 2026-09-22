@@ -24,10 +24,34 @@ DAILY_WITHDRAWAL_LIMIT_TZS=10000000
 REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=true
 ```
 Remove `WITHDRAWAL_PILOT_MODE`/`WITHDRAWAL_PILOT_MAX_AMOUNT_TZS` if still
-set — no code reads them anymore (see §3). `REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS`
-documents an invariant the code enforces unconditionally; it cannot
-actually disable approval, and setting it `false` only produces a startup
-warning log, nothing more.
+set — no code reads them anymore (see §3).
+
+**Withdrawal automation (new, 2026-09-22 — see §21 for the full policy):**
+```
+AUTO_WITHDRAWALS_ENABLED=false
+AUTO_WITHDRAWAL_MAX_AMOUNT_TZS=500000
+AUTO_WITHDRAWAL_DAILY_LIMIT_TZS=1000000
+AUTO_WITHDRAWAL_REQUIRE_APPROVED_MERCHANT=true
+```
+`REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS` used to document an
+invariant the code enforced unconditionally (setting it `false` only
+produced a startup warning, nothing more). It's now a real switch: with
+withdrawal automation added, setting it `false` **and**
+`AUTO_WITHDRAWALS_ENABLED=true` is what actually lets an eligible
+withdrawal skip Super Admin approval — both flags, deliberately, so a
+deploy that sets only one still fails safe to "every withdrawal needs a
+human." Leave both at their defaults (`true`/`false`) unless withdrawal
+automation is a deliberate decision — see §21 before changing either.
+
+**Email-volume reduction (new, 2026-09-22 — see §20):**
+```
+SEND_CUSTOMER_RECEIPT_EMAILS=false
+SEND_WITHDRAWAL_REQUEST_EMAILS=false
+SEND_MERCHANT_WITHDRAWAL_EMAILS=false
+```
+All three default `false` already — listed here for visibility, not
+because they need to be set. Flip any one back to `true` in Railway to
+restore that category without a code change.
 
 **Production safety switches (new):**
 ```
@@ -67,13 +91,20 @@ it's constrained entirely by Postgres Row Level Security, not secrecy.
 
 ## 3. Withdrawal approval policy (confirmed, not newly built)
 
-Every merchant-submitted withdrawal — any amount, any channel — always
-lands `PENDING_ADMIN_APPROVAL`. There is no code path where
+Every merchant-submitted withdrawal — any amount, any channel — lands
+`PENDING_ADMIN_APPROVAL` **unless withdrawal automation is enabled and
+this specific request is eligible** (see §21 — off by default). With
+automation off (the default), there is no code path where
 `execute_disbursement` (the only way a withdrawal is created) reaches
 Selcom directly; only a Super Admin calling `approve_disbursement` via
 `POST /v1/admin/withdrawals/{id}/approve` (`require_super_admin`-gated)
 ever does. This was already true before this pass — confirmed by reading
-`app/services/disbursements.py` end to end, not assumed.
+`app/services/disbursements.py` end to end, not assumed. With automation
+on, an eligible request calls the exact same
+`_reserve_and_run_disbursement_provider` function a manual approval
+does — no separate, less-tested "auto" payout path exists — it's just
+triggered by `execute_disbursement` itself instead of a human clicking
+Approve.
 
 What changed this pass:
 - `approve_disbursement` now **re-checks merchant standing and open
@@ -187,6 +218,13 @@ returns `503 feature_disabled` immediately. Already-pending withdrawals
 remain visible and Super Admins can still approve/reject/reconcile them —
 this only blocks brand-new requests. Revert by setting it back to `true`.
 
+**To disable only automation** (keep accepting withdrawal requests, but
+stop auto-processing any of them — every new request falls back to
+`PENDING_ADMIN_APPROVAL`), set `AUTO_WITHDRAWALS_ENABLED=false` instead —
+narrower than the full kill switch above, and the faster option if
+automation itself is the concern rather than withdrawals altogether. See
+§21.
+
 ## 9. How to disable collections quickly
 
 Set `ENABLE_COLLECTIONS=false` in Railway. Every collection-creating
@@ -237,8 +275,9 @@ that touches env vars or the `/developers` example pages.
 | `ENABLE_WITHDRAWALS` | `true` | New withdrawal requests (`POST /v1/disbursements/*`) | Super Admin approve/reject/reconcile on already-existing requests |
 | `ENABLE_MERCHANT_API_KEYS` | `true` | New API key creation and rotation | Already-issued keys keep authenticating; individual revoke still works |
 | `ENABLE_AUTO_RECONCILIATION` | `true` | Both reconciliation schedulers (checkout + disbursement), regardless of their interval env vars | Manual "Refresh status" and the admin batch-reconcile endpoint |
+| `AUTO_WITHDRAWALS_ENABLED` | `false` | (when `false`, the safe default) any withdrawal auto-processing at all — every request falls back to `PENDING_ADMIN_APPROVAL` | New withdrawal requests themselves — this only controls whether an eligible one skips the human queue, never whether requests are accepted (`ENABLE_WITHDRAWALS` above is the switch for that) |
 
-All four are read fresh on next app start — flipping one in Railway
+All five are read fresh on next app start — flipping one in Railway
 requires the service to actually restart/redeploy to take effect (env var
 changes don't hot-reload a running process).
 
@@ -500,3 +539,150 @@ marketing/SEO surface, not private.
   (`merchant_collection_create`), `test_onboarding.py`
   (`merchant_onboarding_submit`), and `test_public_inquiries.py`
   (`public_inquiry_create`).
+
+## 20. Get Started signup flow, email verification, and email-volume reduction (2026-09-22)
+
+**Get Started / signup form** — the public site's "Get Started" links
+(header, footer, hero, CTA) already pointed at `/create-account`, the
+combined signup+business-details page, before this pass; nothing about
+that routing changed. What changed is the form itself:
+- Account owner: split a single "Your Name" field into **First Name** +
+  **Last Name** (still concatenated into one `full_name` string sent to
+  the backend — no backend/DB change for names).
+- Business details: added **Legal Business Name** (optional — maps to
+  the already-existing `merchants.legal_name` column, just never wired
+  up from this form before), **Business Email** and **Business Phone**
+  (both required, and deliberately distinct from the account owner's own
+  login email/phone — falls back to the owner's when blank, so the
+  older two-step `/onboarding` form, which doesn't collect these,
+  behaves exactly as before), **TIN** as a plain optional text field, and
+  **Notes / Description** (optional).
+- Removed the TIN certificate file upload from this form specifically —
+  "no online KYC document upload" is a decision about the Get Started
+  form's own UX, not a removal of the underlying document infrastructure
+  (`POST /v1/onboarding/documents` and the Document Requests feature both
+  still exist and still work for documents the Super Admin requests
+  during review).
+- `nature_of_business` (DB `NOT NULL`) is still required by the backend
+  but is no longer a separate visible field on this form — it's derived
+  from Notes/Description when provided, falling back to Business Type
+  otherwise, so the constraint is always satisfied without asking twice.
+
+**Email verification** — unchanged in mechanism, already live before this
+pass: `POST /v1/onboarding/signup` creates the Supabase Auth user itself
+(service_role) and, unless the account is already confirmed, generates a
+signup link and sends InfinityPay's own branded verification email (never
+Supabase's default template). Clicking it lands on `/auth/callback` and
+redirects to `/merchant/overview`. **Verifying email only confirms email
+ownership — it never auto-approves the merchant.** A merchant can log in
+immediately after verifying, but every financial feature stays blocked
+(see §5) until a Super Admin approves the onboarding submission
+separately, from `/super-admin/onboarding`.
+
+**CEO signup notification** — unchanged in trigger/recipient, extended
+with one more field: the CEO email (`send_merchant_signup_notification_email`)
+now includes the TIN number (plain, not masked — TIN isn't identity data
+the way NIDA is) alongside the existing masked-NIDA, business type,
+location, and submitted-at fields.
+
+**Customer receipt email flag** — `SEND_CUSTOMER_RECEIPT_EMAILS` (default
+`false`) gates `send_payment_receipt_email` — the one email sent to the
+*paying customer* after a collection succeeds. Turning it off never
+affects the payment succeeding, the wallet being credited, the in-portal
+receipt page, or the merchant's own collection-notification email
+(`send_merchant_collection_notification_email`, gated separately by that
+feature's own `collection_notifications_enabled` setting) — only this one
+customer-facing email. See `app/services/email.py`'s docstring on that
+function and `apps/api/tests/test_payment_receipt_email.py`.
+
+## 21. Withdrawal automation policy (2026-09-22)
+
+**Off by default.** `AUTO_WITHDRAWALS_ENABLED=false` and
+`REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=true` are both defaults —
+every withdrawal behaves exactly as documented in §3 until an operator
+deliberately changes **both** flags. This is intentional belt-and-
+suspenders: a deploy that sets only one of the two still falls back to
+"every withdrawal needs a human," and `app/main.py` logs a startup
+warning either way (automation actually enabled, or one flag set without
+the other) so the current state is always visible in deploy logs.
+
+**Eligibility** (`app/services/disbursements.py::_evaluate_auto_withdrawal_eligibility`,
+called from `execute_disbursement` immediately after the same
+merchant-verification and open-high-risk-fraud-alert checks every
+withdrawal already goes through, auto or not):
+1. Both automation flags must be set (above).
+2. Amount must be within `AUTO_WITHDRAWAL_MAX_AMOUNT_TZS` (default
+   500,000 TZS — a conservative starting point, well under the hard
+   per-request cap `MAX_WITHDRAWAL_AMOUNT_TZS`, 5,000,000 TZS; tune once
+   real auto-withdrawal volume exists).
+3. This merchant's rolling-24h total already auto-processed, plus this
+   request, must stay within `AUTO_WITHDRAWAL_DAILY_LIMIT_TZS` (default
+   1,000,000 TZS — independent of, and stricter than, the overall
+   `DAILY_WITHDRAWAL_LIMIT_TZS` that caps everything requested, auto or
+   manual, for the day).
+
+Ineligible for any reason (including automation simply being off) →
+lands `PENDING_ADMIN_APPROVAL` exactly as before, with
+`disbursements.auto_decision_reason` recording why. Eligible → proceeds
+immediately through `_reserve_and_run_disbursement_provider`, the exact
+same function a Super Admin's manual approval already calls — no
+separate, less-tested "auto" payout path exists.
+
+**Safety invariants unchanged, auto or manual:**
+- `_check_merchant_is_verified` (merchant `active`+`verified`) and
+  `_check_no_open_high_risk_alerts` are unconditional — nothing about
+  automation bypasses either. `AUTO_WITHDRAWAL_REQUIRE_APPROVED_MERCHANT`
+  documents this invariant (same convention as
+  `REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS` used to); it cannot itself
+  disable verification.
+- Balance is still reserved exactly once, atomically, via the same
+  `post_disbursement_entries` Postgres RPC — auto-processing takes the
+  identical reservation path a manual approval does.
+- A failed/rejected provider result still reverses the reservation via
+  `_fail_and_reverse` — an auto-processed withdrawal that fails is never
+  left permanently debited, same as a manually-approved one.
+- Idempotency is unchanged: the existing `Idempotency-Key` requirement on
+  every withdrawal-creation endpoint means a retried request with the
+  same key replays the stored response rather than re-running
+  `execute_disbursement` (and therefore never re-evaluates or
+  re-triggers automation) a second time.
+- Every auto-processed withdrawal still writes the same
+  `disbursement.completed`/`disbursement.failed` audit log entries a
+  manual one does — nothing about the audit trail is auto-specific or
+  reduced.
+
+**Distinguishing auto from manual**: `disbursements.auto_approved`
+(`true`/`false`) and `disbursements.auto_decision_reason` (always
+populated once evaluated, whichever way it went) are new columns —
+exposed on every disbursement API response (`DisbursementResponse`,
+`AdminWithdrawalResponse`) and shown in the Super Admin withdrawals table
+as an "Auto-Processing" badge (still the same underlying `PROCESSING`
+status — no new status value was added to the state machine, so every
+existing reconciliation/refresh code path handles an auto-processed
+withdrawal exactly like a manually-approved one with zero additional
+code).
+
+**CEO withdrawal-request email removed by default**:
+`SEND_WITHDRAWAL_REQUEST_EMAILS` (default `false`) gates
+`send_withdrawal_request_notification_email` — turning it off never
+affects the request itself, its audit log, or its visibility in the
+Super Admin withdrawals queue, only this one email.
+`SEND_MERCHANT_WITHDRAWAL_EMAILS` (default `false`) similarly gates the
+merchant-facing withdrawal-success email — the in-app notification and
+outbound webhook are unconditional either way.
+
+**Manual verification checklist for this feature**:
+- [ ] With defaults (`AUTO_WITHDRAWALS_ENABLED=false`): a withdrawal
+      request lands `PENDING_ADMIN_APPROVAL`, `auto_approved: false`.
+- [ ] With both flags set and a request within limits: lands `PROCESSING`
+      (mock mode) or eventually `SUCCESS`, `auto_approved: true`,
+      `approved_by: null`.
+- [ ] A request over `AUTO_WITHDRAWAL_MAX_AMOUNT_TZS` falls back to
+      `PENDING_ADMIN_APPROVAL` even with automation enabled.
+- [ ] A pending/suspended/unverified merchant's withdrawal is rejected
+      (`409 withdrawal_restricted`) even with automation enabled — never
+      auto-processed.
+- [ ] Setting `AUTO_WITHDRAWALS_ENABLED=false` again immediately returns
+      every new request to manual approval.
+- [ ] Super Admin withdrawals table shows "Auto-Processing" (not plain
+      "Processing") and the decision reason for an auto-approved row.

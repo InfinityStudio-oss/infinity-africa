@@ -169,6 +169,11 @@ export interface AdminWithdrawalRow {
     | "BLOCKED_IP_WHITELIST"
     | "REVERSED";
   requires_approval: boolean;
+  /** True if this withdrawal skipped Super Admin approval via the
+   * automated eligibility check. auto_decision_reason explains why,
+   * whichever way the check went. */
+  auto_approved: boolean;
+  auto_decision_reason: string | null;
   provider_reference: string | null;
   total_charges: string;
   total_reserved_amount: string | null;

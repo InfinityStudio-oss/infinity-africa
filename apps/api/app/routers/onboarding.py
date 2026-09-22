@@ -62,6 +62,10 @@ async def merchant_signup(
     accepted_privacy: Annotated[bool, Form()],
     website_url: Annotated[str | None, Form()] = None,
     tin_number: Annotated[str | None, Form()] = None,
+    legal_business_name: Annotated[str | None, Form()] = None,
+    business_email: Annotated[str | None, Form()] = None,
+    business_phone: Annotated[str | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
     tin_certificate: Annotated[UploadFile | None, File()] = None,
 ):
     """Combined signup: account credentials + business details (+ an
@@ -86,6 +90,10 @@ async def merchant_signup(
             nida_number=nida_number,
             website_url=website_url or None,
             tin_number=tin_number or None,
+            legal_business_name=legal_business_name or None,
+            business_email=business_email or None,
+            business_phone=business_phone or None,
+            notes=notes or None,
             services_needed=services_needed,
             accepted_terms=accepted_terms,
             accepted_privacy=accepted_privacy,

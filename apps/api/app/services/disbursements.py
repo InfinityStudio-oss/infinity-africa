@@ -166,6 +166,60 @@ def _check_daily_withdrawal_limit(client: Client, *, merchant_id: uuid.UUID, amo
         )
 
 
+def _evaluate_auto_withdrawal_eligibility(
+    client: Client, *, merchant_id: uuid.UUID, amount: Decimal
+) -> tuple[bool, str]:
+    """Whether a withdrawal request can skip Super Admin approval and go
+    straight to the provider. Only ever consulted from execute_disbursement,
+    immediately after the same merchant-verification and open-high-risk-
+    fraud-alert checks every withdrawal already goes through unconditionally
+    (auto or not, see _check_merchant_is_verified/_check_no_open_high_risk_alerts
+    above) — this function only adds the amount-based checks specific to
+    automation, it never re-checks or weakens those.
+
+    Returns (eligible, reason) — reason is always populated either way, so
+    it can be recorded on the row (disbursements.auto_decision_reason) for
+    Super Admin visibility regardless of the outcome."""
+    settings = get_settings()
+
+    if not (settings.auto_withdrawals_enabled and not settings.require_admin_approval_for_all_withdrawals):
+        return False, "Manual approval required: withdrawal automation is not enabled."
+
+    if amount > settings.auto_withdrawal_max_amount_tzs:
+        return False, (
+            f"Manual approval required: exceeds the {settings.auto_withdrawal_max_amount_tzs} TZS "
+            "per-transaction limit for automatic processing."
+        )
+
+    # Rolling 24h cap on what this backend will auto-process for one
+    # merchant — independent of (and stricter than) the daily_withdrawal_limit_tzs
+    # check _check_withdrawal_amount_limits already ran before this row
+    # existed, which caps everything requested (auto or manual) for the
+    # day. Excludes REJECTED/FAILED for the same reason
+    # _check_daily_withdrawal_limit does: money that never actually moved
+    # doesn't count against a cap about money moving.
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    rows = (
+        client.table("disbursements")
+        .select("amount, status")
+        .eq("merchant_id", str(merchant_id))
+        .eq("auto_approved", True)
+        .gte("initiated_at", cutoff)
+        .execute()
+    ).data or []
+    auto_processed_today = sum(
+        (Decimal(str(row["amount"])) for row in rows if row["status"] not in ("REJECTED", "FAILED")),
+        Decimal(0),
+    )
+    if auto_processed_today + amount > settings.auto_withdrawal_daily_limit_tzs:
+        return False, (
+            f"Manual approval required: would exceed the {settings.auto_withdrawal_daily_limit_tzs} TZS "
+            f"daily limit for automatic processing (already auto-processed today: {auto_processed_today} TZS)."
+        )
+
+    return True, "Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits."
+
+
 def quote_withdrawal_fee(
     client: Client,
     *,
@@ -196,9 +250,18 @@ async def execute_disbursement(
     network: str | None = None,
     description: str | None = None,
 ) -> dict:
-    """Every withdrawal request — any amount, any channel — lands here and
-    always ends up PENDING_ADMIN_APPROVAL. Selcom is never called from this
-    path; only approve_disbursement (below) ever reaches the provider."""
+    """Every withdrawal request — any amount, any channel — lands here.
+    It is always *created* PENDING_ADMIN_APPROVAL; it then stays that way
+    unless withdrawal automation is enabled AND this request passes
+    _evaluate_auto_withdrawal_eligibility (see its docstring, and
+    Settings.auto_withdrawals_enabled for the flags involved), in which
+    case it is auto-processed here via the same
+    _reserve_and_run_disbursement_provider that a Super Admin's manual
+    approve_disbursement uses — there is no separate auto payout path.
+
+    With automation off (the default, and the only behavior before
+    2026-09) this reaches the provider for nothing: every row is left
+    PENDING_ADMIN_APPROVAL for a human, exactly as before."""
     _check_merchant_is_verified(client, merchant_id=merchant_id)
     _check_no_open_high_risk_alerts(client, merchant_id=merchant_id)
     _check_withdrawal_amount_limits(client, merchant_id=merchant_id, amount=amount)
@@ -247,6 +310,10 @@ async def execute_disbursement(
             "pricing_snapshot_json": breakdown.model_dump(mode="json"),
         },
     )
+    disbursement_id = uuid.UUID(disbursement["id"])
+
+    eligible, decision_reason = _evaluate_auto_withdrawal_eligibility(client, merchant_id=merchant_id, amount=amount)
+    disbursement = update_row(client, "disbursements", disbursement_id, {"auto_decision_reason": decision_reason})
 
     # Courtesy notification — the withdrawal request is already saved above;
     # a failed send must never look like a failed withdrawal request. See
@@ -262,6 +329,22 @@ async def execute_disbursement(
             )
     except Exception:  # noqa: BLE001, S110 — best-effort, never blocks the withdrawal request
         pass
+
+    if eligible:
+        # Same code path a Super Admin's manual approval uses — no
+        # separate, less-tested "auto" payout path exists. Any failure
+        # here (including InsufficientBalanceError, which
+        # _reserve_and_run_disbursement_provider already turns into a
+        # terminal FAILED row with the reservation reversed before
+        # re-raising) must never surface as if creating the withdrawal
+        # *request* failed — that already succeeded above. Whatever state
+        # auto-processing left the row in is what this returns.
+        disbursement = update_row(client, "disbursements", disbursement_id, {"auto_approved": True})
+        try:
+            disbursement = await _reserve_and_run_disbursement_provider(client, disbursement)
+        except Exception:
+            logger.exception("auto_withdrawal_processing_failed disbursement_id=%s", disbursement_id)
+            disbursement = get_by_id(client, "disbursements", disbursement_id) or disbursement
 
     return disbursement
 
@@ -499,6 +582,8 @@ def _send_withdrawal_success_email_best_effort(client: Client, disbursement: dic
     withdrawal (send_withdrawal_success_email itself never raises either;
     this is a second layer of defense in depth, matching collections.py/
     onboarding.py's identical pattern for their own best-effort emails)."""
+    if not get_settings().send_merchant_withdrawal_emails:
+        return
     try:
         merchant = get_by_id(client, "merchants", uuid.UUID(disbursement["merchant_id"]))
         if merchant:

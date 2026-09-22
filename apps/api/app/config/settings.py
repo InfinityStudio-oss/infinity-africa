@@ -242,17 +242,72 @@ class Settings(BaseSettings):
     # per-request max alone wouldn't.
     daily_withdrawal_limit_tzs: Decimal = Decimal(10000000)
 
-    # Documents an architectural invariant rather than a real switch: no
-    # code path in this service lets a merchant-submitted withdrawal reach
-    # Selcom without a Super Admin calling approve_disbursement first (see
-    # execute_disbursement's own docstring) — there is no "off" to turn
-    # this to. Kept as an explicit, checkable setting (not just a comment)
-    # so ops/audit tooling can confirm the invariant from config alone;
-    # app/main.py logs a startup warning if this is ever set False, since
-    # no code actually honors a False value here — changing withdrawal
-    # approval policy would mean changing execute_disbursement/
-    # approve_disbursement themselves, not this flag.
+    # Master safety switch for withdrawal automation (see
+    # app/services/disbursements.py::_evaluate_auto_withdrawal_eligibility).
+    # Automatic processing only ever runs when THIS is True *and*
+    # auto_withdrawals_enabled below is also True — both, deliberately, so
+    # a deploy that sets one but not the other (e.g. someone flips
+    # AUTO_WITHDRAWALS_ENABLED=true in Railway without reading this one)
+    # still fails safe to "every withdrawal needs a human." Default True
+    # (the historical, always-manual behavior) — an operator must
+    # deliberately set this to False in Railway to allow automation at
+    # all. This used to document a hard invariant with no real "off"
+    # switch at all; it now has one, on purpose, as part of the withdrawal
+    # automation feature — see auto_withdrawals_enabled's docstring for
+    # the full eligibility rules that still apply even when this is False.
     require_admin_approval_for_all_withdrawals: bool = True
+
+    # Withdrawal automation (business request: reduce approval delays for
+    # low-risk merchants without removing the safety net). Defaults to
+    # False regardless of what a deployment's other withdrawal env vars
+    # say — turning on real-money automation must be a deliberate,
+    # explicit Railway change by someone who has read this whole block,
+    # never a side effect of just deploying this code. Requires BOTH this
+    # and require_admin_approval_for_all_withdrawals=False to take any
+    # effect at all (see that field's docstring) — belt-and-suspenders so
+    # a single misconfigured flag can't silently enable automation.
+    #
+    # When both are set, execute_disbursement() evaluates every new
+    # withdrawal against auto_withdrawal_max_amount_tzs/
+    # auto_withdrawal_daily_limit_tzs (below) plus the same merchant-
+    # verification and open-high-risk-fraud-alert checks every withdrawal
+    # already goes through regardless of automation. Eligible ones proceed
+    # straight to the provider, same code path a Super Admin's manual
+    # approval already uses (_reserve_and_run_disbursement_provider) — no
+    # separate, less-tested "auto" payout path exists. Ineligible ones
+    # land PENDING_ADMIN_APPROVAL exactly as before, with
+    # disbursements.auto_decision_reason recording why automation didn't
+    # apply. Kill switches, in order of what they actually stop:
+    #   ENABLE_WITHDRAWALS=false           -> no new withdrawal requests at all
+    #   AUTO_WITHDRAWALS_ENABLED=false      -> new requests still accepted,
+    #                                          all go back to manual approval
+    auto_withdrawals_enabled: bool = False
+    # Per-transaction ceiling for automatic processing — deliberately far
+    # below max_withdrawal_amount_tzs (the hard per-request cap every
+    # withdrawal, auto or manual, must fit under). A request above this
+    # amount is never rejected outright; it simply falls back to
+    # PENDING_ADMIN_APPROVAL like automation was off, so raising or
+    # lowering this only changes how much needs a human, never what's
+    # allowed to withdraw at all. 500,000 TZS (~10% of the hard per-
+    # request cap) is a conservative starting point, not a business-
+    # derived figure — tune once real auto-withdrawal volume exists.
+    auto_withdrawal_max_amount_tzs: Decimal = Decimal(500000)
+    # Rolling 24-hour cap on the total amount this backend will
+    # auto-process for a single merchant, independent of (and stricter
+    # than) daily_withdrawal_limit_tzs above, which caps everything
+    # requested (auto or manual) for the day. Exceeding this doesn't
+    # reject the request — it just stops auto-processing for the rest of
+    # that window, falling back to manual approval same as any other
+    # ineligible request.
+    auto_withdrawal_daily_limit_tzs: Decimal = Decimal(1000000)
+    # Documents an invariant, not a real switch, same convention as
+    # require_admin_approval_for_all_withdrawals above: every withdrawal
+    # path (auto or manual) already calls
+    # disbursements._check_merchant_is_verified unconditionally — setting
+    # this to False cannot and does not skip it. Kept as an explicit,
+    # checkable setting for ops/audit visibility rather than only a code
+    # comment.
+    auto_withdrawal_require_approved_merchant: bool = True
 
     # Transactional email (Resend) — see app/services/email.py and
     # docs/email-delivery.md. Backend/Railway only, NEVER set
@@ -286,6 +341,39 @@ class Settings(BaseSettings):
     # link — see app/services/payment_links.py::build_public_url). Falls
     # back to public_app_url when blank. Production (Railway): https://infinitypay.me
     app_url_raw: str = Field(default="", validation_alias="APP_URL")
+
+    # Email-volume reduction (business request, 2026-09): each gates one
+    # category of email independently — never RESEND_API_KEY itself, so
+    # turning any of these off never affects the others. All default False
+    # (the currently-desired reduced-volume state), not True — flip
+    # individually back to True in Railway to restore a given category
+    # without code changes. Never gates: email verification, password
+    # reset, staff invite, merchant approval/welcome email, CEO merchant
+    # signup notification, or any security-alert email — those are never
+    # conditional on any of these three flags, regardless of their values.
+    #
+    # Customer-facing payment receipt (app/services/email.py::
+    # send_payment_receipt_email) — the one email sent to the *paying
+    # customer* after a collection succeeds. Does not affect the payment
+    # succeeding, the wallet being credited, or the in-portal receipt
+    # page/download, all of which are unconditional. Also does not affect
+    # send_payment_link_customer_email (the "Pay Now" link sent when a
+    # payment link is *created*, a different email entirely) or
+    # send_merchant_collection_notification_email (goes to the merchant's
+    # own configured notification address, gated separately by that
+    # feature's own collection_notifications_enabled setting).
+    send_customer_receipt_emails: bool = False
+    # CEO-bound "please review this withdrawal request" email
+    # (send_withdrawal_request_notification_email) sent on every new
+    # withdrawal request. Turning this off never affects the request
+    # itself, its audit log, or its visibility in the Super Admin
+    # withdrawals queue — only this one notification email.
+    send_withdrawal_request_emails: bool = False
+    # Merchant-facing "your withdrawal succeeded" email
+    # (send_withdrawal_success_email). The in-app notification
+    # (notify_merchant(...WITHDRAWAL_SUCCESS...)) and the webhook event
+    # are unconditional either way — only this email is gated.
+    send_merchant_withdrawal_emails: bool = False
 
     @property
     def invoice_email_from(self) -> str:

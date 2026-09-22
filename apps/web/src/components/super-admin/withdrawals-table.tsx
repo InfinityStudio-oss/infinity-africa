@@ -363,9 +363,12 @@ export function WithdrawalsTable({ rows, queue }: { rows: AdminWithdrawalRow[]; 
                       <td className={`${tdClass} text-on-surface-variant`}>{formatCurrency(row.total_charges, row.currency)}</td>
                       <td className={`${tdClass} text-on-surface-variant text-xs font-mono`}>{row.provider_reference ?? "—"}</td>
                       <td className={tdClass}>
-                        <StatusBadge {...adminWithdrawalBadge(row.status)} />
+                        <StatusBadge {...adminWithdrawalBadge(row.status, row.auto_approved)} />
                         {row.status === "REJECTED" && row.rejection_reason && (
                           <p className="text-xs text-on-surface-variant mt-1">{row.rejection_reason}</p>
+                        )}
+                        {row.auto_decision_reason && (
+                          <p className="text-[11px] text-on-surface-variant mt-1">{row.auto_decision_reason}</p>
                         )}
                         {row.request_email_status === "failed" && (
                           <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">

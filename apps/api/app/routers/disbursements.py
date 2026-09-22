@@ -10,8 +10,11 @@ app.auth.get_authenticated_caller / authorize_merchant_action.
 Super Admin approval/reject/request-info/refresh-status actions live in
 app/routers/admin_withdrawals.py, not here — this router is purely the
 merchant/API-key-facing create/list/get surface. Every disbursement created
-here always lands PENDING_ADMIN_APPROVAL; Selcom is never called from this
-router (see app/services/disbursements.py::execute_disbursement).
+here is always *created* PENDING_ADMIN_APPROVAL, and stays there for a
+human unless withdrawal automation is enabled and the request passes the
+eligibility check, in which case execute_disbursement auto-processes it
+inline (see app/services/disbursements.py::execute_disbursement and
+Settings.auto_withdrawals_enabled). Automation is off by default.
 """
 
 import uuid

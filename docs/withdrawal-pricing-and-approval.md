@@ -17,10 +17,22 @@
 > Selcom-call sequencing) is still accurate and unaffected by this
 > change — a withdrawal's stored fee fields are just always zero now.
 
+> **Withdrawal automation (2026-09-22, off by default):** the "every
+> withdrawal requires Super Admin approval" invariant described below is
+> now conditional, not absolute — see
+> [`docs/MVP_LAUNCH_CHECKLIST.md`, §21](./MVP_LAUNCH_CHECKLIST.md#21-withdrawal-automation-policy-2026-09-22)
+> for the full eligibility rules. Both `AUTO_WITHDRAWALS_ENABLED` and
+> `REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false` must be set for an
+> eligible withdrawal to skip approval; everything else on this page
+> (fee snapshot, status glossary, the re-check-at-approval-time gates) is
+> unchanged and still accurate for the manual path, which stays the
+> default and the only path when either flag is at its default.
+
 How dynamic, per-merchant withdrawal fees **used to be** calculated, how
 the fee snapshot is frozen onto a withdrawal, and why every withdrawal —
 regardless of amount — sits for Super Admin approval before it ever
-reaches Selcom. For the general endpoint/auth/pagination conventions, see
+reaches Selcom, **unless withdrawal automation is deliberately enabled**
+(see the callout above). For the general endpoint/auth/pagination conventions, see
 [`docs/api.md`](./api.md). For the underlying reservation/ledger mechanics,
 see `apps/api/app/services/ledger.py`.
 

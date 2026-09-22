@@ -21,9 +21,12 @@ returns:
                  sandbox round-trip has verified the request/response shapes
                  in app/services/selcom_business/signing.py and parsing.py.
 
-Only app/services/disbursements.py's Super-Admin-approval path ever calls
-this — never the merchant submission path (see execute_disbursement, which
-never imports this module at all).
+Only app/services/disbursements.py reaches this, and only through
+_reserve_and_run_disbursement_provider — either from a Super Admin's
+manual approval, or from execute_disbursement's auto-processing branch
+when withdrawal automation is enabled (off by default; see
+Settings.auto_withdrawals_enabled). Both go through that one function, so
+there is no second, less-tested payout path into this client.
 """
 
 from functools import lru_cache

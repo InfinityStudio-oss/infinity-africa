@@ -127,8 +127,12 @@ export default function DisbursementsApiPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Submit a withdrawal</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Charges are recalculated and frozen server-side at submission time — never trust a client-side quote. The
-          request always comes back <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PENDING_ADMIN_APPROVAL</code>.
+          Charges are recalculated and frozen server-side at submission time — never trust a client-side quote. Most
+          requests come back <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PENDING_ADMIN_APPROVAL</code>;
+          a low-value request from an eligible, verified merchant may instead be processed automatically and come
+          back already <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PROCESSING</code> — check the
+          response&apos;s <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">status</code> field
+          rather than assuming one or the other.
         </p>
         <div className="space-y-4">
           <CodeBlock language="json — POST /v1/merchant/withdrawals">{`{
@@ -239,13 +243,17 @@ export default function DisbursementsApiPage() {
 
       <section>
         <h2 className="text-xl font-semibold text-on-surface mb-3">Super Admin approval</h2>
-        <Callout title="Every withdrawal is held for manual review">
-          A withdrawal always comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code> with{" "}
+        <Callout title="Most withdrawals are held for manual review">
+          A withdrawal typically comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code> with{" "}
           <code className="font-mono text-xs">requires_approval: true</code> and is <em>not</em> sent to Selcom until
-          an InfinityPay Super Admin approves it in the dashboard. Poll{" "}
-          <code className="font-mono text-xs">GET .../merchant/withdrawals</code> or listen for{" "}
+          an InfinityPay Super Admin approves it in the dashboard. If withdrawal automation is enabled and this
+          request is eligible (a verified merchant, within the configured per-transaction/daily automation limits,
+          no open high-risk fraud alert), it&apos;s processed immediately instead and comes back{" "}
+          <code className="font-mono text-xs">PROCESSING</code> with{" "}
+          <code className="font-mono text-xs">auto_approved: true</code> — never assume which one you&apos;ll get.
+          Poll <code className="font-mono text-xs">GET .../merchant/withdrawals</code> or listen for{" "}
           <code className="font-mono text-xs">disbursement.success</code>/<code className="font-mono text-xs">disbursement.failed</code> to
-          know the outcome.
+          know the outcome either way.
         </Callout>
       </section>
 

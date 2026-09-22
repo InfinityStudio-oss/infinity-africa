@@ -51,6 +51,13 @@ class DisbursementResponse(BaseModel):
     bank_name: str | None = None
     status: str
     requires_approval: bool
+    # True if this withdrawal skipped Super Admin approval via the
+    # automated eligibility check (Settings.auto_withdrawals_enabled) —
+    # approved_by/approved_at stay null in that case, since no human
+    # approved it. auto_decision_reason explains why the eligibility
+    # check did or did not auto-process this one, whichever way it went.
+    auto_approved: bool = False
+    auto_decision_reason: str | None = None
     approved_by: uuid.UUID | None = None
     approved_at: datetime | None = None
     rejected_by: uuid.UUID | None = None

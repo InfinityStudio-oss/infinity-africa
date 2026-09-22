@@ -18,6 +18,10 @@ export interface OnboardingMerchantAccountInput {
   contact_phone: string;
   nida_number: string;
   tin_number?: string | null;
+  legal_business_name?: string | null;
+  business_email?: string | null;
+  business_phone?: string | null;
+  notes?: string | null;
   services_needed: ServiceNeeded[];
   accepted_terms: boolean;
   accepted_privacy: boolean;
@@ -88,6 +92,7 @@ export interface OnboardingSubmission {
   merchant_id: string;
   merchant_code: string | null;
   business_name: string;
+  legal_name: string | null;
   owner_email: string;
   contact_phone: string | null;
   nature_of_business: string;
@@ -95,6 +100,7 @@ export interface OnboardingSubmission {
   physical_address: string;
   region_city: string;
   website_url: string | null;
+  notes: string | null;
   /** Masked — last 4 digits of the NIDA only. The full number is never
    * returned by the API. Null for pre-NIDA submissions. */
   nida_last4: string | null;

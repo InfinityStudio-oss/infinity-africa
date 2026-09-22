@@ -196,6 +196,13 @@ class AdminWithdrawalResponse(BaseModel):
     destination_identifier: str
     status: str
     requires_approval: bool
+    # True if this withdrawal skipped Super Admin approval via the
+    # automated eligibility check — see
+    # app/services/disbursements.py::_evaluate_auto_withdrawal_eligibility.
+    # auto_decision_reason explains why, whichever way the check went
+    # (still populated for a withdrawal that fell back to manual review).
+    auto_approved: bool = False
+    auto_decision_reason: str | None = None
     provider_reference: str | None = None
     # Fee snapshot, so the approval queue can show total charges/reserved/
     # recipient-receives without a second lookup — see
