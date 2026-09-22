@@ -154,8 +154,8 @@ export default function PrivacyPage() {
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">
                   <Icon name="headset_mic" className="text-[18px] text-primary-container" />
-                  <a href="mailto:info@infinitypay.me" className="hover:text-primary-container transition-colors">
-                    info@infinitypay.me
+                  <a href="mailto:support@infinitypay.me" className="hover:text-primary-container transition-colors">
+                    support@infinitypay.me
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-sm text-on-surface">

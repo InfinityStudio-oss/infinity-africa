@@ -45,7 +45,7 @@ export default function ContactPage() {
                 <div className="space-y-5">
                   <ContactCard icon="mail" label="Business Email" value="info@infinitypay.me" href="mailto:info@infinitypay.me" />
                   <ContactCard icon="support_agent" label="Help" value="help@infinitypay.me" href="mailto:help@infinitypay.me" />
-                  <ContactCard icon="headset_mic" label="Support" value="info@infinitypay.me" href="mailto:info@infinitypay.me" />
+                  <ContactCard icon="headset_mic" label="Support" value="support@infinitypay.me" href="mailto:support@infinitypay.me" />
                   <ContactCard icon="call" label="Phone / WhatsApp" value="+255 747 730 270" href="https://wa.me/255747730270" />
                   <ContactCard icon="location_on" label="Location" value="Mbezi Luis - Ubungo - Dar es Salaam" />
                 </div>
