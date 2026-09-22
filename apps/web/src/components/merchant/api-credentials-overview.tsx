@@ -81,7 +81,7 @@ export function ApiCredentialsOverview({ onSelectTab }: { onSelectTab: (tab: Api
         action={
           merchant?.merchant_code ? (
             <p className="text-xs text-on-surface-variant">
-              Merchant ID: <span className="font-mono font-semibold text-on-background">{merchant.merchant_code}</span>
+              ID: <span className="font-mono font-semibold text-on-background">{merchant.merchant_code}</span>
             </p>
           ) : undefined
         }

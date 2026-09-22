@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { establishRecoveryLinkSession as establishRecoveryLinkSessionImpl } from "./recovery-link";
 
 function setUrl(hrefSuffix: string) {
-  window.history.replaceState(null, "", `/merchant/reset-password${hrefSuffix}`);
+  window.history.replaceState(null, "", `/dashboard/reset-password${hrefSuffix}`);
 }
 
 function fakeSupabase(overrides: Partial<Record<"exchangeCodeForSession" | "verifyOtp" | "setSession", ReturnType<typeof vi.fn>>> = {}) {

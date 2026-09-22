@@ -19,7 +19,7 @@ class ForgotPasswordRequest(BaseModel):
     controlled."""
 
     email: str = Field(pattern=_EMAIL_PATTERN)
-    redirect_path: Literal["/merchant/reset-password", "/admin-login/reset-password"] = "/merchant/reset-password"
+    redirect_path: Literal["/dashboard/reset-password", "/admin-login/reset-password"] = "/dashboard/reset-password"
 
 
 class AuthenticatedUser(BaseModel):

@@ -22,7 +22,7 @@ function RoleGuard({ children }: { children: React.ReactNode }) {
         heading="Access restricted"
         body={`Your role (${USER_ROLE_LABELS[role]}) doesn't have access to this page. Switch roles from the topbar or head back to Overview.`}
         actionLabel="Go to Overview"
-        onAction={() => router.push("/merchant/overview")}
+        onAction={() => router.push("/dashboard/overview")}
       />
     );
   }

@@ -83,11 +83,11 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           </select>
         </label>
         <Link
-          href="/merchant/payment-links"
+          href="/dashboard/pay-by-link"
           className="hidden lg:flex items-center gap-2 bg-primary-container text-on-primary px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
         >
           <Icon name="add" className="text-[20px]" />
-          New Payment Link
+          New Pay by Link
         </Link>
         <div className="relative hidden sm:block">
           <button
@@ -154,7 +154,7 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
                   )}
                 </div>
                 <Link
-                  href="/merchant/profile"
+                  href="/dashboard/profile"
                   onClick={() => setMenuOpen(false)}
                   className="block px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-low transition-colors"
                 >

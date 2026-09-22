@@ -15,7 +15,7 @@ const VALID_SERVICES = new Set<string>(Object.values(ServiceNeeded));
 export async function submitOnboardingAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const user = await getCurrentUser();
   if (!user) {
-    redirect("/merchant/login");
+    redirect("/dashboard/login");
   }
 
   const businessName = String(formData.get("businessName") ?? "").trim();
@@ -93,5 +93,5 @@ export async function submitOnboardingAction(_prevState: FormState, formData: Fo
     return { errors: {}, formError, values };
   }
 
-  redirect("/merchant/overview");
+  redirect("/dashboard/overview");
 }

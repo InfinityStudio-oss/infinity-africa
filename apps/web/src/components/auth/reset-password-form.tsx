@@ -14,8 +14,8 @@ const inputClass =
 const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2";
 
 export function ResetPasswordForm({
-  loginPath = "/merchant/login",
-  forgotPasswordPath = "/merchant/forgot-password",
+  loginPath = "/dashboard/login",
+  forgotPasswordPath = "/dashboard/forgot-password",
 }: {
   /** Where to send the user after a successful reset. */
   loginPath?: string;

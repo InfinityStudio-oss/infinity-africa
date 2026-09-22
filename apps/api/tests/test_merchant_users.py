@@ -214,7 +214,7 @@ def test_admin_cannot_deactivate_themself(fake_client):
 
 def test_invite_redirect_url_points_to_the_accept_invite_page_not_login(fake_client, monkeypatch):
     """The whole bug being fixed: a freshly-invited staff member has no
-    password yet, so an invite email that lands on /merchant/login leaves
+    password yet, so an invite email that lands on /dashboard/login leaves
     them stuck. It must point at the password-setup page instead."""
     _merchant_id, admin_id = _admin(fake_client)
     captured: dict = {}
@@ -234,8 +234,8 @@ def test_invite_redirect_url_points_to_the_accept_invite_page_not_login(fake_cli
     assert response.status_code == 201, response.text
     assert captured["params"]["type"] == "invite"
     redirect_to = captured["params"]["options"]["redirect_to"]
-    assert redirect_to.endswith("/merchant/invite/accept")
-    assert "/merchant/login" not in redirect_to
+    assert redirect_to.endswith("/dashboard/invite/accept")
+    assert "/dashboard/login" not in redirect_to
 
 
 def test_invite_uses_resend_branded_email_not_supabase_default(fake_client, monkeypatch):
@@ -301,7 +301,7 @@ def test_resend_invite_uses_recovery_link_not_invite(fake_client, monkeypatch):
     assert response.status_code == 200, response.text
     assert captured["params"]["type"] == "recovery"
     assert captured["params"]["email"] == "staff@example.com"
-    assert captured["params"]["options"]["redirect_to"].endswith("/merchant/invite/accept")
+    assert captured["params"]["options"]["redirect_to"].endswith("/dashboard/invite/accept")
 
 
 def test_resend_invite_sends_another_branded_email(fake_client, monkeypatch):

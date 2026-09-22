@@ -1,19 +1,19 @@
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { requireVerifiedMerchant } from "@/lib/onboarding/guard";
-import { WithdrawalsView } from "@/components/merchant/withdrawals-view";
+import { PayByLinkView } from "@/components/merchant/pay-by-link-view";
 import { PortalShell } from "@/components/portal/portal-shell";
 
 export const metadata = {
-  title: "Withdrawals | InfinityPay",
+  title: "Pay by Link | InfinityPay",
 };
 
-export default async function WithdrawalsPage() {
-  await requireCurrentUser("/merchant/login");
+export default async function PayByLinkPage() {
+  await requireCurrentUser("/dashboard/login");
   await requireVerifiedMerchant();
 
   return (
     <PortalShell>
-      <WithdrawalsView />
+      <PayByLinkView />
     </PortalShell>
   );
 }

@@ -19,7 +19,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 function setValidRecoveryLinkUrl() {
-  window.history.replaceState(null, "", "/merchant/reset-password#access_token=at&refresh_token=rt&type=recovery");
+  window.history.replaceState(null, "", "/dashboard/reset-password#access_token=at&refresh_token=rt&type=recovery");
 }
 
 describe("ResetPasswordForm", () => {
@@ -80,7 +80,7 @@ describe("ResetPasswordForm", () => {
   });
 
   it("shows the invalid/expired message when the link carries no usable token", async () => {
-    window.history.replaceState(null, "", "/merchant/reset-password");
+    window.history.replaceState(null, "", "/dashboard/reset-password");
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
@@ -95,7 +95,7 @@ describe("ResetPasswordForm", () => {
     window.history.replaceState(
       null,
       "",
-      "/merchant/reset-password#error=access_denied&error_description=Email+link+is+invalid+or+has+expired",
+      "/dashboard/reset-password#error=access_denied&error_description=Email+link+is+invalid+or+has+expired",
     );
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
@@ -114,7 +114,7 @@ describe("ResetPasswordForm", () => {
   });
 
   it("handles a ?code= link via exchangeCodeForSession", async () => {
-    window.history.replaceState(null, "", "/merchant/reset-password?code=abc123");
+    window.history.replaceState(null, "", "/dashboard/reset-password?code=abc123");
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
@@ -124,7 +124,7 @@ describe("ResetPasswordForm", () => {
   });
 
   it("handles a ?token_hash=&type=recovery link via verifyOtp", async () => {
-    window.history.replaceState(null, "", "/merchant/reset-password?token_hash=th_abc&type=recovery");
+    window.history.replaceState(null, "", "/dashboard/reset-password?token_hash=th_abc&type=recovery");
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 

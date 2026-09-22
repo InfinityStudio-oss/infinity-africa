@@ -258,12 +258,12 @@ describe("loginAction", () => {
       error: null,
     });
     maybeSingle.mockResolvedValue({ data: null });
-    getOnboardingStatus.mockResolvedValue({ next_path: "/merchant/overview" });
+    getOnboardingStatus.mockResolvedValue({ next_path: "/dashboard/overview" });
     const { loginAction } = await importActions();
 
     await expect(
       loginAction(null, form({ email: "amani@shop.co.tz", password: "Str0ng!pass" })),
-    ).rejects.toMatchObject({ location: "/merchant/overview" });
+    ).rejects.toMatchObject({ location: "/dashboard/overview" });
   });
 });
 

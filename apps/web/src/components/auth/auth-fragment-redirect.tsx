@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 /**
  * Supabase's admin-generated recovery/invite links carry a `redirect_to`
- * pointing at the real destination (e.g. /merchant/reset-password), but
+ * pointing at the real destination (e.g. /dashboard/reset-password), but
  * Supabase silently falls back to the bare Site URL (this homepage)
  * whenever it decides that redirect_to isn't valid — a long-standing,
  * documented Supabase quirk (supabase/auth#1738 and others), not
@@ -18,8 +18,8 @@ import { useRouter } from "next/navigation";
  * Supabase's fallback ever targets.
  */
 const TYPE_TO_PATH: Record<string, string> = {
-  recovery: "/merchant/reset-password",
-  invite: "/merchant/invite/accept",
+  recovery: "/dashboard/reset-password",
+  invite: "/dashboard/invite/accept",
 };
 
 export function AuthFragmentRedirect() {

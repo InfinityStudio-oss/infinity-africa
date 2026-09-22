@@ -66,7 +66,7 @@ describe("Merchant portal WalletPage", () => {
     expect(await screen.findByText("No wallet activity yet.")).toBeInTheDocument();
   });
 
-  it("shows the merchant's Merchant ID in the page header", async () => {
+  it("shows the merchant's ID in the page header", async () => {
     const { default: WalletPage } = await import("./page");
     render(<WalletPage />);
 

@@ -45,7 +45,7 @@ export function Header() {
         </nav>
         <div className="flex items-center gap-3">
           <Link
-            href="/merchant/login"
+            href="/dashboard/login"
             className="hidden lg:inline-flex text-on-surface-variant font-medium text-sm hover:text-primary transition-colors duration-200"
           >
             Sign in
@@ -81,7 +81,7 @@ export function Header() {
             );
           })}
           <Link
-            href="/merchant/login"
+            href="/dashboard/login"
             onClick={() => setOpen(false)}
             className="py-2.5 text-on-surface-variant font-medium text-sm"
           >

@@ -93,7 +93,7 @@ def test_forgot_password_uses_the_merchant_redirect_path_by_default(fake_client,
     response = client.post("/v1/auth/forgot-password", json={"email": "amina@example.com"})
 
     assert response.status_code == 200
-    assert "/merchant/reset-password" in fake_resend.calls[0]["html"]
+    assert "/dashboard/reset-password" in fake_resend.calls[0]["html"]
 
 
 def test_forgot_password_accepts_the_admin_redirect_path(fake_client, fake_resend):
@@ -170,4 +170,4 @@ def test_forgot_password_redirect_to_matches_the_production_reset_page(fake_clie
     client.post("/v1/auth/forgot-password", json={"email": "amina@example.com"})
 
     html = fake_resend.calls[0]["html"]
-    assert f"redirect_to={settings.app_url}/merchant/reset-password" in html
+    assert f"redirect_to={settings.app_url}/dashboard/reset-password" in html

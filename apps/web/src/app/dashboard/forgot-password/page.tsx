@@ -17,7 +17,7 @@ export default function MerchantForgotPasswordPage() {
       <ForgotPasswordForm />
       <p className="mt-6 text-center text-sm text-on-surface-variant">
         Remembered it after all?{" "}
-        <Link href="/merchant/login" className="font-semibold text-primary-container hover:underline">
+        <Link href="/dashboard/login" className="font-semibold text-primary-container hover:underline">
           Back to login
         </Link>
       </p>

@@ -11,12 +11,12 @@ const labelClass = "block text-xs font-semibold text-on-surface-variant uppercas
 const GENERIC_SENT_MESSAGE = "If an account exists, we've sent password reset instructions.";
 
 export function ForgotPasswordForm({
-  resetPasswordPath = "/merchant/reset-password",
+  resetPasswordPath = "/dashboard/reset-password",
 }: {
   /** Where the emailed reset link should send the user back to — sent to
    * the backend as-is; it only accepts a closed set of known paths (see
    * app/schemas/auth.py::ForgotPasswordRequest). */
-  resetPasswordPath?: "/merchant/reset-password" | "/admin-login/reset-password";
+  resetPasswordPath?: "/dashboard/reset-password" | "/admin-login/reset-password";
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "sent">("idle");

@@ -1,4 +1,4 @@
-// Metadata-only layout — every page under app/merchant/* (login, register,
+// Metadata-only layout — every page under app/dashboard/* (login, register,
 // forgot/reset-password, invite/accept, and every authenticated portal page)
 // already enforces its own auth check inline (requireCurrentUser/requireUser
 // + redirect) and renders its own shell, so this adds no UI, only the

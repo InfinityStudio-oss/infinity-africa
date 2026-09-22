@@ -22,7 +22,7 @@ const KYC_LABEL: Record<string, string> = {
 };
 
 /** Real-data merchant dashboard, shown once GET /v1/merchant/overview
- * succeeds — see app/merchant/overview/page.tsx for the fallback to
+ * succeeds — see app/dashboard/overview/page.tsx for the fallback to
  * OverviewWelcome when it doesn't (no real merchant row for this user
  * yet). */
 export function OverviewDashboard({ overview }: { overview: MerchantOverview }) {
@@ -39,7 +39,7 @@ export function OverviewDashboard({ overview }: { overview: MerchantOverview }) 
             <StatusBadge label={KYC_LABEL[kycStatus] ?? kycStatus} tone={KYC_TONE[kycStatus] ?? "neutral"} dot />
             {overview.merchant.merchant_code && (
               <p className="text-xs text-on-surface-variant">
-                Merchant ID: <span className="font-mono font-semibold text-on-background">{overview.merchant.merchant_code}</span>
+                ID: <span className="font-mono font-semibold text-on-background">{overview.merchant.merchant_code}</span>
               </p>
             )}
           </div>
@@ -60,19 +60,19 @@ export function OverviewDashboard({ overview }: { overview: MerchantOverview }) 
         <h3 className="text-lg font-semibold text-on-surface mb-4">Quick Actions</h3>
         <div className="grid sm:grid-cols-3 gap-3">
           <Link
-            href="/merchant/payment-links"
+            href="/dashboard/pay-by-link"
             className="flex items-center gap-2 rounded-lg border border-outline-variant px-4 py-3 text-sm text-on-surface hover:bg-surface-container transition-colors"
           >
-            Create Payment Link
+            Create Pay by Link
           </Link>
           <Link
-            href="/merchant/invoices"
+            href="/dashboard/invoices"
             className="flex items-center gap-2 rounded-lg border border-outline-variant px-4 py-3 text-sm text-on-surface hover:bg-surface-container transition-colors"
           >
             Create Invoice
           </Link>
           <Link
-            href="/merchant/withdrawals"
+            href="/dashboard/withdrawals"
             className="flex items-center gap-2 rounded-lg border border-outline-variant px-4 py-3 text-sm text-on-surface hover:bg-surface-container transition-colors"
           >
             Request Withdrawal

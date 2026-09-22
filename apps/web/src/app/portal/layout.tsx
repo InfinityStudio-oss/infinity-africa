@@ -17,7 +17,7 @@ export default async function PortalLayout({
   children: React.ReactNode;
 }) {
   if (!process.env.__PORTAL_UI_PREVIEW__) {
-    await requireUser("/merchant/login");
+    await requireUser("/dashboard/login");
     const onboarding = await getOnboardingStatus();
     if (!onboarding || onboarding.next_path === "/onboarding") redirect("/onboarding");
 

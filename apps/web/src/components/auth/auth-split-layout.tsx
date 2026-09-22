@@ -4,7 +4,7 @@ import { Icon } from "@/components/portal/icon";
 
 /**
  * Shared two-panel layout for the standalone auth pages (/login,
- * /merchant/login, /create-account): a brand panel on the left (hidden on
+ * /dashboard/login, /create-account): a brand panel on the left (hidden on
  * small screens, where the card alone carries the page) and the page's own
  * card on the right.
  */

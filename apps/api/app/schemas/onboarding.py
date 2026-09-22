@@ -89,7 +89,7 @@ class OnboardingSignupCreate(OnboardingMerchantAccountCreate):
 class OnboardingMerchantAccountResponse(BaseModel):
     merchant: MerchantResponse
     account_status: AccountStatus
-    next_path: str = "/merchant/overview"
+    next_path: str = "/dashboard/overview"
 
 
 class OnboardingSignupResponse(BaseModel):

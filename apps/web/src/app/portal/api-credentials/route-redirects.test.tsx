@@ -7,9 +7,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("old API-related routes redirect into the unified API Credentials page", () => {
-  it("/merchant/api-keys -> /portal/api-credentials?tab=keys", async () => {
+  it("/dashboard/api-keys -> /portal/api-credentials?tab=keys", async () => {
     redirect.mockClear();
-    const { default: MerchantApiKeysRedirect } = await import("@/app/merchant/api-keys/page");
+    const { default: MerchantApiKeysRedirect } = await import("@/app/dashboard/api-keys/page");
     MerchantApiKeysRedirect();
     expect(redirect).toHaveBeenCalledWith("/portal/api-credentials?tab=keys");
   });
@@ -21,9 +21,9 @@ describe("old API-related routes redirect into the unified API Credentials page"
     expect(redirect).toHaveBeenCalledWith("/portal/api-credentials?tab=keys");
   });
 
-  it("/merchant/developer-docs -> /portal/api-credentials?tab=docs", async () => {
+  it("/dashboard/developer-docs -> /portal/api-credentials?tab=docs", async () => {
     redirect.mockClear();
-    const { default: MerchantDeveloperDocsRedirect } = await import("@/app/merchant/developer-docs/page");
+    const { default: MerchantDeveloperDocsRedirect } = await import("@/app/dashboard/developer-docs/page");
     MerchantDeveloperDocsRedirect();
     expect(redirect).toHaveBeenCalledWith("/portal/api-credentials?tab=docs");
   });

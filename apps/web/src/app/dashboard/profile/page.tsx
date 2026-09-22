@@ -2,15 +2,16 @@ import { redirect } from "next/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
-import { RiskMonitoringView } from "@/components/merchant/risk-monitoring-view";
+import { PageHeader } from "@/components/portal/page-header";
 import { PortalShell } from "@/components/portal/portal-shell";
+import { ProfileView } from "@/components/merchant/profile-view";
 
 export const metadata = {
-  title: "Risk Monitoring | InfinityPay",
+  title: "Profile | InfinityPay",
 };
 
-export default async function RiskMonitoringPage() {
-  await requireCurrentUser("/merchant/login");
+export default async function MerchantProfilePage() {
+  const user = await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
   if (!onboarding || onboarding.next_path === "/onboarding") {
@@ -19,7 +20,10 @@ export default async function RiskMonitoringPage() {
 
   return (
     <PortalShell>
-      <RiskMonitoringView />
+      <div className="space-y-8">
+        <PageHeader title="Profile" description="Your account and business details." />
+        <ProfileView email={user.email} />
+      </div>
     </PortalShell>
   );
 }

@@ -15,7 +15,7 @@ import type { OnboardingStatus } from "./types";
  *
  *  - No submission yet  -> /onboarding (finish document/business verification)
  *  - Submitted, still under review / rejected / info-requested
- *                       -> /merchant/overview (shows the pending banner and
+ *                       -> /dashboard/overview (shows the pending banner and
  *                          the current review status; nothing financial)
  *  - Approved           -> allowed through
  *
@@ -32,7 +32,7 @@ export async function requireVerifiedMerchant(): Promise<OnboardingStatus> {
   }
 
   if (onboarding.account_status !== AccountStatus.VERIFIED) {
-    redirect("/merchant/overview");
+    redirect("/dashboard/overview");
   }
 
   return onboarding;

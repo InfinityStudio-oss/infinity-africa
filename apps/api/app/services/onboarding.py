@@ -329,7 +329,7 @@ async def signup_merchant(
                     "type": "signup",
                     "email": payload.email,
                     "password": payload.password,
-                    "options": {"redirect_to": f"{settings.app_url}/auth/callback?next=/merchant/overview"},
+                    "options": {"redirect_to": f"{settings.app_url}/auth/callback?next=/dashboard/overview"},
                 }
             )
             action_link = link.properties.action_link
@@ -371,7 +371,7 @@ def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
         "onboarding_completed": completed,
         "merchant_id": merchant_id,
         "account_status": review_status,
-        "next_path": "/merchant/overview" if completed else "/onboarding",
+        "next_path": "/dashboard/overview" if completed else "/onboarding",
     }
 
 
@@ -616,7 +616,7 @@ def approve_onboarding_submission(
         if not merchant.get("contact_email"):
             welcome_email_warning = "Merchant approved, but welcome email was not sent because merchant email is missing."
         send_merchant_welcome_email(
-            client, merchant=merchant, portal_url=f"{settings.public_app_url}/merchant/login"
+            client, merchant=merchant, portal_url=f"{settings.public_app_url}/dashboard/login"
         )
     except Exception:  # noqa: BLE001, S110
         pass

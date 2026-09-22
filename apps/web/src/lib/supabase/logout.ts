@@ -27,7 +27,7 @@ export async function logout() {
  * signed-out merchant lands somewhere they can sign back in as a merchant. */
 export async function merchantLogout() {
   await signOutEverywhere();
-  redirect("/merchant/login");
+  redirect("/dashboard/login");
 }
 
 /** Same sign-out, but back to the Super Admin console's own login page

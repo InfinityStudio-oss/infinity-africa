@@ -42,7 +42,7 @@ describe("Topbar", () => {
     expect(within(menu).getByRole("button", { name: "Log out" })).toBeInTheDocument();
     expect(within(menu).getByRole("link", { name: /Profile & Settings/i })).toHaveAttribute(
       "href",
-      "/merchant/profile",
+      "/dashboard/profile",
     );
   });
 
@@ -57,7 +57,7 @@ describe("Topbar", () => {
     const { Topbar } = await import("./topbar");
     render(<Topbar onOpenSidebar={() => {}} />);
 
-    expect(screen.getByRole("link", { name: /New Payment Link/i })).toHaveAttribute("href", "/merchant/payment-links");
+    expect(screen.getByRole("link", { name: /New Pay by Link/i })).toHaveAttribute("href", "/dashboard/pay-by-link");
   });
 
   it("opens a help popover showing the real support email, instead of a silent mailto link", async () => {

@@ -84,7 +84,7 @@ describe("ApiCredentialsOverview", () => {
     expect(onSelectTab).toHaveBeenCalledWith("webhooks");
   });
 
-  it("shows the merchant's Merchant ID in the page header", async () => {
+  it("shows the merchant's ID in the page header", async () => {
     getMyMerchant.mockResolvedValue({
       id: "merchant-1",
       merchant_code: "27048391",

@@ -635,7 +635,7 @@ export async function resendMerchantUserInvite(userRowId: string): Promise<Merch
 }
 
 /** Called once by a newly-invited staff member right after they set their
- * password on /merchant/invite/accept — flips their own merchant_users row
+ * password on /dashboard/invite/accept — flips their own merchant_users row
  * from 'invited' to 'active'. Not admin-only, unlike everything else in
  * this section: the caller isn't a team member yet, they're the person
  * accepting the invite. merchant_id is resolved backend-side from the

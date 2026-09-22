@@ -171,7 +171,7 @@ export default function WalletPage() {
         action={
           merchantCode ? (
             <p className="text-xs text-on-surface-variant">
-              Merchant ID: <span className="font-mono font-semibold text-on-background">{merchantCode}</span>
+              ID: <span className="font-mono font-semibold text-on-background">{merchantCode}</span>
             </p>
           ) : undefined
         }

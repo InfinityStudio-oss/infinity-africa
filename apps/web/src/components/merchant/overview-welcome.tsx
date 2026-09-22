@@ -7,8 +7,8 @@ import { StatusBadge } from "@/components/portal/status-badge";
 import { ACCOUNT_STATUS_LABELS, AccountStatus } from "@infinity/shared";
 
 const CHECKLIST_ITEMS: { label: string; href?: string; icon: string }[] = [
-  { label: "Create your first payment link", href: "/merchant/payment-links", icon: "link" },
-  { label: "Create your first invoice", href: "/merchant/invoices", icon: "description" },
+  { label: "Create your first Pay by Link", href: "/dashboard/pay-by-link", icon: "storefront" },
+  { label: "Create your first invoice", href: "/dashboard/invoices", icon: "description" },
   { label: "Generate an API key", href: "/portal/api-credentials?tab=keys", icon: "vpn_key" },
   { label: "Read the API docs", href: "/portal/api-credentials?tab=docs", icon: "menu_book" },
   { label: "Wait for account verification", icon: "verified_user" },

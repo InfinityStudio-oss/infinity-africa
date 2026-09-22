@@ -141,7 +141,7 @@ export default function ApiDocsPage() {
           primaryLabel="Create Merchant Account to Generate API Keys"
           primaryHref="/create-account"
           secondaryLabel="Already have an account? Log in"
-          secondaryHref="/merchant/login"
+          secondaryHref="/dashboard/login"
         />
       </main>
       <Footer />

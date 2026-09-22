@@ -16,10 +16,10 @@ import { createClient } from "@/lib/supabase/server";
  *   - `?token_hash=...&type=signup`   (verify the OTP directly)
  *
  * On success we establish the session cookie and forward the merchant on
- * (`?next=`, default `/merchant/overview` — the pending-review page). On
+ * (`?next=`, default `/dashboard/overview` — the pending-review page). On
  * any failure — an expired or already-consumed link, or a link opened in
  * a browser that never held the PKCE verifier — we send them to
- * /merchant/login with a plain-language notice, never a stack trace and
+ * /dashboard/login with a plain-language notice, never a stack trace and
  * never a bare 400.
  *
  * A hash-fragment callback (`#access_token=...`) can't be handled here
@@ -30,7 +30,7 @@ import { createClient } from "@/lib/supabase/server";
 const SAFE_NEXT = /^\/[a-zA-Z0-9/_-]*$/;
 
 function loginRedirect(origin: string, notice: string) {
-  const url = new URL("/merchant/login", origin);
+  const url = new URL("/dashboard/login", origin);
   url.searchParams.set("notice", notice);
   return NextResponse.redirect(url);
 }

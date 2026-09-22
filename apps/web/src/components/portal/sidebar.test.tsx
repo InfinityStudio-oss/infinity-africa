@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/merchant/overview",
+  usePathname: () => "/dashboard/overview",
 }));
 
 describe("Sidebar", () => {
@@ -14,11 +14,11 @@ describe("Sidebar", () => {
     expect(container.textContent).not.toMatch(/Upgrade Plan/i);
   });
 
-  it("shows a Team nav item linking to /merchant/users", async () => {
+  it("shows a Team nav item linking to /dashboard/users", async () => {
     const { Sidebar } = await import("./sidebar");
     render(<Sidebar open onClose={() => {}} />);
 
-    expect(screen.getByRole("link", { name: /Team/i })).toHaveAttribute("href", "/merchant/users");
+    expect(screen.getByRole("link", { name: /Team/i })).toHaveAttribute("href", "/dashboard/users");
   });
 
   it("shows a single API Credentials nav item linking to /portal/api-credentials", async () => {

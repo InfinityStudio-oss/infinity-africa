@@ -4,14 +4,15 @@ import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
 import { PageHeader } from "@/components/portal/page-header";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { ProfileView } from "@/components/merchant/profile-view";
+import { UpdatePasswordForm } from "@/components/auth/update-password-form";
+import { NotificationSettingsCard } from "@/components/merchant/notification-settings-card";
 
 export const metadata = {
-  title: "Profile | InfinityPay",
+  title: "Settings | InfinityPay",
 };
 
-export default async function MerchantProfilePage() {
-  const user = await requireCurrentUser("/merchant/login");
+export default async function MerchantSettingsPage() {
+  const user = await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
   if (!onboarding || onboarding.next_path === "/onboarding") {
@@ -21,8 +22,9 @@ export default async function MerchantProfilePage() {
   return (
     <PortalShell>
       <div className="space-y-8">
-        <PageHeader title="Profile" description="Your account and business details." />
-        <ProfileView email={user.email} />
+        <PageHeader title="Settings" description="Manage your account security and notifications." />
+        <NotificationSettingsCard />
+        <UpdatePasswordForm email={user.email} source={user.source} />
       </div>
     </PortalShell>
   );

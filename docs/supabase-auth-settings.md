@@ -33,11 +33,30 @@ homepage instead of the intended form):
 ```
 https://infinitypay.me/auth/callback
 https://infinitypay.me/onboarding
-https://infinitypay.me/merchant/login
-https://infinitypay.me/merchant/reset-password
+https://infinitypay.me/dashboard/login
+https://infinitypay.me/dashboard/reset-password
 https://infinitypay.me/admin-login/reset-password
-https://infinitypay.me/merchant/invite/accept
+https://infinitypay.me/dashboard/invite/accept
 ```
+
+> **The merchant dashboard moved from `/merchant/*` to `/dashboard/*`.**
+> The backend now sends the `/dashboard/...` URLs above as `redirect_to`,
+> so they **must** be added to the allow-list or password-reset and staff
+> invite links will silently land on the homepage instead of the form.
+>
+> Keep the old entries in place as well, at least until every previously
+> sent reset/invite email has expired:
+>
+> ```
+> https://infinitypay.me/merchant/login
+> https://infinitypay.me/merchant/reset-password
+> https://infinitypay.me/merchant/invite/accept
+> ```
+>
+> Those paths still resolve — `next.config.ts` permanently redirects
+> `/merchant/:path*` to `/dashboard/:path*` — but Supabase validates the
+> `redirect_to` value *before* any redirect happens, so an allow-list miss
+> fails regardless.
 
 If the site is also served on `www.`, add the `www.` variant of each
 (for both domains). For Vercel preview deployments, add
@@ -71,7 +90,7 @@ These are already documented in `apps/web/.env.example` /
    `app/auth/callback/route.ts` establishes the session and redirects to
    `/onboarding`.
    - If the link is opened on a **different device** (no PKCE verifier) or
-     a second time, the callback redirects to `/merchant/login` with
+     a second time, the callback redirects to `/dashboard/login` with
      *"Your email is verified. Sign in to continue…"* — the account is
      fine, they just sign in.
 4. Merchant completes `/onboarding` (business details only — no KYC
@@ -96,13 +115,13 @@ These are already documented in `apps/web/.env.example` /
       or password"*).
 - [ ] Trying to log in before verifying shows the verify-email message.
 - [ ] Click the email link → lands on `/onboarding` signed in.
-- [ ] (Mobile) open the same link on a phone → lands on `/merchant/login`
+- [ ] (Mobile) open the same link on a phone → lands on `/dashboard/login`
       with the *"email is verified, sign in"* notice; signing in works.
 - [ ] Submit onboarding → `ceo@infinitypay.me` receives the signup
       notification; merchant status is *Pending Verification*.
-- [ ] Before approval: `/merchant/payment-links`, `/merchant/pay-by-link`,
-      `/merchant/withdrawals`, `/merchant/invoices` all redirect to
-      `/merchant/overview` (pending banner). Direct API calls to create a
+- [ ] Before approval: `/dashboard/pay-by-link`,
+      `/dashboard/withdrawals`, `/dashboard/invoices` all redirect to
+      `/dashboard/overview` (pending banner). Direct API calls to create a
       payment link / invoice / collection return `403 merchant_not_approved`;
       a withdrawal returns `409 withdrawal_restricted`.
 - [ ] Super Admin approves → merchant receives the welcome email (CEO does

@@ -14,7 +14,7 @@ export const metadata = {
 };
 
 export default async function MerchantOverviewPage() {
-  await requireCurrentUser("/merchant/login");
+  await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
   if (!onboarding || onboarding.next_path === "/onboarding") {

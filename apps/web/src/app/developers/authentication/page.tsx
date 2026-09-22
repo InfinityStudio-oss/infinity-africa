@@ -46,7 +46,7 @@ export default function AuthenticationPage() {
         <h2 className="text-xl font-semibold text-on-surface mb-3">Generating a key</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           Full API credentials are only ever generated inside the authenticated Merchant Portal — sign in at{" "}
-          <a href="/merchant/login" className="text-primary font-semibold hover:underline">
+          <a href="/dashboard/login" className="text-primary font-semibold hover:underline">
             Merchant Portal
           </a>
           , go to <strong>API Keys</strong>, choose <strong>Sandbox</strong> or <strong>Live</strong>, name the key,

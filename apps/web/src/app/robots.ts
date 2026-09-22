@@ -11,6 +11,11 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       disallow: [
+        "/dashboard",
+        "/dashboard/",
+        // Still listed after the /merchant -> /dashboard rename: the old
+        // paths continue to resolve via the permanent redirects in
+        // next.config.ts, so a crawler can still reach them.
         "/merchant",
         "/merchant/",
         "/portal",

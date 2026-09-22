@@ -2,15 +2,15 @@ import { redirect } from "next/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
-import { DisputesView } from "@/components/merchant/disputes-view";
 import { PortalShell } from "@/components/portal/portal-shell";
+import { UsersView } from "@/components/merchant/users-view";
 
 export const metadata = {
-  title: "Disputes | InfinityPay",
+  title: "Team | InfinityPay",
 };
 
-export default async function MerchantDisputesPage() {
-  await requireCurrentUser("/merchant/login");
+export default async function MerchantUsersPage() {
+  await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
   if (!onboarding || onboarding.next_path === "/onboarding") {
@@ -19,7 +19,7 @@ export default async function MerchantDisputesPage() {
 
   return (
     <PortalShell>
-      <DisputesView />
+      <UsersView />
     </PortalShell>
   );
 }

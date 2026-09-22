@@ -184,7 +184,7 @@ def test_onboarding_status_pending_verification(fake_client):
     assert body["has_account"] is True
     assert body["onboarding_completed"] is True
     assert body["account_status"] == "PENDING_VERIFICATION"
-    assert body["next_path"] == "/merchant/overview"
+    assert body["next_path"] == "/dashboard/overview"
 
 
 def test_onboarding_status_rejected_sends_back_to_onboarding(fake_client):

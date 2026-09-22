@@ -25,7 +25,7 @@ vi.mock("@/lib/portal/api", () => ({
 const INVALID_INVITE_MESSAGE = "Invitation expired or invalid. Please ask your merchant admin to send a new invitation.";
 
 function setValidInviteLinkUrl() {
-  window.history.replaceState(null, "", "/merchant/invite/accept#access_token=at&refresh_token=rt&type=invite");
+  window.history.replaceState(null, "", "/dashboard/invite/accept#access_token=at&refresh_token=rt&type=invite");
 }
 
 async function renderReady() {
@@ -68,7 +68,7 @@ describe("AcceptInviteForm", () => {
   it("redirects to the merchant portal (not login) after successfully accepting", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { AcceptInviteForm } = await import("./accept-invite-form");
-    render(<AcceptInviteForm portalPath="/merchant/overview" />);
+    render(<AcceptInviteForm portalPath="/dashboard/overview" />);
     await vi.waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("New Password"), { target: { value: "NewPass456!" } });
@@ -78,7 +78,7 @@ describe("AcceptInviteForm", () => {
     await vi.waitFor(() => expect(acceptMyInvite).toHaveBeenCalledTimes(1));
     await vi.advanceTimersByTimeAsync(1500);
 
-    expect(push).toHaveBeenCalledWith("/merchant/overview");
+    expect(push).toHaveBeenCalledWith("/dashboard/overview");
     vi.useRealTimers();
   });
 
@@ -104,7 +104,7 @@ describe("AcceptInviteForm", () => {
     window.history.replaceState(
       null,
       "",
-      "/merchant/invite/accept#error=access_denied&error_description=Email+link+is+invalid+or+has+expired",
+      "/dashboard/invite/accept#error=access_denied&error_description=Email+link+is+invalid+or+has+expired",
     );
     const { AcceptInviteForm } = await import("./accept-invite-form");
     render(<AcceptInviteForm />);
@@ -116,7 +116,7 @@ describe("AcceptInviteForm", () => {
   });
 
   it("shows the fallback invalid-invite message when the link carries no usable token at all", async () => {
-    window.history.replaceState(null, "", "/merchant/invite/accept");
+    window.history.replaceState(null, "", "/dashboard/invite/accept");
     const { AcceptInviteForm } = await import("./accept-invite-form");
     render(<AcceptInviteForm />);
 
@@ -134,14 +134,14 @@ describe("AcceptInviteForm", () => {
   });
 
   it("accepts a resend-invite link, which reuses the recovery OTP type", async () => {
-    window.history.replaceState(null, "", "/merchant/invite/accept#access_token=at&refresh_token=rt&type=recovery");
+    window.history.replaceState(null, "", "/dashboard/invite/accept#access_token=at&refresh_token=rt&type=recovery");
     await renderReady();
 
     expect(setSession).toHaveBeenCalledWith({ access_token: "at", refresh_token: "rt" });
   });
 
   it("handles a ?token_hash=&type=invite link via verifyOtp", async () => {
-    window.history.replaceState(null, "", "/merchant/invite/accept?token_hash=th_abc&type=invite");
+    window.history.replaceState(null, "", "/dashboard/invite/accept?token_hash=th_abc&type=invite");
     await renderReady();
 
     expect(verifyOtp).toHaveBeenCalledWith({ type: "invite", token_hash: "th_abc" });

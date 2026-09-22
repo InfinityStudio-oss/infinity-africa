@@ -53,7 +53,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   return null;
 }
 
-export async function requireCurrentUser(redirectTo = "/merchant/login"): Promise<CurrentUser> {
+export async function requireCurrentUser(redirectTo = "/dashboard/login"): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) {
     redirect(redirectTo);

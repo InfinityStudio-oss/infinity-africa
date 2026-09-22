@@ -11,11 +11,11 @@ export const metadata = {
 };
 
 export default async function OnboardingPage() {
-  const user = await requireCurrentUser("/merchant/login");
+  const user = await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
-  if (onboarding?.next_path === "/merchant/overview") {
-    redirect("/merchant/overview");
+  if (onboarding?.next_path === "/dashboard/overview") {
+    redirect("/dashboard/overview");
   }
 
   return (

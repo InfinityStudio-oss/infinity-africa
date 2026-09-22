@@ -19,7 +19,7 @@ describe("AuthFragmentRedirect", () => {
     render(<AuthFragmentRedirect />);
 
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/merchant/reset-password#access_token=at&refresh_token=rt&type=recovery"),
+      expect(replace).toHaveBeenCalledWith("/dashboard/reset-password#access_token=at&refresh_token=rt&type=recovery"),
     );
   });
 
@@ -29,7 +29,7 @@ describe("AuthFragmentRedirect", () => {
     render(<AuthFragmentRedirect />);
 
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/merchant/invite/accept#access_token=at&refresh_token=rt&type=invite"),
+      expect(replace).toHaveBeenCalledWith("/dashboard/invite/accept#access_token=at&refresh_token=rt&type=invite"),
     );
   });
 
@@ -38,7 +38,7 @@ describe("AuthFragmentRedirect", () => {
     const { AuthFragmentRedirect } = await import("./auth-fragment-redirect");
     render(<AuthFragmentRedirect />);
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/merchant/reset-password?token_hash=th_abc&type=recovery"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard/reset-password?token_hash=th_abc&type=recovery"));
   });
 
   it("does nothing on a plain homepage visit with no auth params", async () => {

@@ -95,7 +95,7 @@ function SignupComplete({ email, notice, canResend }: { email: string; notice?: 
 
       <p className="text-center text-sm text-on-surface-variant">
         {canResend ? "Already verified? " : ""}
-        <Link href="/merchant/login" className="font-semibold text-primary-container hover:underline">
+        <Link href="/dashboard/login" className="font-semibold text-primary-container hover:underline">
           {canResend ? "Sign in" : "Back to login"}
         </Link>
       </p>
@@ -252,7 +252,7 @@ export function CreateAccountForm() {
 
       <p className="text-center text-sm text-on-surface-variant">
         Already have an account?{" "}
-        <Link href="/merchant/login" className="font-semibold text-primary-container hover:underline">
+        <Link href="/dashboard/login" className="font-semibold text-primary-container hover:underline">
           Sign in
         </Link>
       </p>

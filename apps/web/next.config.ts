@@ -79,6 +79,32 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // The merchant dashboard moved from /merchant/* to /dashboard/*. These
+  // permanent redirects keep every old URL working: bookmarks, links in
+  // password-reset and staff-invite emails already delivered, and any
+  // /merchant/... path a merchant has saved. Without them those all 404.
+  //
+  // 308 (permanent, method-preserving) rather than 301/302 so a POST to an
+  // old URL isn't silently downgraded to GET.
+  //
+  // Deliberately NOT a catch-all rewrite: the five removed features
+  // (payment-links, risk-monitoring, disputes, and the portal's customers
+  // and pricing pages) have no destination any more, so /merchant/disputes
+  // correctly 404s rather than redirecting somewhere misleading.
+  async redirects() {
+    return [
+      {
+        source: "/merchant",
+        destination: "/dashboard/overview",
+        permanent: true,
+      },
+      {
+        source: "/merchant/:path*",
+        destination: "/dashboard/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

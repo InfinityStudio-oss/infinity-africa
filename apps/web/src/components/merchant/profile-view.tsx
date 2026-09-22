@@ -110,7 +110,7 @@ export function ProfileView({ email }: { email: string }) {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Merchant ID</label>
+              <label className="block text-sm font-medium text-on-surface-variant mb-1.5">ID</label>
               <p className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm font-mono text-on-surface-variant">
                 {merchant.merchant_code ?? "—"}
               </p>

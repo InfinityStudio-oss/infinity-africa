@@ -13,25 +13,21 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[] | "*"> = {
   [UserRole.SUPER_ADMIN]: "*",
   [UserRole.MERCHANT_ADMIN]: "*",
   [UserRole.MERCHANT_STAFF]: [
-    "/merchant/overview",
+    "/dashboard/overview",
     "/portal",
     "/portal/collections",
-    "/merchant/payment-links",
-    "/merchant/invoices",
-    "/portal/customers",
+    "/dashboard/invoices",
     "/portal/transactions",
     "/portal/support",
-    "/merchant/risk-monitoring",
-    "/merchant/disputes",
-    "/merchant/profile",
-    "/merchant/settings",
+    "/dashboard/profile",
+    "/dashboard/settings",
   ],
   [UserRole.DEVELOPER]: [
-    "/merchant/overview",
+    "/dashboard/overview",
     "/portal",
     "/portal/api-credentials",
-    "/merchant/profile",
-    "/merchant/settings",
+    "/dashboard/profile",
+    "/dashboard/settings",
   ],
 };
 
@@ -39,6 +35,6 @@ export function isPathAllowedForRole(role: UserRole, pathname: string): boolean 
   const allowed = ROLE_ALLOWED_PATHS[role];
   if (allowed === "*") return true;
   return allowed.some((href) =>
-    href === "/portal" || href === "/merchant/overview" ? pathname === href : pathname.startsWith(href),
+    href === "/portal" || href === "/dashboard/overview" ? pathname === href : pathname.startsWith(href),
   );
 }

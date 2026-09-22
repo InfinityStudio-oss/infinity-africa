@@ -1835,7 +1835,7 @@ def accept_my_merchant_invite(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ):
     """Called once, right after a newly-invited staff member sets their
-    password on the frontend's /merchant/invite/accept page — flips their
+    password on the frontend's /dashboard/invite/accept page — flips their
     merchant_users row from 'invited' to 'active' so require_own_merchant_role
     (which only recognizes 'active') starts letting them into the portal.
 
@@ -1939,10 +1939,10 @@ def create_my_merchant_user(
                 "options": {
                     "data": {"full_name": payload.full_name},
                     # Must land on the password-setup page, not
-                    # /merchant/login — an invited staff member has no
+                    # /dashboard/login — an invited staff member has no
                     # password yet, so sending them to the login form
                     # leaves them stuck with no way in.
-                    "redirect_to": f"{settings.public_app_url}/merchant/invite/accept",
+                    "redirect_to": f"{settings.public_app_url}/dashboard/invite/accept",
                 },
             }
         )
@@ -2016,7 +2016,7 @@ def resend_my_merchant_user_invite(
     Uses generate_link(type="recovery") rather than "invite" — the
     Supabase Auth user already exists from the original invite, and
     "invite" only works for brand-new users. The resulting action link
-    still lands on /merchant/invite/accept, and
+    still lands on /dashboard/invite/accept, and
     accept-invite-form.tsx's supabase.auth.updateUser({password}) works
     identically regardless of whether the underlying link type was
     invite or recovery."""
@@ -2043,7 +2043,7 @@ def resend_my_merchant_user_invite(
             {
                 "type": "recovery",
                 "email": invited_email,
-                "options": {"redirect_to": f"{settings.public_app_url}/merchant/invite/accept"},
+                "options": {"redirect_to": f"{settings.public_app_url}/dashboard/invite/accept"},
             }
         )
     except Exception as exc:

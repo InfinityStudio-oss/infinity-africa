@@ -5,21 +5,16 @@ export interface PortalNavItem {
 }
 
 export const PORTAL_NAV_ITEMS: PortalNavItem[] = [
-  { label: "Overview", href: "/merchant/overview", icon: "dashboard" },
+  { label: "Overview", href: "/dashboard/overview", icon: "dashboard" },
   { label: "Wallet", href: "/portal/wallet", icon: "account_balance" },
   { label: "Collections", href: "/portal/collections", icon: "payments" },
-  { label: "Payment Links", href: "/merchant/payment-links", icon: "link" },
-  { label: "Pay by Link", href: "/merchant/pay-by-link", icon: "storefront" },
-  { label: "Withdrawals", href: "/merchant/withdrawals", icon: "account_balance_wallet" },
+  { label: "Pay by Link", href: "/dashboard/pay-by-link", icon: "storefront" },
+  { label: "Withdrawals", href: "/dashboard/withdrawals", icon: "account_balance_wallet" },
   { label: "Transactions", href: "/portal/transactions", icon: "receipt_long" },
-  { label: "Customers", href: "/portal/customers", icon: "group" },
-  { label: "Invoices", href: "/merchant/invoices", icon: "description" },
-  { label: "Risk Monitoring", href: "/merchant/risk-monitoring", icon: "gpp_maybe" },
-  { label: "Disputes", href: "/merchant/disputes", icon: "gavel" },
-  { label: "Team", href: "/merchant/users", icon: "group_add" },
-  { label: "Pricing", href: "/portal/pricing", icon: "sell" },
+  { label: "Invoices", href: "/dashboard/invoices", icon: "description" },
+  { label: "Team", href: "/dashboard/users", icon: "group_add" },
   { label: "API Credentials", href: "/portal/api-credentials", icon: "vpn_key" },
   { label: "Reports", href: "/portal/reports", icon: "bar_chart" },
-  { label: "Settings", href: "/merchant/settings", icon: "settings" },
+  { label: "Settings", href: "/dashboard/settings", icon: "settings" },
   { label: "Support", href: "/portal/support", icon: "help" },
 ];

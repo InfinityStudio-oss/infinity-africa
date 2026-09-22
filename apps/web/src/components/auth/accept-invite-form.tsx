@@ -15,8 +15,8 @@ const inputClass =
 const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2";
 
 export function AcceptInviteForm({
-  portalPath = "/merchant/overview",
-  loginPath = "/merchant/login",
+  portalPath = "/dashboard/overview",
+  loginPath = "/dashboard/login",
 }: {
   /** Where a successfully-accepted staff member lands. */
   portalPath?: string;

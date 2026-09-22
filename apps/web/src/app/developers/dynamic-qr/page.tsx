@@ -35,7 +35,7 @@ export default function DynamicQrApiPage() {
           Call this endpoint from your own backend with an API key that has the{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">collections:write</code>{" "}
           scope, or from the Merchant Portal dashboard (signed-in session). Generate a key on the{" "}
-          <a href="/merchant/login" className="text-primary font-semibold hover:underline">
+          <a href="/dashboard/login" className="text-primary font-semibold hover:underline">
             Merchant Portal
           </a>{" "}
           — see{" "}

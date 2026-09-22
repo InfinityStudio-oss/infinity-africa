@@ -45,7 +45,7 @@ export function LoginForm({ variant }: { variant: "public" | "merchant" | "admin
           </label>
           {(variant === "merchant" || variant === "admin") && (
             <Link
-              href={variant === "merchant" ? "/merchant/forgot-password" : "/admin-login/forgot-password"}
+              href={variant === "merchant" ? "/dashboard/forgot-password" : "/admin-login/forgot-password"}
               className="text-xs font-semibold text-primary-container hover:underline"
             >
               Forgot password?

@@ -36,14 +36,14 @@ describe("GET /auth/callback", () => {
     expect(res.headers.get("location")).toBe("https://infinitypay.me/onboarding");
   });
 
-  it("sends a failed exchange to /merchant/login with a plain-language notice, never a 400", async () => {
+  it("sends a failed exchange to /dashboard/login with a plain-language notice, never a 400", async () => {
     exchangeCodeForSession.mockResolvedValue({ error: { message: "code challenge does not match" } });
 
     const res = await callGet("https://infinitypay.me/auth/callback?code=stale");
 
     expect(res.status).toBe(307);
     const location = new URL(res.headers.get("location")!);
-    expect(location.pathname).toBe("/merchant/login");
+    expect(location.pathname).toBe("/dashboard/login");
     expect(location.searchParams.get("notice")).toMatch(/verified/i);
   });
 
@@ -52,7 +52,7 @@ describe("GET /auth/callback", () => {
 
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     const location = new URL(res.headers.get("location")!);
-    expect(location.pathname).toBe("/merchant/login");
+    expect(location.pathname).toBe("/dashboard/login");
   });
 
   it("routes an error_description straight to login without touching Supabase", async () => {
@@ -62,7 +62,7 @@ describe("GET /auth/callback", () => {
 
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     expect(verifyOtp).not.toHaveBeenCalled();
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/merchant/login");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/dashboard/login");
   });
 
   it("ignores an off-site `next` (open-redirect guard) and falls back to /onboarding", async () => {

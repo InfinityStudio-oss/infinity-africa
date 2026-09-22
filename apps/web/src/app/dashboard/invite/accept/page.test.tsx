@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // requireCurrentUser/getCurrentUser would redirect an unauthenticated
-// visitor to /merchant/login — the exact bug this page exists to fix. If
+// visitor to /dashboard/login — the exact bug this page exists to fix. If
 // the page ever starts calling either of these, these mocks throw, failing
 // the test loudly instead of silently reintroducing the redirect-before-
 // password-setup bug.
@@ -32,7 +32,7 @@ describe("MerchantInviteAcceptPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setSession.mockResolvedValue({ error: null });
-    window.history.replaceState(null, "", "/merchant/invite/accept#access_token=at&refresh_token=rt&type=invite");
+    window.history.replaceState(null, "", "/dashboard/invite/accept#access_token=at&refresh_token=rt&type=invite");
   });
 
   it("renders the set-password form without any existing session or auth guard", async () => {

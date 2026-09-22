@@ -251,7 +251,7 @@ export default function DisbursementsApiPage() {
           no open high-risk fraud alert), it&apos;s processed immediately instead and comes back{" "}
           <code className="font-mono text-xs">PROCESSING</code> with{" "}
           <code className="font-mono text-xs">auto_approved: true</code> — never assume which one you&apos;ll get.
-          Poll <code className="font-mono text-xs">GET .../merchant/withdrawals</code> or listen for{" "}
+          Poll <code className="font-mono text-xs">GET .../dashboard/withdrawals</code> or listen for{" "}
           <code className="font-mono text-xs">disbursement.success</code>/<code className="font-mono text-xs">disbursement.failed</code> to
           know the outcome either way.
         </Callout>

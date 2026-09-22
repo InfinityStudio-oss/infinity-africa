@@ -34,7 +34,7 @@ describe("ForgotPasswordForm", () => {
     expect(url).toContain("/v1/auth/forgot-password");
     expect(JSON.parse(init.body)).toEqual({
       email: "merchant@example.com",
-      redirect_path: "/merchant/reset-password",
+      redirect_path: "/dashboard/reset-password",
     });
     await waitFor(() =>
       expect(screen.getByText(/If an account exists, we've sent password reset instructions\./)).toBeInTheDocument(),

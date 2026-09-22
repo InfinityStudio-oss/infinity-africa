@@ -27,13 +27,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         className={`fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-sidebar to-sidebar-strong shadow-lg z-50 flex flex-col py-8 px-4 overflow-y-auto transition-transform duration-200 md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-8 flex items-center gap-3 px-4 shrink-0">
-          <Link href="/merchant/overview" className="flex flex-col gap-1 flex-1 min-w-0">
-            <span className="flex items-center">
-              <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
-            </span>
-            <p className="text-[11px] font-semibold tracking-wide text-sidebar-text-muted">
-              Merchant Portal
-            </p>
+          <Link href="/dashboard/overview" className="flex items-center flex-1 min-w-0">
+            <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
           </Link>
           <button onClick={onClose} className="md:hidden text-sidebar-text p-1" aria-label="Close menu">
             <Icon name="close" />
@@ -43,7 +38,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <nav className="flex-1 space-y-1">
           {visibleNavItems.map((item) => {
             const isActive =
-              item.href === "/merchant/overview" ? pathname === "/merchant/overview" : pathname.startsWith(item.href);
+              item.href === "/dashboard/overview" ? pathname === "/dashboard/overview" : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

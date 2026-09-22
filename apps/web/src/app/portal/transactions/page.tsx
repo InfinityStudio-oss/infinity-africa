@@ -118,11 +118,8 @@ export default function TransactionsPage() {
             <div>
               <h3 className="font-semibold text-on-background mb-1">Transaction under review</h3>
               <p className="text-sm text-on-surface-variant">
-                Please submit supporting documents requested by InfinityPay for the flagged transaction(s) below. See{" "}
-                <a href="/merchant/risk-monitoring" className="text-primary font-semibold hover:underline">
-                  Risk Monitoring
-                </a>{" "}
-                for details.
+                Please submit supporting documents requested by InfinityPay for the flagged transaction(s) below.
+                Contact support if you need details.
               </p>
             </div>
           </div>

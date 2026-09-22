@@ -33,7 +33,7 @@ describe("robots.ts", () => {
     expect(rules.allow).toBe("/");
     const disallow = rules.disallow as string[];
     for (const path of [
-      "/merchant",
+      "/dashboard",
       "/portal",
       "/super-admin",
       "/admin",
@@ -73,6 +73,7 @@ describe("sitemap.ts", () => {
     // in the path; only the actual private route "/payment-links/..." itself
     // (first segment) is disallowed.
     const privateFirstSegments = new Set([
+      "dashboard",
       "merchant",
       "portal",
       "super-admin",
@@ -148,7 +149,7 @@ describe("private route groups are noindex", () => {
     "portal/layout.tsx",
     "admin/layout.tsx",
     "super-admin/layout.tsx",
-    "merchant/layout.tsx",
+    "dashboard/layout.tsx",
     "onboarding/layout.tsx",
     "pay/layout.tsx",
     "payment-links/layout.tsx",
