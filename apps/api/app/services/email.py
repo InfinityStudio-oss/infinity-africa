@@ -151,8 +151,9 @@ def _mask_identifier(value: str) -> str:
 
 def _email_shell(*, body_html: str) -> str:
     """Wraps `body_html` in the InfinityPay branded header/footer
-    every transactional email shares — dark green header band (∞ mark +
-    wordmark), white content area, light-gray footer with a help-contact
+    every transactional email shares — dark green header band (the
+    wordmark alone; the infinity mark was dropped from the brand lockup),
+    white content area, light-gray footer with a help-contact
     line and "Powered by InfinityPay". Table-based HTML with inline
     styles throughout — the only layout approach that renders consistently
     across real email clients (Gmail, Outlook, Apple Mail strip <style>
@@ -160,8 +161,8 @@ def _email_shell(*, body_html: str) -> str:
     CSS background-color AND the legacy bgcolor HTML attribute — Outlook
     desktop's Word-based rendering engine ignores CSS background-color on
     table cells entirely. Never references the Material Symbols icon font
-    used elsewhere in the app (unsupported in email); the ∞ mark is a
-    plain Unicode character so it always renders."""
+    used elsewhere in the app — it is unsupported in email, which is why
+    this header is plain text rather than an icon."""
     settings = get_settings()
     return f"""\
 <!doctype html>
@@ -173,8 +174,7 @@ def _email_shell(*, body_html: str) -> str:
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;">
             <tr>
               <td bgcolor="#04332a" style="background-color:#04332a;padding:24px 28px;">
-                <span style="font-size:20px;color:#9cf5c1;vertical-align:middle;">&#8734;</span>
-                <span style="font-size:18px;font-weight:700;color:#ffffff;vertical-align:middle;margin-left:6px;">InfinityPay</span>
+                <span style="font-size:18px;font-weight:700;color:#ffffff;vertical-align:middle;">InfinityPay</span>
               </td>
             </tr>
             <tr>

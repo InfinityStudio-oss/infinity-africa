@@ -9,7 +9,7 @@ export default function MerchantResetPasswordPage() {
   return (
     <AuthSplitLayout>
       <h1 className="text-2xl font-bold text-on-surface">Set a new password</h1>
-      <p className="mt-2 text-sm text-on-surface-variant">Choose a new password for your merchant account.</p>
+      <p className="mt-2 text-sm text-on-surface-variant">Choose a new password for your account.</p>
       <ResetPasswordForm />
     </AuthSplitLayout>
   );

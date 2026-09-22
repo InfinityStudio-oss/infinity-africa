@@ -74,9 +74,9 @@ export function LoginForm({ variant }: { variant: "public" | "merchant" | "admin
         </p>
       ) : (
         <p className="text-center text-sm text-on-surface-variant">
-          {variant === "merchant" ? "Don't have a merchant account?" : "Don't have an account?"}{" "}
+          {"Don't have an account?"}{" "}
           <Link href="/create-account" className="font-semibold text-primary-container hover:underline">
-            Create Merchant Account
+            Create an account
           </Link>
         </p>
       )}

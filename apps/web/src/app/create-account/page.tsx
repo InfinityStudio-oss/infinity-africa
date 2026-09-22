@@ -3,7 +3,7 @@ import { CreateAccountForm } from "@/components/auth/create-account-form";
 
 export const metadata = {
   title: "Create your InfinityPay account",
-  description: "Create your InfinityPay merchant account and submit your business details for review.",
+  description: "Create your InfinityPay account and submit your business details for review.",
 };
 
 export default function CreateAccountPage() {
