@@ -166,58 +166,41 @@ def _check_daily_withdrawal_limit(client: Client, *, merchant_id: uuid.UUID, amo
         )
 
 
-def _evaluate_auto_withdrawal_eligibility(
-    client: Client, *, merchant_id: uuid.UUID, amount: Decimal
-) -> tuple[bool, str]:
-    """Whether a withdrawal request can skip Super Admin approval and go
-    straight to the provider. Only ever consulted from execute_disbursement,
-    immediately after the same merchant-verification and open-high-risk-
-    fraud-alert checks every withdrawal already goes through unconditionally
-    (auto or not, see _check_merchant_is_verified/_check_no_open_high_risk_alerts
-    above) — this function only adds the amount-based checks specific to
-    automation, it never re-checks or weakens those.
-
-    Returns (eligible, reason) — reason is always populated either way, so
-    it can be recorded on the row (disbursements.auto_decision_reason) for
-    Super Admin visibility regardless of the outcome."""
+def _automation_is_enabled() -> bool:
+    """Both flags, deliberately — see Settings.auto_withdrawals_enabled.
+    A deploy that sets one but not the other still fails safe to "every
+    withdrawal needs a human"."""
     settings = get_settings()
+    return settings.auto_withdrawals_enabled and not settings.require_admin_approval_for_all_withdrawals
 
-    if not (settings.auto_withdrawals_enabled and not settings.require_admin_approval_for_all_withdrawals):
-        return False, "Manual approval required: withdrawal automation is not enabled."
 
-    if amount > settings.auto_withdrawal_max_amount_tzs:
-        return False, (
-            f"Manual approval required: exceeds the {settings.auto_withdrawal_max_amount_tzs} TZS "
-            "per-transaction limit for automatic processing."
-        )
+def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -> tuple[str, str]:
+    """Atomically enforces the rolling 24h limits and decides auto-withdrawal
+    eligibility for the row just inserted, via the
+    finalize_withdrawal_limits Postgres function (migration
+    20260922030000) — which holds a per-merchant advisory lock for the
+    whole decision, so two withdrawals submitted at the same instant can
+    never both pass a limit only one of them should have.
 
-    # Rolling 24h cap on what this backend will auto-process for one
-    # merchant — independent of (and stricter than) the daily_withdrawal_limit_tzs
-    # check _check_withdrawal_amount_limits already ran before this row
-    # existed, which caps everything requested (auto or manual) for the
-    # day. Excludes REJECTED/FAILED for the same reason
-    # _check_daily_withdrawal_limit does: money that never actually moved
-    # doesn't count against a cap about money moving.
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    rows = (
-        client.table("disbursements")
-        .select("amount, status")
-        .eq("merchant_id", str(merchant_id))
-        .eq("auto_approved", True)
-        .gte("initiated_at", cutoff)
-        .execute()
-    ).data or []
-    auto_processed_today = sum(
-        (Decimal(str(row["amount"])) for row in rows if row["status"] not in ("REJECTED", "FAILED")),
-        Decimal(0),
-    )
-    if auto_processed_today + amount > settings.auto_withdrawal_daily_limit_tzs:
-        return False, (
-            f"Manual approval required: would exceed the {settings.auto_withdrawal_daily_limit_tzs} TZS "
-            f"daily limit for automatic processing (already auto-processed today: {auto_processed_today} TZS)."
-        )
-
-    return True, "Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits."
+    This is the authoritative check. _check_withdrawal_amount_limits still
+    runs before the row is created, for a fast, friendly rejection — same
+    relationship _check_available_balance has with post_ledger_entries's
+    own locked balance check (see 20260814140001). Returns
+    (outcome, reason) where outcome is "rejected" | "auto" | "manual";
+    the function has already written `reason` onto the row either way."""
+    settings = get_settings()
+    result = client.rpc(
+        "finalize_withdrawal_limits",
+        {
+            "p_disbursement_id": str(disbursement_id),
+            "p_daily_limit": str(settings.daily_withdrawal_limit_tzs),
+            "p_auto_max": str(settings.auto_withdrawal_max_amount_tzs),
+            "p_auto_daily_limit": str(settings.auto_withdrawal_daily_limit_tzs),
+            "p_automation_enabled": _automation_is_enabled(),
+        },
+    ).execute()
+    data = result.data or {}
+    return data.get("outcome", "manual"), data.get("reason", "")
 
 
 def quote_withdrawal_fee(
@@ -312,8 +295,18 @@ async def execute_disbursement(
     )
     disbursement_id = uuid.UUID(disbursement["id"])
 
-    eligible, decision_reason = _evaluate_auto_withdrawal_eligibility(client, merchant_id=merchant_id, amount=amount)
-    disbursement = update_row(client, "disbursements", disbursement_id, {"auto_decision_reason": decision_reason})
+    # Authoritative, race-proof limit enforcement + automation decision,
+    # under a per-merchant advisory lock (see _finalize_withdrawal_limits).
+    # The checks above this point are fast pre-checks; this is the one that
+    # holds under concurrency.
+    outcome, decision_reason = _finalize_withdrawal_limits(client, disbursement_id=disbursement_id)
+    disbursement = get_by_id(client, "disbursements", disbursement_id) or disbursement
+    if outcome == "rejected":
+        # The row has already been marked REJECTED inside the lock, so it
+        # stops counting toward anyone else's rolling total. Raising the
+        # same error the pre-check raises keeps the API contract identical
+        # whether the limit was caught before or after insert.
+        raise WithdrawalRestrictedError(decision_reason)
 
     # Courtesy notification — the withdrawal request is already saved above;
     # a failed send must never look like a failed withdrawal request. See
@@ -330,7 +323,7 @@ async def execute_disbursement(
     except Exception:  # noqa: BLE001, S110 — best-effort, never blocks the withdrawal request
         pass
 
-    if eligible:
+    if outcome == "auto":
         # Same code path a Super Admin's manual approval uses — no
         # separate, less-tested "auto" payout path exists. Any failure
         # here (including InsufficientBalanceError, which
@@ -339,7 +332,39 @@ async def execute_disbursement(
         # re-raising) must never surface as if creating the withdrawal
         # *request* failed — that already succeeded above. Whatever state
         # auto-processing left the row in is what this returns.
-        disbursement = update_row(client, "disbursements", disbursement_id, {"auto_approved": True})
+        #
+        # auto_approved was already set inside the advisory lock by
+        # finalize_withdrawal_limits, so it is deliberately not set again
+        # here — the lock is what makes it visible to concurrent callers'
+        # rolling totals at the right moment.
+        #
+        # Final re-check of the non-amount gates immediately before money
+        # moves. They were checked at the top of this function moments ago,
+        # so this is defense in depth rather than a likely catch — but an
+        # unattended payout is exactly where a stale check is least
+        # acceptable, and the cost is two reads. Balance is not re-checked
+        # here because post_ledger_entries re-checks it atomically under a
+        # row lock inside _reserve_and_run_disbursement_provider, and the
+        # amount limits were settled under the advisory lock above. Any
+        # failure falls back to PENDING_ADMIN_APPROVAL rather than
+        # rejecting — a human then decides.
+        try:
+            _check_merchant_is_verified(client, merchant_id=merchant_id)
+            _check_no_open_high_risk_alerts(client, merchant_id=merchant_id)
+        except WithdrawalRestrictedError as exc:
+            logger.warning(
+                "auto_withdrawal_aborted_on_final_recheck disbursement_id=%s reason=%s", disbursement_id, exc
+            )
+            return update_row(
+                client,
+                "disbursements",
+                disbursement_id,
+                {
+                    "auto_approved": False,
+                    "auto_decision_reason": f"Manual approval required: {exc}",
+                },
+            )
+
         try:
             disbursement = await _reserve_and_run_disbursement_provider(client, disbursement)
         except Exception:

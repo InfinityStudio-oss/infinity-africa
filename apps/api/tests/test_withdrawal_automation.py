@@ -9,6 +9,7 @@ change.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import resend
@@ -16,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import app
+from app.services import disbursements as disbursements_service
 from app.services.selcom_business.client import get_selcom_business_client
 from tests.factories import (
     TEST_JWT_SECRET,
@@ -24,6 +26,7 @@ from tests.factories import (
     make_merchant_member,
     make_super_admin,
 )
+from tests.fakes import FakeSupabaseClient
 
 client = TestClient(app)
 
@@ -470,3 +473,210 @@ def test_manual_fallback_reason_exposes_no_secrets(fake_client, fake_resend, mon
     serialized = str(body)
     for name, value in _SECRET_ENV.items():
         assert value not in serialized, f"{name} leaked into the withdrawal response"
+
+
+# --- Concurrency: the advisory-locked limit guard -------------------------------
+#
+# The real guard is supabase/migrations/20260922030000_finalize_withdrawal_limits.sql,
+# which holds a per-merchant advisory lock for the whole decision. These tests
+# exercise the decision rule that makes that lock useful: totals count only
+# rows initiated strictly before this one, so two simultaneous requests
+# resolve to exactly one winner instead of both passing (the bug) or both
+# being rejected (the naive fix). tests/fakes.py mirrors the function.
+
+
+def _seed_competing_withdrawal(fake_client, merchant_id, *, amount, initiated_at, auto_approved=False, status="PENDING_ADMIN_APPROVAL"):
+    """A withdrawal that already exists when the one under test is finalized —
+    i.e. the other half of a race, already inserted."""
+    return fake_client.seed(
+        "disbursements",
+        {
+            "merchant_id": str(merchant_id),
+            "method": "MOBILE_MONEY",
+            "amount": amount,
+            "currency": "TZS",
+            "destination_name": "Jane Doe",
+            "destination_identifier": "+255700000000",
+            "destination_code": "MPESA",
+            "status": status,
+            "requires_approval": True,
+            "auto_approved": auto_approved,
+            "initiated_at": initiated_at,
+        },
+    )
+
+
+def test_concurrent_request_cannot_bypass_the_hard_daily_limit(fake_client, fake_resend, monkeypatch):
+    """Two withdrawals that each fit under DAILY_WITHDRAWAL_LIMIT_TZS alone but
+    not together, submitted at the same instant.
+
+    The race the guard exists for: the up-front _check_withdrawal_amount_limits
+    pre-check reads a total that does NOT yet include the competing request,
+    so it passes — that is exactly the window the old read-then-write check
+    missed. Simulated deterministically by neutralizing the pre-check (which
+    is what a real concurrent read would effectively do) and letting the
+    competing row exist by the time the guard runs. The guard must still
+    reject, and must mark the row REJECTED rather than leaving it pending."""
+    monkeypatch.setenv("DAILY_WITHDRAWAL_LIMIT_TZS", "150000")
+    get_settings.cache_clear()
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="100000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+    )
+    monkeypatch.setattr(disbursements_service, "_check_withdrawal_amount_limits", lambda *a, **k: None)
+
+    response = client.post(
+        "/v1/disbursements/mobile-money",
+        headers={**auth_headers(admin_id), "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "merchant_id": str(merchant_id),
+            "amount": "100000.00",
+            "destination_name": "Jane Doe",
+            "destination_identifier": "+255700000000",
+            "destination_code": "MPESA",
+        },
+    )
+
+    assert response.status_code == 409, response.text
+    assert "daily withdrawal limit" in response.text.lower()
+    # Marked REJECTED inside the guard, so it stops counting against others.
+    rejected = [
+        r
+        for r in fake_client.table("disbursements")._table.rows
+        if r["merchant_id"] == str(merchant_id) and r["status"] == "REJECTED"
+    ]
+    assert len(rejected) == 1
+
+
+def test_pre_check_still_rejects_an_over_limit_request_before_any_row_exists(fake_client, fake_resend, monkeypatch):
+    """The fast path: when the competing total is already visible, the
+    up-front check rejects without ever creating a disbursement row."""
+    monkeypatch.setenv("DAILY_WITHDRAWAL_LIMIT_TZS", "150000")
+    get_settings.cache_clear()
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="100000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+    )
+
+    response = client.post(
+        "/v1/disbursements/mobile-money",
+        headers={**auth_headers(admin_id), "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "merchant_id": str(merchant_id),
+            "amount": "100000.00",
+            "destination_name": "Jane Doe",
+            "destination_identifier": "+255700000000",
+            "destination_code": "MPESA",
+        },
+    )
+
+    assert response.status_code == 409, response.text
+    # Nothing was inserted — only the seeded competitor exists.
+    assert len(fake_client.table("disbursements")._table.rows) == 1
+
+
+def test_concurrent_auto_withdrawals_cannot_bypass_the_auto_daily_cap(fake_client, fake_resend, monkeypatch):
+    """The auto-only rolling cap has the same race. The later request must
+    fall back to manual approval — never be rejected, and never auto-process."""
+    _enable_automation(monkeypatch)
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    # AUTO_WITHDRAWAL_DAILY_LIMIT_TZS is 1,000,000 in this file's fixture.
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="800000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        auto_approved=True,
+        status="SUCCESS",
+    )
+
+    body = _request_withdrawal(merchant_id, admin_id, "400000.00")
+
+    assert body["status"] == "PENDING_ADMIN_APPROVAL"
+    assert body["auto_approved"] is False
+    assert "daily limit for automatic processing" in body["auto_decision_reason"]
+
+
+def test_the_earlier_of_two_racing_requests_still_wins(fake_client, fake_resend, monkeypatch):
+    """The ordering rule must not deadlock both requests into rejection: a
+    competing row initiated strictly *after* this one doesn't count against
+    it, so the earlier request proceeds normally."""
+    _enable_automation(monkeypatch)
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    # Already-inserted competitor, but dated into the future relative to the
+    # request below — i.e. this request is the earlier of the two.
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="900000.00",
+        initiated_at=(datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+        auto_approved=True,
+    )
+
+    body = _request_withdrawal(merchant_id, admin_id, "400000.00")
+
+    assert body["status"] == "SUCCESS"
+    assert body["auto_approved"] is True
+
+
+def test_a_rejected_racing_request_does_not_consume_the_limit(fake_client, fake_resend, monkeypatch):
+    """A row the guard rejected must stop counting toward the rolling total,
+    or one rejected request would wrongly block every later one."""
+    monkeypatch.setenv("DAILY_WITHDRAWAL_LIMIT_TZS", "150000")
+    get_settings.cache_clear()
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="140000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        status="REJECTED",
+    )
+
+    body = _request_withdrawal(merchant_id, admin_id, "140000.00")
+
+    assert body["status"] == "PENDING_ADMIN_APPROVAL"
+
+
+def test_auto_withdrawal_aborts_if_merchant_is_suspended_just_before_payout(
+    fake_client, fake_resend, monkeypatch
+):
+    """The final re-check immediately before money moves: if merchant standing
+    changed after the row was created, fall back to manual approval rather
+    than paying out or rejecting."""
+    _enable_automation(monkeypatch)
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    # Suspend the merchant at the moment the guard finishes, i.e. between the
+    # eligibility decision and the provider call.
+    original = FakeSupabaseClient._finalize_withdrawal_limits
+
+    def _suspend_then_finalize(self, params):
+        result = original(self, params)
+        merchant = next(r for r in self.table("merchants")._table.rows if r["id"] == str(merchant_id))
+        merchant["status"] = "suspended"
+        return result
+
+    monkeypatch.setattr(FakeSupabaseClient, "_finalize_withdrawal_limits", _suspend_then_finalize)
+
+    body = _request_withdrawal(merchant_id, admin_id, "50000.00")
+
+    assert body["status"] == "PENDING_ADMIN_APPROVAL"
+    assert body["auto_approved"] is False
+    assert "Manual approval required" in body["auto_decision_reason"]

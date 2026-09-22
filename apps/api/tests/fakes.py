@@ -7,7 +7,7 @@ code end-to-end in tests without a real Supabase project.
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 
@@ -235,6 +235,8 @@ class _FakeRpcCall:
     def execute(self) -> _Result:
         if self._fn_name == "post_ledger_entries":
             return self._client._post_ledger_entries(self._params.get("p_entries") or [])
+        if self._fn_name == "finalize_withdrawal_limits":
+            return self._client._finalize_withdrawal_limits(self._params)
         raise NotImplementedError(self._fn_name)
 
 
@@ -415,6 +417,88 @@ class FakeSupabaseClient:
 
     def rpc(self, fn_name: str, params: dict | None = None) -> _FakeRpcCall:
         return _FakeRpcCall(self, fn_name, params or {})
+
+    def _finalize_withdrawal_limits(self, params: dict) -> _Result:
+        """Mirrors supabase/migrations/20260922030000_finalize_withdrawal_limits.sql:
+        enforces the rolling 24h hard daily limit and decides
+        auto-withdrawal eligibility for a just-inserted disbursement,
+        returning {"outcome": rejected|auto|manual, "reason": ...} and
+        writing status/auto_approved/auto_decision_reason onto the row
+        exactly as the real function does.
+
+        The real function does all of this while holding a per-merchant
+        advisory lock, which is what makes it race-proof; this in-memory
+        mirror is single-threaded, so it reproduces the *decisions* (and
+        the (initiated_at, id) "count only rows initiated strictly before
+        this one" ordering that makes two simultaneous requests resolve to
+        one winner rather than blocking each other) but not the locking
+        itself. Tests that care about the ordering rule seed the competing
+        rows directly — see tests/test_withdrawal_automation.py.
+        """
+        table = self.table("disbursements")._table
+        row = next((r for r in table.rows if r["id"] == params["p_disbursement_id"]), None)
+        if row is None:
+            raise Exception(f"DISBURSEMENT_NOT_FOUND: {params['p_disbursement_id']}")  # noqa: TRY002
+
+        daily_limit = Decimal(str(params["p_daily_limit"]))
+        auto_max = Decimal(str(params["p_auto_max"]))
+        auto_daily_limit = Decimal(str(params["p_auto_daily_limit"]))
+        automation_enabled = bool(params["p_automation_enabled"])
+
+        amount = Decimal(str(row["amount"]))
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        def _earlier_rows(*, auto_only: bool) -> Decimal:
+            total = Decimal(0)
+            for other in table.rows:
+                if other["id"] == row["id"] or other["merchant_id"] != row["merchant_id"]:
+                    continue
+                if other["status"] in ("REJECTED", "FAILED"):
+                    continue
+                if auto_only and not other.get("auto_approved"):
+                    continue
+                initiated = other.get("initiated_at")
+                if not initiated or datetime.fromisoformat(initiated) < cutoff:
+                    continue
+                # Strictly-before ordering on (initiated_at, id), same as
+                # the real function's row-comparison predicate.
+                if (initiated, str(other["id"])) >= (row["initiated_at"], str(row["id"])):
+                    continue
+                total += Decimal(str(other["amount"]))
+            return total
+
+        requested_today = _earlier_rows(auto_only=False)
+        if requested_today + amount > daily_limit:
+            reason = (
+                f"Rejected: would exceed the daily withdrawal limit of {daily_limit} TZS "
+                f"(already requested in the last 24 hours: {requested_today} TZS)."
+            )
+            row["status"] = "REJECTED"
+            row["auto_decision_reason"] = reason
+            return _Result({"outcome": "rejected", "reason": reason, "already_requested_today": str(requested_today)})
+
+        if not automation_enabled:
+            reason = "Manual approval required: withdrawal automation is not enabled."
+        elif amount > auto_max:
+            reason = (
+                f"Manual approval required: exceeds the {auto_max} TZS "
+                "per-transaction limit for automatic processing."
+            )
+        else:
+            auto_today = _earlier_rows(auto_only=True)
+            if auto_today + amount > auto_daily_limit:
+                reason = (
+                    f"Manual approval required: would exceed the {auto_daily_limit} TZS "
+                    f"daily limit for automatic processing (already auto-processed today: {auto_today} TZS)."
+                )
+            else:
+                reason = "Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits."
+                row["auto_approved"] = True
+                row["auto_decision_reason"] = reason
+                return _Result({"outcome": "auto", "reason": reason})
+
+        row["auto_decision_reason"] = reason
+        return _Result({"outcome": "manual", "reason": reason})
 
     def _post_ledger_entries(self, entries: list[dict]) -> _Result:
         """Mirrors supabase/migrations/20260814130002_post_ledger_entries_function.sql,
