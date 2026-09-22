@@ -8,6 +8,29 @@ Covers the three migrations introduced by commits `435286a` and `dacaed3`.
 > every row. Deploying the API before step 3 breaks **all** withdrawals, not
 > just automation. Migrations first, API second.
 
+> **Do not set `AUTO_WITHDRAWALS_ENABLED=true` until the advisory lock has
+> been proven against a real PostgreSQL instance.** The unit tests run
+> against an in-memory fake that is single-threaded — they verify the
+> decision rules but cannot prove that `pg_advisory_xact_lock` actually
+> serializes anything. Until the "Proving the advisory lock" section at the
+> bottom of this runbook has been completed successfully on staging, launch
+> with manual approval:
+>
+> ```
+> AUTO_WITHDRAWALS_ENABLED=false
+> REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=true
+> ```
+>
+> These are the code defaults, so no Railway change is needed to get them.
+> Applying the migrations does **not** enable automation — with these flags
+> the function only records a reason string and returns `manual`.
+>
+> `AUTO_WITHDRAWAL_MAX_AMOUNT_TZS` (500,000) and
+> `AUTO_WITHDRAWAL_DAILY_LIMIT_TZS` (1,000,000) are conservative
+> placeholders, not business-derived figures. Treat them as deliberate
+> business decisions requiring sign-off before automation is turned on, not
+> as values to inherit.
+
 All three are additive: they add two columns, one column, one partial index
 and one function. Nothing is dropped, truncated, renamed or backfilled with
 new values, and no merchant, wallet, ledger or existing disbursement row is
