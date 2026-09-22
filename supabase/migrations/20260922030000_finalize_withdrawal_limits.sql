@@ -94,7 +94,17 @@ begin
     select coalesce(sum(amount), 0) into v_auto_today
     from public.disbursements
     where merchant_id = v_row.merchant_id
-      and auto_approved
+      -- Already auto-approved, OR still undecided. The second half matters:
+      -- these calls are serialized by the advisory lock, but NOT necessarily
+      -- in (initiated_at, id) order — a later row's call can acquire the lock
+      -- first, while the earlier row has been inserted but has not yet had
+      -- auto_approved written. Counting only auto_approved there would let
+      -- each of the two miss the other and both auto-process, exceeding this
+      -- cap. An undecided earlier row is therefore counted conservatively:
+      -- worst case the later one falls back to PENDING_ADMIN_APPROVAL, which
+      -- is the safe direction. Outside that race every earlier row already
+      -- has a reason set, so this changes nothing in the normal case.
+      and (auto_approved or auto_decision_reason is null)
       and status not in ('REJECTED', 'FAILED')
       and initiated_at >= now() - interval '24 hours'
       and (initiated_at, id) < (v_row.initiated_at, v_row.id);
@@ -106,8 +116,10 @@ begin
       );
     else
       v_reason := 'Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits.';
-      -- Set inside the lock, so the very next concurrent call's
-      -- v_auto_today sum already sees this row.
+      -- Set inside the lock. Concurrent calls that run after this one see
+      -- auto_approved directly; one that runs before it (lock order is not
+      -- (initiated_at, id) order) counts this row via the
+      -- "auto_decision_reason is null" half of the predicate above.
       update public.disbursements
         set auto_approved = true,
             auto_decision_reason = v_reason

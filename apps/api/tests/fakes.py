@@ -455,7 +455,11 @@ class FakeSupabaseClient:
                     continue
                 if other["status"] in ("REJECTED", "FAILED"):
                     continue
-                if auto_only and not other.get("auto_approved"):
+                # Mirrors the SQL's "(auto_approved or auto_decision_reason
+                # is null)": an earlier row that is still undecided is
+                # counted conservatively, because lock order is not
+                # (initiated_at, id) order and it may yet become auto.
+                if auto_only and not (other.get("auto_approved") or not other.get("auto_decision_reason")):
                     continue
                 initiated = other.get("initiated_at")
                 if not initiated or datetime.fromisoformat(initiated) < cutoff:

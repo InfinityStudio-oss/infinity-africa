@@ -485,7 +485,16 @@ def test_manual_fallback_reason_exposes_no_secrets(fake_client, fake_resend, mon
 # being rejected (the naive fix). tests/fakes.py mirrors the function.
 
 
-def _seed_competing_withdrawal(fake_client, merchant_id, *, amount, initiated_at, auto_approved=False, status="PENDING_ADMIN_APPROVAL"):
+def _seed_competing_withdrawal(
+    fake_client,
+    merchant_id,
+    *,
+    amount,
+    initiated_at,
+    auto_approved=False,
+    status="PENDING_ADMIN_APPROVAL",
+    decision_reason="Manual approval required: withdrawal automation is not enabled.",
+):
     """A withdrawal that already exists when the one under test is finalized —
     i.e. the other half of a race, already inserted."""
     return fake_client.seed(
@@ -501,6 +510,9 @@ def _seed_competing_withdrawal(fake_client, merchant_id, *, amount, initiated_at
             "status": status,
             "requires_approval": True,
             "auto_approved": auto_approved,
+            # None means "inserted but not yet decided" — the in-flight state
+            # the auto-cap predicate has to account for.
+            "auto_decision_reason": decision_reason,
             "initiated_at": initiated_at,
         },
     )
@@ -680,3 +692,111 @@ def test_auto_withdrawal_aborts_if_merchant_is_suspended_just_before_payout(
     assert body["status"] == "PENDING_ADMIN_APPROVAL"
     assert body["auto_approved"] is False
     assert "Manual approval required" in body["auto_decision_reason"]
+
+
+def test_an_undecided_earlier_request_still_counts_against_the_auto_cap(
+    fake_client, fake_resend, monkeypatch
+):
+    """The race the (auto_approved or auto_decision_reason is null) predicate
+    exists for.
+
+    The advisory lock serializes these calls but does NOT order them by
+    (initiated_at, id) — the later row's call can acquire the lock first,
+    at which point the earlier row is inserted but has not yet had
+    auto_approved written. If only auto_approved counted, each would miss
+    the other and both would auto-process, blowing past the auto daily cap.
+    The earlier, still-undecided row must count, so this one falls back to
+    manual approval rather than auto-processing."""
+    _enable_automation(monkeypatch)
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    # AUTO_WITHDRAWAL_DAILY_LIMIT_TZS is 1,000,000 in this file's fixture.
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="800000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        auto_approved=False,
+        decision_reason=None,
+    )
+
+    body = _request_withdrawal(merchant_id, admin_id, "400000.00")
+
+    assert body["status"] == "PENDING_ADMIN_APPROVAL"
+    assert body["auto_approved"] is False
+    assert "daily limit for automatic processing" in body["auto_decision_reason"]
+
+
+def test_a_settled_manual_earlier_request_does_not_block_the_auto_cap(
+    fake_client, fake_resend, monkeypatch
+):
+    """The other side of that predicate: an earlier row that was already
+    decided as manual is not in flight any more, so it must NOT consume the
+    auto cap — otherwise every manual withdrawal would suppress automation
+    for the rest of the window."""
+    _enable_automation(monkeypatch)
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "5000000.00")
+
+    _seed_competing_withdrawal(
+        fake_client,
+        merchant_id,
+        amount="800000.00",
+        initiated_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        auto_approved=False,
+        decision_reason="Manual approval required: exceeds the per-transaction limit.",
+    )
+
+    body = _request_withdrawal(merchant_id, admin_id, "400000.00")
+
+    assert body["status"] == "SUCCESS"
+    assert body["auto_approved"] is True
+
+
+# --- Manual mode: the provider must not be touched at request time -------------
+
+
+def test_manual_mode_never_calls_the_provider_on_a_withdrawal_request(
+    fake_client, fake_resend, monkeypatch
+):
+    """The single most important guarantee of the recommended first-real-users
+    configuration (AUTO_WITHDRAWALS_ENABLED=false,
+    REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=true): submitting a withdrawal
+    must never reach Selcom. Only a Super Admin's approval does.
+
+    Asserted by making any provider call fail the test outright, rather than
+    by checking the resulting status — a status assertion would still pass if
+    a payout had been attempted and then rolled back."""
+    calls: list[dict] = []
+
+    class _ExplodingProvider:
+        async def process_transaction(self, **kwargs):
+            calls.append(kwargs)
+            raise AssertionError("Selcom was called at withdrawal-request time in manual mode")
+
+    monkeypatch.setattr(
+        "app.services.disbursements.get_selcom_business_client", lambda: _ExplodingProvider()
+    )
+
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "1000000.00")
+
+    body = _request_withdrawal(merchant_id, admin_id, "50000.00")
+
+    assert calls == []
+    assert body["status"] == "PENDING_ADMIN_APPROVAL"
+    assert body["auto_approved"] is False
+
+
+def test_manual_mode_response_exposes_no_provider_internals(fake_client, fake_resend):
+    """A withdrawal-request response is merchant-visible. It must carry no
+    provider credentials, no raw provider payload, and no stack trace."""
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "1000000.00")
+
+    body = _request_withdrawal(merchant_id, admin_id, "50000.00")
+
+    serialized = str(body).lower()
+    for leaked in ("traceback", "psycopg", "postgrest", "api_key", "api_secret", "private_key", "vendor_id"):
+        assert leaked not in serialized, f"{leaked!r} leaked into the withdrawal response"
