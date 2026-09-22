@@ -13,7 +13,7 @@ import { Icon } from "@/components/portal/icon";
 export const metadata = {
   title: "InfinityPay — Collect Payments, Create Links, and Get Paid Faster in Tanzania",
   description:
-    "InfinityPay helps merchants accept mobile money payments, create secure payment links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
+    "InfinityPay helps business and services providers accept mobile money payments, create secure payment links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
 };
 
 const NETWORKS = [
@@ -51,16 +51,16 @@ const HIGHLIGHTS = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: 1, title: "Create Your Account", description: "Sign up and get verified as a merchant in minutes." },
+  { step: 1, title: "Create Your Account", description: "Sign up and get verified as a business or service provider in minutes." },
   { step: 2, title: "Collect Payments", description: "Accept mobile money, share payment links, or send invoices with Pay Now." },
   { step: 3, title: "Track in Real Time", description: "Monitor collections, balances, and payment status from one dashboard." },
-  { step: 4, title: "Get Paid Faster", description: "Funds settle to your available balance — manage withdrawals anytime from your merchant portal." },
+  { step: 4, title: "Get Paid Faster", description: "Funds settle to your available balance — manage withdrawals anytime from your portal." },
 ];
 
 const SECURITY_POINTS = [
   { icon: "lock", label: "Bank-grade encryption for every transaction" },
   { icon: "monitoring", label: "Real-time fraud monitoring and alerts" },
-  { icon: "account_balance", label: "Segregated merchant funds" },
+  { icon: "account_balance", label: "Segregated business funds" },
   { icon: "verified", label: "Registered Payment Service Provider in Tanzania" },
   { icon: "groups", label: "Role-based access control for your team" },
   { icon: "api", label: "Secure, versioned REST API with signed webhooks" },
@@ -82,12 +82,12 @@ export default function Home() {
                 Faster.
               </h1>
               <p className="text-lg text-on-surface-variant max-w-xl leading-relaxed">
-                InfinityPay helps merchants accept mobile money payments, create secure payment links, generate
-                invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web
-                apps.
+                InfinityPay helps business and services providers accept mobile money payments, create secure
+                payment links, generate invoices, and integrate payment collection into websites, mobile apps,
+                ecommerce platforms, and web apps.
               </p>
               <p className="text-sm text-on-surface-variant/80 max-w-xl">
-                Merchants can manage collected funds from their merchant portal after verification.
+                Business and services providers can manage collected funds from their portal after verification.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
