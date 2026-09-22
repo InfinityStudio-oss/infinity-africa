@@ -17,8 +17,7 @@ export function DocsShell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-on-surface-variant p-1" aria-label="Open menu">
             <Icon name="menu" />
           </button>
-          <Link href="/" className="flex items-center gap-1.5">
-            <Icon name="all_inclusive" className="text-primary text-[22px]" />
+          <Link href="/" className="flex items-center">
             <span className="text-lg font-bold tracking-tight text-primary">InfinityPay</span>
           </Link>
           <span className="hidden sm:inline text-sm font-semibold text-on-surface-variant border-l border-outline-variant pl-3 ml-1">

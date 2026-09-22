@@ -24,8 +24,7 @@ export function Footer() {
     <footer className="bg-primary border-t border-on-primary/10 w-full">
       <div className="py-16 px-4 md:px-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 max-w-[1280px] mx-auto">
         <div className="col-span-1 lg:col-span-1">
-          <div className="inline-flex items-center gap-1.5 mb-4">
-            <Icon name="all_inclusive" className="text-on-primary text-[24px]" />
+          <div className="inline-flex items-center mb-4">
             <span className="text-lg font-bold tracking-tight text-on-primary">InfinityPay</span>
           </div>
           <p className="text-base text-on-primary/80 max-w-sm">

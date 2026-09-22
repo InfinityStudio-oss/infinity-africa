@@ -35,11 +35,13 @@ describe("ReceiptCard", () => {
     expect(screen.getByText("S20690471578")).toBeInTheDocument();
   });
 
-  it("shows the InfinityPay logo mark (icon + wordmark), not plain text alone", () => {
+  it("shows the InfinityPay wordmark, with no infinity glyph beside it", () => {
     render(<ReceiptCard receipt={receipt} slug="test-slug" />);
 
-    expect(screen.getByText("all_inclusive")).toBeInTheDocument();
     expect(screen.getByText("InfinityPay")).toBeInTheDocument();
+    // The "all_inclusive" Material Symbols mark was removed from the brand
+    // lockup — the wordmark stands alone everywhere now.
+    expect(screen.queryByText("all_inclusive")).not.toBeInTheDocument();
   });
 
   it("does not show internal record IDs or the processor's name — customer-facing only", () => {

@@ -18,11 +18,10 @@ export function AdminSidebar({ open, onClose }: { open: boolean; onClose: () => 
       >
         <div className="mb-8 flex items-center gap-3 px-4 shrink-0">
           <Link href="/super-admin" className="flex flex-col gap-1 flex-1 min-w-0">
-            <span className="flex items-center gap-2">
-              <Icon name="all_inclusive" className="text-white text-[22px] shrink-0" />
+            <span className="flex items-center">
               <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
             </span>
-            <p className="text-[11px] font-semibold tracking-wide text-sidebar-text-muted pl-[30px]">
+            <p className="text-[11px] font-semibold tracking-wide text-sidebar-text-muted">
               Super Admin
             </p>
           </Link>

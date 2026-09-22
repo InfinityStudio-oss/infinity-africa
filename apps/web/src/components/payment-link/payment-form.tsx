@@ -348,8 +348,7 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
       <div className="bg-primary p-6 text-on-primary sm:p-8">
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-on-primary/70">Payment Request</p>
-          <span className="flex shrink-0 items-center gap-1.5">
-            <Icon name="all_inclusive" className="text-on-primary text-[18px]" />
+          <span className="flex shrink-0 items-center">
             <span className="text-sm font-bold tracking-tight text-on-primary">InfinityPay</span>
           </span>
         </div>

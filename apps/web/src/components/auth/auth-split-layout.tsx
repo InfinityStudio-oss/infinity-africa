@@ -22,8 +22,7 @@ export function AuthSplitLayout({
         <div className="absolute bottom-10 left-10 w-80 h-80 rounded-full bg-on-primary/5" aria-hidden />
 
         <div className="absolute top-8 left-8 z-10">
-          <Link href="/" className="inline-flex items-center gap-1.5">
-            <Icon name="all_inclusive" className="text-on-primary text-[22px]" />
+          <Link href="/" className="inline-flex items-center">
             <span className="text-lg font-bold tracking-tight text-on-primary">InfinityPay</span>
           </Link>
         </div>
@@ -81,8 +80,7 @@ export function AuthSplitLayout({
             <Icon name="arrow_back" className="text-[18px]" />
             Back to website
           </Link>
-          <div className="mb-6 flex items-center gap-1.5 lg:hidden">
-            <Icon name="all_inclusive" className="text-primary text-[22px]" />
+          <div className="mb-6 flex items-center lg:hidden">
             <span className="text-lg font-bold tracking-tight text-primary">InfinityPay</span>
           </div>
           <div className="rounded-lg border border-outline-variant bg-surface p-8 shadow-sm">{children}</div>
