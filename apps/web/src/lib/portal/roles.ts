@@ -18,7 +18,6 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[] | "*"> = {
     "/portal/collections",
     "/dashboard/invoices",
     "/portal/transactions",
-    "/portal/support",
     "/dashboard/profile",
     "/dashboard/settings",
   ],

@@ -16,5 +16,4 @@ export const PORTAL_NAV_ITEMS: PortalNavItem[] = [
   { label: "API Credentials", href: "/portal/api-credentials", icon: "vpn_key" },
   { label: "Reports", href: "/portal/reports", icon: "bar_chart" },
   { label: "Settings", href: "/dashboard/settings", icon: "settings" },
-  { label: "Support", href: "/portal/support", icon: "help" },
 ];
