@@ -12,7 +12,7 @@ export default function CreateAccountPage() {
       <h1 className="text-2xl font-bold text-on-surface">Create your InfinityPay account</h1>
       <p className="mt-2 text-sm text-on-surface-variant">
         Tell us about you and your business. We&apos;ll verify your email and review your business before activating
-        your merchant dashboard.
+        your dashboard.
       </p>
       <CreateAccountForm />
     </AuthSplitLayout>
