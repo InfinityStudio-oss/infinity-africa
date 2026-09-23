@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useActionState } from "react";
 
-import { SERVICE_NEEDED_LABELS, ServiceNeeded } from "@infinity/shared";
-
 import { resendVerificationAction, signupWithBusinessAction } from "@/lib/auth/actions";
 
 // Boxed inputs inside bordered fieldsets — each field reads as its own
@@ -17,10 +15,6 @@ const labelClass = "block text-xs font-semibold text-on-surface-variant uppercas
 const errorClass = "mt-1.5 text-xs font-medium text-error";
 const fieldsetClass = "rounded-xl border border-outline-variant bg-surface p-6";
 const legendClass = "px-1 text-sm font-bold text-on-surface";
-
-// Dynamic QR is a real collection method once onboarded — just not an
-// interest checkbox during signup (mirrors OnboardingForm).
-const SERVICES = Object.values(ServiceNeeded).filter((service) => service !== ServiceNeeded.DYNAMIC_QR);
 
 function Field({
   name,
@@ -167,10 +161,6 @@ export function CreateAccountForm() {
           <Field name="businessPhone" label="Business Phone" type="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.businessPhone} errors={err.businessPhone} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field name="physicalAddress" label="Business Address" defaultValue={v.physicalAddress} errors={err.physicalAddress} />
-          <Field name="regionCity" label="Region / City" defaultValue={v.regionCity} errors={err.regionCity} />
-        </div>
-        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="tinNumber" label="TIN" optional placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
         </div>
@@ -182,29 +172,6 @@ export function CreateAccountForm() {
           defaultValue={v.notes}
           errors={err.notes}
         />
-      </fieldset>
-
-      <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>Services needed</legend>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {SERVICES.map((service) => (
-            <label key={service} className="flex items-center gap-3 text-sm text-on-surface">
-              <input
-                type="checkbox"
-                name="servicesNeeded"
-                value={service}
-                defaultChecked
-                className="h-4 w-4 rounded border-outline-variant text-primary-container focus:ring-primary-container"
-              />
-              {SERVICE_NEEDED_LABELS[service]}
-            </label>
-          ))}
-        </div>
-        {err.servicesNeeded?.map((msg) => (
-          <p key={msg} className={errorClass}>
-            {msg}
-          </p>
-        ))}
       </fieldset>
 
       <section className="space-y-3">

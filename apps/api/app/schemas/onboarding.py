@@ -37,8 +37,14 @@ class OnboardingMerchantAccountCreate(BaseModel):
     business_name: str
     nature_of_business: str
     business_category: str
-    physical_address: str
-    region_city: str
+    # No longer collected on the Get Started form (business address and
+    # region were dropped from signup). Still non-null columns in
+    # onboarding_submissions, so they default to "" rather than None —
+    # an empty string satisfies the NOT NULL constraint without needing a
+    # migration, and the older two-step /onboarding form still sends real
+    # values.
+    physical_address: str = ""
+    region_city: str = ""
     website_url: str | None = None
     contact_phone: str
     nida_number: str = ""
@@ -48,7 +54,11 @@ class OnboardingMerchantAccountCreate(BaseModel):
     business_email: str | None = None
     business_phone: str | None = None
     notes: str | None = None
-    services_needed: list[ServiceNeeded] = Field(min_length=1)
+    # Was min_length=1 while the Get Started form asked which services a
+    # merchant wanted; that section was removed, so an empty list is now
+    # valid. The column is `not null default '{}'`, so this needs no
+    # migration either.
+    services_needed: list[ServiceNeeded] = Field(default_factory=list)
     accepted_terms: bool
     accepted_privacy: bool
 

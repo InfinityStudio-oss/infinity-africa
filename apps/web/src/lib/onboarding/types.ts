@@ -12,8 +12,10 @@ export interface OnboardingMerchantAccountInput {
   business_name: string;
   nature_of_business: string;
   business_category: string;
-  physical_address: string;
-  region_city: string;
+  // Dropped from the Get Started form; the older two-step /onboarding
+  // form still sends them, so they stay accepted, just optional.
+  physical_address?: string;
+  region_city?: string;
   website_url: string | null;
   contact_phone: string;
   nida_number: string;
@@ -22,7 +24,7 @@ export interface OnboardingMerchantAccountInput {
   business_email?: string | null;
   business_phone?: string | null;
   notes?: string | null;
-  services_needed: ServiceNeeded[];
+  services_needed?: ServiceNeeded[];
   accepted_terms: boolean;
   accepted_privacy: boolean;
 }

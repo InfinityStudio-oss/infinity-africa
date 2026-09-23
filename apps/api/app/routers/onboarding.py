@@ -53,13 +53,15 @@ async def merchant_signup(
     business_name: Annotated[str, Form()],
     nature_of_business: Annotated[str, Form()],
     business_category: Annotated[str, Form()],
-    physical_address: Annotated[str, Form()],
-    region_city: Annotated[str, Form()],
     contact_phone: Annotated[str, Form()],
     nida_number: Annotated[str, Form()],
-    services_needed: Annotated[list[ServiceNeeded], Form()],
     accepted_terms: Annotated[bool, Form()],
     accepted_privacy: Annotated[bool, Form()],
+    # Dropped from the Get Started form; the older two-step /onboarding
+    # form still sends them, so they stay accepted rather than removed.
+    physical_address: Annotated[str, Form()] = "",
+    region_city: Annotated[str, Form()] = "",
+    services_needed: Annotated[list[ServiceNeeded] | None, Form()] = None,
     website_url: Annotated[str | None, Form()] = None,
     tin_number: Annotated[str | None, Form()] = None,
     legal_business_name: Annotated[str | None, Form()] = None,
@@ -94,7 +96,7 @@ async def merchant_signup(
             business_email=business_email or None,
             business_phone=business_phone or None,
             notes=notes or None,
-            services_needed=services_needed,
+            services_needed=services_needed or [],
             accepted_terms=accepted_terms,
             accepted_privacy=accepted_privacy,
         )

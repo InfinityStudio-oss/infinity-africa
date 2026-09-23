@@ -109,8 +109,8 @@ export async function submitMerchantSignup(input: MerchantSignupInput): Promise<
   fd.set("business_name", input.business_name);
   fd.set("nature_of_business", input.nature_of_business);
   fd.set("business_category", input.business_category);
-  fd.set("physical_address", input.physical_address);
-  fd.set("region_city", input.region_city);
+  if (input.physical_address) fd.set("physical_address", input.physical_address);
+  if (input.region_city) fd.set("region_city", input.region_city);
   fd.set("contact_phone", input.contact_phone);
   fd.set("nida_number", input.nida_number);
   fd.set("accepted_terms", String(input.accepted_terms));
@@ -121,7 +121,7 @@ export async function submitMerchantSignup(input: MerchantSignupInput): Promise<
   if (input.business_email) fd.set("business_email", input.business_email);
   if (input.business_phone) fd.set("business_phone", input.business_phone);
   if (input.notes) fd.set("notes", input.notes);
-  for (const service of input.services_needed) fd.append("services_needed", service);
+  for (const service of input.services_needed ?? []) fd.append("services_needed", service);
 
   let res: Response;
   try {

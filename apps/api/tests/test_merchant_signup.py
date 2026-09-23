@@ -250,3 +250,44 @@ def test_signup_ceo_notification_includes_tin_when_provided(fake_client, fake_re
     ceo_calls = [c for c in fake_resend.calls if c["to"] == ["ceo@infinitypay.me"]]
     assert len(ceo_calls) == 1
     assert "123-456-789" in ceo_calls[0]["html"]
+
+
+# --- Fields dropped from the Get Started form ---------------------------------
+
+
+def test_signup_succeeds_without_address_region_or_services(fake_client):
+    """The Get Started form no longer collects business address, region/city
+    or "services needed", so the endpoint must accept a payload that omits
+    all three. onboarding_submissions.physical_address/region_city are
+    NOT NULL columns, so they have to land as "" rather than null, and
+    services_needed as an empty array."""
+    form = _form()
+    for dropped in ("physical_address", "region_city", "services_needed"):
+        form.pop(dropped)
+
+    response = _post(form)
+
+    assert response.status_code == 201, response.text
+    merchant_id = str(response.json()["data"]["merchant_id"])
+    submission = next(
+        r for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
+    )
+    # Empty string, never None — the column is NOT NULL.
+    assert submission["physical_address"] == ""
+    assert submission["region_city"] == ""
+    assert submission["services_needed"] == []
+
+
+def test_signup_still_accepts_address_region_and_services_when_sent(fake_client):
+    """The older two-step /onboarding form still sends all three, so making
+    them optional must not stop them being stored when they are supplied."""
+    response = _post(_form())
+
+    assert response.status_code == 201, response.text
+    merchant_id = str(response.json()["data"]["merchant_id"])
+    submission = next(
+        r for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
+    )
+    assert submission["physical_address"] == "Mbezi"
+    assert submission["region_city"] == "Dar es Salaam"
+    assert submission["services_needed"] == ["PAYMENT_LINKS"]

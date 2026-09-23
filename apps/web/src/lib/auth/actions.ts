@@ -3,7 +3,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ServiceNeeded } from "@infinity/shared";
 
 import { createClient } from "@/lib/supabase/server";
 import { getOnboardingStatus, submitMerchantSignup, OnboardingApiError } from "@/lib/onboarding/api";
@@ -89,7 +88,6 @@ export async function resendVerificationAction(_prevState: FormState, formData: 
   };
 }
 
-const VALID_SERVICES = new Set<string>(Object.values(ServiceNeeded));
 
 const SIGNUP_SUCCESS_VERIFY =
   "Account created. Please verify your email, then wait for InfinityPay approval.";
@@ -122,16 +120,9 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const businessCategory = get("businessCategory");
   const businessEmail = get("businessEmail");
   const businessPhone = get("businessPhone");
-  const physicalAddress = get("physicalAddress");
-  const regionCity = get("regionCity");
   const tinNumber = get("tinNumber");
   const websiteOrAppLink = get("websiteOrAppLink");
   const notes = get("notes");
-
-  const servicesNeeded = formData
-    .getAll("servicesNeeded")
-    .map((v) => String(v))
-    .filter((v): v is ServiceNeeded => VALID_SERVICES.has(v));
 
   const agreedToTerms = formData.get("agreedToTerms") === "on";
   const agreedToPrivacy = formData.get("agreedToPrivacy") === "on";
@@ -147,8 +138,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
     businessCategory,
     businessEmail,
     businessPhone,
-    physicalAddress,
-    regionCity,
     tinNumber,
     websiteOrAppLink,
     notes,
@@ -174,9 +163,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   if (!businessEmail) errors.businessEmail = ["Business email is required."];
   else if (!isEmail(businessEmail)) errors.businessEmail = ["Enter a valid business email address."];
   if (!businessPhone) errors.businessPhone = ["Business phone is required."];
-  if (!physicalAddress) errors.physicalAddress = ["Business address is required."];
-  if (!regionCity) errors.regionCity = ["Region/city is required."];
-  if (servicesNeeded.length === 0) errors.servicesNeeded = ["Select at least one service you need."];
 
   if (!agreedToTerms) errors.agreedToTerms = ["You must agree to the Terms of Service."];
   if (!agreedToPrivacy) errors.agreedToPrivacy = ["You must agree to the Privacy Policy."];
@@ -204,12 +190,9 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
       nature_of_business: notes || businessCategory,
       business_email: businessEmail,
       business_phone: businessPhone,
-      physical_address: physicalAddress,
-      region_city: regionCity,
       tin_number: tinNumber || null,
       website_url: websiteOrAppLink || null,
       notes: notes || null,
-      services_needed: servicesNeeded,
       accepted_terms: agreedToTerms,
       accepted_privacy: agreedToPrivacy,
     });
