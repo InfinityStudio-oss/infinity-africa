@@ -5,9 +5,13 @@ import { useActionState } from "react";
 
 import { loginAction } from "@/lib/auth/actions";
 
+// Boxed inputs, matching the signup form — shared by all three variants
+// (merchant, admin, public), so the admin login picks this up too. That is
+// deliberate: two different input styles across the same product's login
+// screens is worse than one consistent one.
 const inputClass =
-  "w-full border-0 border-b border-outline-variant bg-transparent pb-2 text-sm text-on-surface placeholder-outline focus:outline-none focus:border-primary-container transition-colors";
-const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2";
+  "mt-1.5 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface placeholder-outline transition-colors focus:border-primary-container focus:outline-none focus:ring-2 focus:ring-primary-container/40";
+const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide";
 const errorClass = "mt-1.5 text-xs font-medium text-error";
 
 export function LoginForm({ variant }: { variant: "public" | "merchant" | "admin" }) {

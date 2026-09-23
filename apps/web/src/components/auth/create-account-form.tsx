@@ -7,11 +7,16 @@ import { SERVICE_NEEDED_LABELS, ServiceNeeded } from "@infinity/shared";
 
 import { resendVerificationAction, signupWithBusinessAction } from "@/lib/auth/actions";
 
+// Boxed inputs inside bordered fieldsets — each field reads as its own
+// control rather than a line on a page, which is what makes a long
+// signup form scannable. InfinityPay's own colour tokens throughout; only
+// the layout is borrowed.
 const inputClass =
-  "w-full border-0 border-b border-outline-variant bg-transparent pb-2 text-sm text-on-surface placeholder-outline focus:outline-none focus:border-primary-container transition-colors";
-const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2";
+  "mt-1.5 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface placeholder-outline transition-colors focus:border-primary-container focus:outline-none focus:ring-2 focus:ring-primary-container/40";
+const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide";
 const errorClass = "mt-1.5 text-xs font-medium text-error";
-const sectionHeadingClass = "text-base font-semibold text-on-surface";
+const fieldsetClass = "rounded-xl border border-outline-variant bg-surface p-6";
+const legendClass = "px-1 text-sm font-bold text-on-surface";
 
 // Dynamic QR is a real collection method once onboarded — just not an
 // interest checkbox during signup (mirrors OnboardingForm).
@@ -40,7 +45,11 @@ function Field({
     <div>
       <label htmlFor={name} className={labelClass}>
         {label}
-        {optional && <span className="normal-case font-normal text-outline"> (optional)</span>}
+        {optional ? (
+          <span className="normal-case font-normal text-outline"> (optional)</span>
+        ) : (
+          <span aria-hidden className="text-error"> *</span>
+        )}
       </label>
       <input
         id={name}
@@ -124,15 +133,15 @@ export function CreateAccountForm() {
         <div className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">{state.formError}</div>
       )}
 
-      <section className="space-y-6">
-        <h2 className={sectionHeadingClass}>Account owner</h2>
-        <div className="grid sm:grid-cols-2 gap-6">
+      <fieldset className={fieldsetClass}>
+        <legend className={legendClass}>Account owner</legend>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="firstName" label="First Name" autoComplete="given-name" placeholder="Amani" defaultValue={v.firstName} errors={err.firstName} />
           <Field name="lastName" label="Last Name" autoComplete="family-name" placeholder="Mushi" defaultValue={v.lastName} errors={err.lastName} />
           <Field name="email" label="Work Email" type="email" autoComplete="off" placeholder="you@business.co.tz" defaultValue={v.email} errors={err.email} />
           <Field name="phone" label="Phone Number" type="tel" autoComplete="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.phone} errors={err.phone} />
         </div>
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <div>
             <Field name="password" label="Password" type="password" autoComplete="new-password" errors={err.password} />
             <p className="mt-1.5 text-xs text-on-surface-variant">
@@ -141,27 +150,27 @@ export function CreateAccountForm() {
           </div>
           <Field name="confirmPassword" label="Confirm Password" type="password" autoComplete="new-password" errors={err.confirmPassword} />
         </div>
-      </section>
+      </fieldset>
 
-      <section className="space-y-6">
-        <h2 className={sectionHeadingClass}>Business details</h2>
-        <div className="grid sm:grid-cols-2 gap-6">
+      <fieldset className={fieldsetClass}>
+        <legend className={legendClass}>Business details</legend>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessName" label="Business / Trading Name" defaultValue={v.businessName} errors={err.businessName} />
           <Field name="legalBusinessName" label="Legal Business Name" optional defaultValue={v.legalBusinessName} errors={err.legalBusinessName} />
         </div>
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessCategory" label="Business Type" placeholder="e.g. Retail, Logistics, Restaurant" defaultValue={v.businessCategory} errors={err.businessCategory} />
           <Field name="nidaNumber" label="NIDA Number" placeholder="20-digit National ID number" defaultValue={v.nidaNumber} errors={err.nidaNumber} />
         </div>
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessEmail" label="Business Email" type="email" placeholder="hello@business.co.tz" defaultValue={v.businessEmail} errors={err.businessEmail} />
           <Field name="businessPhone" label="Business Phone" type="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.businessPhone} errors={err.businessPhone} />
         </div>
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="physicalAddress" label="Business Address" defaultValue={v.physicalAddress} errors={err.physicalAddress} />
           <Field name="regionCity" label="Region / City" defaultValue={v.regionCity} errors={err.regionCity} />
         </div>
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="tinNumber" label="TIN" optional placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
         </div>
@@ -173,11 +182,11 @@ export function CreateAccountForm() {
           defaultValue={v.notes}
           errors={err.notes}
         />
-      </section>
+      </fieldset>
 
-      <section className="space-y-4">
-        <h2 className={sectionHeadingClass}>Services needed</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
+      <fieldset className={fieldsetClass}>
+        <legend className={legendClass}>Services needed</legend>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {SERVICES.map((service) => (
             <label key={service} className="flex items-center gap-3 text-sm text-on-surface">
               <input
@@ -196,7 +205,7 @@ export function CreateAccountForm() {
             {msg}
           </p>
         ))}
-      </section>
+      </fieldset>
 
       <section className="space-y-3">
         {[
