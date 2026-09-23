@@ -235,7 +235,7 @@ def export_my_wallet_ledger(
     )
     workbook_bytes = build_wallet_ledger_workbook(merchant=merchant, rows=rows)
 
-    filename = f"infinity-africa-wallet-ledger-{start_date.isoformat()}-to-{end_date.isoformat()}.xlsx"
+    filename = f"infinitypay-wallet-ledger-{start_date.isoformat()}-to-{end_date.isoformat()}.xlsx"
     return Response(
         content=workbook_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

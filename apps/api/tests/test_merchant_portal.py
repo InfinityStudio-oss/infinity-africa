@@ -1169,7 +1169,7 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
     assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert (
         response.headers["content-disposition"]
-        == 'attachment; filename="infinity-africa-wallet-ledger-2026-08-01-to-2026-08-31.xlsx"'
+        == 'attachment; filename="infinitypay-wallet-ledger-2026-08-01-to-2026-08-31.xlsx"'
     )
 
     wb = load_workbook(io.BytesIO(response.content))

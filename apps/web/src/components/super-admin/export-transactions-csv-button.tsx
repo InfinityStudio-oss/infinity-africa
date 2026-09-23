@@ -61,7 +61,7 @@ export function ExportTransactionsCsvButton({ transactions }: { transactions: Ad
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `infinity-africa-platform-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `infinitypay-platform-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
