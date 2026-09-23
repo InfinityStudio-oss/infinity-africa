@@ -32,10 +32,10 @@ export function AuthSplitLayout({
             Welcome to InfinityPay
           </p>
           <p className="mt-4 max-w-sm text-on-primary/80 leading-relaxed">
-            Payment infrastructure for growing merchants — collect, link, invoice, and integrate from one platform.
+            Payment infrastructure for growing businesses and service providers — collect, link, invoice, and integrate from one platform.
           </p>
           <p className="mt-4 max-w-sm text-on-primary/80 leading-relaxed">
-            Access your merchant portal to manage payment links, invoices, transactions, and API integration.
+            Access your dashboard to manage payment links, invoices, transactions, and API integration.
           </p>
         </div>
 

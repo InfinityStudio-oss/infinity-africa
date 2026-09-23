@@ -22,7 +22,7 @@ vi.mock("@/lib/portal/api", () => ({
   acceptMyInvite: (...args: unknown[]) => acceptMyInvite(...args),
 }));
 
-const INVALID_INVITE_MESSAGE = "Invitation expired or invalid. Please ask your merchant admin to send a new invitation.";
+const INVALID_INVITE_MESSAGE = "Invitation expired or invalid. Please ask your account admin to send a new invitation.";
 
 function setValidInviteLinkUrl() {
   window.history.replaceState(null, "", "/dashboard/invite/accept#access_token=at&refresh_token=rt&type=invite");

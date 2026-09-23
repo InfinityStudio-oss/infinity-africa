@@ -68,7 +68,7 @@ export function ReportTransactionForm() {
         </div>
         <h3 className="text-xl font-semibold text-on-surface mb-2">Report received</h3>
         <p className="text-sm text-on-surface-variant max-w-md mx-auto">
-          Your report has been received. InfinityPay will review the transaction and contact the merchant where
+          Your report has been received. InfinityPay will review the transaction and contact the business where
           necessary.
         </p>
       </div>
@@ -101,7 +101,7 @@ export function ReportTransactionForm() {
           <input value={transactionReference} onChange={(e) => setTransactionReference(e.target.value)} placeholder="TXN-..." className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Merchant / Business Name (if known)</label>
+          <label className={labelClass}>Business Name (if known)</label>
           <input value={merchantName} onChange={(e) => setMerchantName(e.target.value)} className={inputClass} />
         </div>
       </div>

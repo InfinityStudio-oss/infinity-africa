@@ -28,7 +28,7 @@ export function Footer() {
             <span className="text-lg font-bold tracking-tight text-on-primary">InfinityPay</span>
           </div>
           <p className="text-base text-on-primary/80 max-w-sm">
-            Secure payment infrastructure for growing merchants — collect, link, invoice, and integrate from one
+            Secure payment infrastructure for growing businesses and service providers — collect, link, invoice,
             platform.
           </p>
         </div>

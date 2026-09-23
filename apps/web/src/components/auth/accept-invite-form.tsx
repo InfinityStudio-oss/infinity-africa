@@ -8,7 +8,7 @@ import { acceptMyInvite } from "@/lib/portal/api";
 import { PASSWORD_RULES, validatePassword } from "@/lib/auth/password";
 import { useRecoveryLinkSession } from "@/lib/auth/use-recovery-link-session";
 
-const INVALID_INVITE_MESSAGE = "Invitation expired or invalid. Please ask your merchant admin to send a new invitation.";
+const INVALID_INVITE_MESSAGE = "Invitation expired or invalid. Please ask your account admin to send a new invitation.";
 
 const inputClass =
   "w-full border-0 border-b border-outline-variant bg-transparent pb-2 text-sm text-on-surface placeholder-outline focus:outline-none focus:border-primary-container transition-colors";
@@ -64,8 +64,8 @@ export function AcceptInviteForm({
       setStatus("idle");
       setErrors([
         err instanceof Error
-          ? `Your password was set, but we couldn't finish linking your account: ${err.message} Try logging in — if that doesn't work, ask your merchant admin for help.`
-          : "Your password was set, but we couldn't finish linking your account. Try logging in — if that doesn't work, ask your merchant admin for help.",
+          ? `Your password was set, but we couldn't finish linking your account: ${err.message} Try logging in — if that doesn't work, ask your account admin for help.`
+          : "Your password was set, but we couldn't finish linking your account. Try logging in — if that doesn't work, ask your account admin for help.",
       ]);
       return;
     }

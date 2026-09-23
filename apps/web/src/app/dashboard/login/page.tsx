@@ -2,7 +2,7 @@ import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata = {
-  title: "Merchant Login | InfinityPay",
+  title: "Log in | InfinityPay",
 };
 
 export default async function MerchantLoginPage({
