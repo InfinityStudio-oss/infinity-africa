@@ -22,6 +22,7 @@ function Field({
   type = "text",
   placeholder,
   optional,
+  hideOptionalHint,
   autoComplete,
   defaultValue,
   errors,
@@ -31,6 +32,9 @@ function Field({
   type?: string;
   placeholder?: string;
   optional?: boolean;
+  /** Optional, but without the "(optional)" hint — for fields where the
+   *  absence of the required asterisk is signal enough. */
+  hideOptionalHint?: boolean;
   autoComplete?: string;
   defaultValue?: string;
   errors?: string[];
@@ -40,7 +44,7 @@ function Field({
       <label htmlFor={name} className={labelClass}>
         {label}
         {optional ? (
-          <span className="normal-case font-normal text-outline"> (optional)</span>
+          hideOptionalHint ? null : <span className="normal-case font-normal text-outline"> (optional)</span>
         ) : (
           <span aria-hidden className="text-error"> *</span>
         )}
@@ -150,7 +154,7 @@ export function CreateAccountForm() {
         <legend className={legendClass}>Business details</legend>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessName" label="Business / Trading Name" defaultValue={v.businessName} errors={err.businessName} />
-          <Field name="legalBusinessName" label="Legal Business Name" optional defaultValue={v.legalBusinessName} errors={err.legalBusinessName} />
+          <Field name="legalBusinessName" label="Legal Business Name" optional hideOptionalHint defaultValue={v.legalBusinessName} errors={err.legalBusinessName} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessCategory" label="Business Type" placeholder="e.g. Retail, Logistics, Restaurant" defaultValue={v.businessCategory} errors={err.businessCategory} />
@@ -161,17 +165,9 @@ export function CreateAccountForm() {
           <Field name="businessPhone" label="Business Phone" type="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.businessPhone} errors={err.businessPhone} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field name="tinNumber" label="TIN" optional placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
+          <Field name="tinNumber" label="TIN" optional hideOptionalHint placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
         </div>
-        <Field
-          name="notes"
-          label="Notes / Description"
-          optional
-          placeholder="Anything else you'd like InfinityPay to know about your business"
-          defaultValue={v.notes}
-          errors={err.notes}
-        />
       </fieldset>
 
       <section className="space-y-3">

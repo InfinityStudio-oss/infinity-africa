@@ -19,7 +19,7 @@ export default function ReportTransactionPage() {
             <SectionHeading
               eyebrow="Customer Support"
               title="Report a Transaction"
-              description="If you paid a merchant through InfinityPay and something went wrong — a product or service you didn't receive, an unauthorized payment, or a duplicate charge — let us know and we'll review it."
+              description="If you paid a business through InfinityPay and something went wrong — a product or service you didn't receive, an unauthorized payment, or a duplicate charge — let us know and we'll review it."
             />
           </div>
         </section>

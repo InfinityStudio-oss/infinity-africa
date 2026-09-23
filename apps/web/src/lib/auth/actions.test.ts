@@ -135,7 +135,7 @@ describe("signupWithBusinessAction", () => {
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
-  it("combines first and last name into full_name, and derives nature_of_business from notes/business type", async () => {
+  it("combines first and last name into full_name, and reuses the business type as nature_of_business", async () => {
     submitMerchantSignup.mockResolvedValue({
       merchant_id: "m1",
       merchant_code: "MER-1",
@@ -144,16 +144,15 @@ describe("signupWithBusinessAction", () => {
     });
     const { signupWithBusinessAction } = await importActions();
 
+    // The Notes field was removed from signup, so nature_of_business (a
+    // NOT NULL column) is now always the business type — never notes, and
+    // notes is no longer sent at all.
     await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, notes: "Also sells on Instagram" }));
-    expect(submitMerchantSignup).toHaveBeenCalledWith(
-      expect.objectContaining({ full_name: "Amani Mushi", nature_of_business: "Also sells on Instagram", notes: "Also sells on Instagram" }),
+    const payload = submitMerchantSignup.mock.calls[0][0];
+    expect(payload).toEqual(
+      expect.objectContaining({ full_name: "Amani Mushi", nature_of_business: "Retail" }),
     );
-
-    submitMerchantSignup.mockClear();
-    await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, notes: "" }));
-    expect(submitMerchantSignup).toHaveBeenCalledWith(
-      expect.objectContaining({ nature_of_business: "Retail", notes: null }),
-    );
+    expect(payload).not.toHaveProperty("notes");
   });
 
   it("on success (email confirmation required) shows the verify-then-wait message and offers resend", async () => {

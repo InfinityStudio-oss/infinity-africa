@@ -58,10 +58,7 @@ const HOW_IT_WORKS = [
 ];
 
 const SECURITY_POINTS = [
-  { icon: "lock", label: "Bank-grade encryption for every transaction" },
   { icon: "monitoring", label: "Real-time fraud monitoring and alerts" },
-  { icon: "account_balance", label: "Segregated business funds" },
-  { icon: "verified", label: "Registered Payment Service Provider in Tanzania" },
   { icon: "groups", label: "Role-based access control for your team" },
   { icon: "api", label: "Secure, versioned REST API with signed webhooks" },
 ];
@@ -248,14 +245,14 @@ export default function Home() {
               <span className="text-xs font-semibold text-primary-container uppercase tracking-wide">Security</span>
               <h2 className="text-2xl md:text-4xl font-bold mt-2 mb-4 text-on-surface tracking-tight">Security and Trust</h2>
               <p className="text-base text-on-surface-variant mb-8 max-w-lg">
-                InfinityPay is built to move your customers&apos; money with the same rigor as a bank — so you can focus on
-                growing your business.
+                InfinityPay is built to move your customers&apos; money securely — so you can focus on growing your
+                business.
               </p>
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
+              <div className="flex flex-col gap-5">
                 {SECURITY_POINTS.map((point) => (
                   <div key={point.label} className="flex items-start gap-3">
                     <Icon name={point.icon} className="text-primary-container text-[22px]" />
-                    <span className="text-sm text-on-surface-variant leading-relaxed">{point.label}</span>
+                    <span className="text-base text-on-surface-variant leading-relaxed">{point.label}</span>
                   </div>
                 ))}
               </div>

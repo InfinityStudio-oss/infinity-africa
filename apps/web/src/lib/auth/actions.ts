@@ -122,7 +122,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const businessPhone = get("businessPhone");
   const tinNumber = get("tinNumber");
   const websiteOrAppLink = get("websiteOrAppLink");
-  const notes = get("notes");
 
   const agreedToTerms = formData.get("agreedToTerms") === "on";
   const agreedToPrivacy = formData.get("agreedToPrivacy") === "on";
@@ -140,7 +139,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
     businessPhone,
     tinNumber,
     websiteOrAppLink,
-    notes,
   };
 
   const errors: Record<string, string[]> = {};
@@ -183,16 +181,15 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
       business_name: businessName,
       legal_business_name: legalBusinessName || null,
       business_category: businessCategory,
-      // Required by the backend, but no longer a separate visible field on
-      // this form (see Part 1 of the Get Started brief) — notes doubles
-      // as it when provided, falling back to the business type so the
-      // NOT NULL column is always satisfied without asking twice.
-      nature_of_business: notes || businessCategory,
+      // Required (NOT NULL) by the backend but not asked for separately on
+      // this form — the business type answers the same question, so it is
+      // reused rather than asking twice. The Notes field that used to feed
+      // this was removed from signup.
+      nature_of_business: businessCategory,
       business_email: businessEmail,
       business_phone: businessPhone,
       tin_number: tinNumber || null,
       website_url: websiteOrAppLink || null,
-      notes: notes || null,
       accepted_terms: agreedToTerms,
       accepted_privacy: agreedToPrivacy,
     });
