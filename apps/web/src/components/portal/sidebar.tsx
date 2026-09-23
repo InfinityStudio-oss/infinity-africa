@@ -26,7 +26,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       <aside
         className={`fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-sidebar to-sidebar-strong shadow-lg z-50 flex flex-col py-8 px-4 overflow-y-auto transition-transform duration-200 md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="mb-8 flex items-center gap-3 px-4 shrink-0">
+        <div className="mb-5 flex items-center gap-3 px-4 shrink-0">
           <Link href="/dashboard/overview" className="flex items-center flex-1 min-w-0">
             <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
           </Link>
@@ -35,7 +35,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-0.5">
           {visibleNavItems.map((item) => {
             const isActive =
               item.href === "/dashboard/overview" ? pathname === "/dashboard/overview" : pathname.startsWith(item.href);
@@ -46,8 +46,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 onClick={onClose}
                 className={
                   isActive
-                    ? "flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-active-bg text-sidebar-active-text font-bold text-sm shadow-sm"
-                    : "flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-text/90 hover:bg-sidebar-hover hover:text-white transition-colors text-sm font-medium"
+                    ? "flex items-center gap-2.5 px-4 py-2 rounded-lg bg-sidebar-active-bg text-sidebar-active-text font-bold text-sm shadow-sm"
+                    : "flex items-center gap-2.5 px-4 py-2 rounded-lg text-sidebar-text/90 hover:bg-sidebar-hover hover:text-white transition-colors text-sm font-medium"
                 }
               >
                 <Icon name={item.icon} filled={isActive} className="shrink-0" />
