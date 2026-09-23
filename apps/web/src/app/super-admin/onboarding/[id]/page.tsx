@@ -31,7 +31,7 @@ export default async function OnboardingDetailPage(props: PageProps<"/super-admi
     <div className="space-y-8">
       <PageHeader
         title={submission.business_name}
-        description={`${submission.merchant_code ? `Merchant ID: ${submission.merchant_code} · ` : ""}Submitted ${formatDateTime(submission.submitted_at)}`}
+        description={`${submission.merchant_code ? `ID: ${submission.merchant_code} · ` : ""}Submitted ${formatDateTime(submission.submitted_at)}`}
         action={<StatusBadge label={ACCOUNT_STATUS_LABELS[submission.review_status]} tone={ACCOUNT_TONE[submission.review_status]} dot />}
       />
 

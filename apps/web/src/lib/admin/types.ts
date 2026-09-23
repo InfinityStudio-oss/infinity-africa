@@ -30,7 +30,7 @@ export type MerchantAccountStatus = "pending" | "active" | "suspended" | "closed
 
 export interface Merchant {
   merchant_id: string;
-  /** Human-friendly Merchant ID (27 + 6 digits) — identification only,
+  /** Human-friendly account ID (27 + 6 digits) — identification only,
    * never an auth secret. Null only for defensive typing; a real merchant
    * always has one after supabase/migrations/20260829010000. */
   merchant_code: string | null;

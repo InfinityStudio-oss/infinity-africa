@@ -18,7 +18,7 @@ describe("PaymentLinksApiPage", () => {
     expect(screen.getAllByText(/WALLET_PUSH/).length).toBeGreaterThan(0);
   });
 
-  it("no longer asks the merchant to set allowed_payment_methods on creation", () => {
+  it("no longer asks the business to set allowed_payment_methods on creation", () => {
     render(<PaymentLinksApiPage />);
 
     expect(screen.queryByText(/"allowed_payment_methods": \["USSD_PUSH"/)).not.toBeInTheDocument();

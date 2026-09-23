@@ -366,7 +366,7 @@ export interface MerchantUser {
  * (GET/PATCH /v1/merchant/me, /v1/merchants/{id}). */
 export interface MerchantProfile {
   id: string;
-  /** Human-friendly Merchant ID (27 + 6 digits) — identification only, not
+  /** Human-friendly account ID (27 + 6 digits) — identification only, not
    * a secret. Nullable purely for defensive typing (older API deploys
    * before this field existed); a real merchant always has one. */
   merchant_code: string | null;

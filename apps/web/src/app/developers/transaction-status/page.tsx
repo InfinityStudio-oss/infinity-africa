@@ -34,7 +34,7 @@ export default function TransactionStatusApiPage() {
         <h2 className="text-xl font-semibold text-on-surface mb-3">Authentication</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           Requires the <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">transactions:read</code> scope
-          on the API key used. A key only ever sees transactions belonging to its own merchant.
+          on the API key used. A key only ever sees transactions belonging to its own account.
         </p>
         <CodeBlock language="bash — cURL">{`curl https://api.infinitypay.me/v1/transactions/TXN-4821AB \\
   -H "Authorization: Bearer inf_live_xxxxxxxxxxxxx"`}</CodeBlock>
@@ -95,8 +95,8 @@ export default function TransactionStatusApiPage() {
       <section>
         <h2 className="text-xl font-semibold text-on-surface mb-3">404 — reference not found</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Returned for an unknown reference, or one belonging to a different merchant than your API key — the two
-          cases are indistinguishable by design, so a key can never be used to probe for another merchant&apos;s
+          Returned for an unknown reference, or one belonging to a different account than your API key — the two
+          cases are indistinguishable by design, so a key can never be used to probe for another account&apos;s
           transaction references.
         </p>
         <Callout title="Prefer webhooks for real-time updates">

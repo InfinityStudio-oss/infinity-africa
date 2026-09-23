@@ -11,7 +11,7 @@ export default function CurlExamplesPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Examples</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">cURL Examples</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        Copy-pasteable requests for every core flow. Swap in your own API key, merchant ID, and a fresh{" "}
+        Copy-pasteable requests for every core flow. Swap in your own API key, ID, and a fresh{" "}
         <code className="font-mono text-sm bg-surface-container-low px-1.5 py-0.5 rounded">Idempotency-Key</code> (a
         UUID) per attempt.
       </p>

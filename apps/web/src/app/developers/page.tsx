@@ -79,7 +79,7 @@ Local dev    http://localhost:8000`}</CodeBlock>
         <h2 className="text-xl font-semibold text-on-surface mb-3">Authentication</h2>
         <p className="text-sm text-on-surface-variant mb-4">
           Server-to-server requests — from your backend, not a browser — authenticate with an API key generated in
-          the Merchant Portal, sent as an{" "}
+          the dashboard, sent as an{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">Authorization: Bearer</code> header
           (or the equivalent <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-API-Key</code> header).
           Full detail, including scopes, sandbox vs. live keys, and key rotation, is in{" "}
@@ -130,7 +130,7 @@ Local dev    http://localhost:8000`}</CodeBlock>
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Rate limits</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed">
-          Each merchant API key is limited to 120 requests per minute by default. Responses include no special
+          Each API key is limited to 120 requests per minute by default. Responses include no special
           rate-limit headers yet — if you need a higher limit for a high-volume integration,{" "}
           <Link href="/#contact" className="text-primary font-semibold hover:underline">
             contact us

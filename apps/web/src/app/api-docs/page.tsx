@@ -119,7 +119,7 @@ export default function ApiDocsPage() {
 
         <section className="py-16 px-4 md:px-10 bg-surface">
           <div className="max-w-[1280px] mx-auto">
-            <SectionHeading eyebrow="Merchant Account Operations" title="Beyond Collection" description="A small set of account-level operations live outside the public API docs, gated behind merchant verification." />
+            <SectionHeading eyebrow="Account Operations" title="Beyond Collection" description="A small set of account-level operations live outside the public API docs, gated behind account verification." />
             <div className="mt-10 max-w-2xl mx-auto bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-6 flex items-start gap-4">
               <div className="w-11 h-11 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
                 <Icon name="lock" className="text-primary-container text-[22px]" />
@@ -127,8 +127,8 @@ export default function ApiDocsPage() {
               <div>
                 <h3 className="text-sm font-bold text-on-surface mb-1.5">Withdrawal APIs</h3>
                 <p className="text-sm text-on-surface-variant leading-relaxed">
-                  Withdrawal APIs are available to approved merchants after onboarding and verification. Reference
-                  documentation lives in the authenticated merchant/developer portal.
+                  Withdrawal APIs are available to approved businesses after onboarding and verification. Reference
+                  documentation lives in the authenticated dashboard.
                 </p>
               </div>
             </div>
@@ -137,8 +137,8 @@ export default function ApiDocsPage() {
 
         <CTASection
           title="Start integrating today"
-          description="Create a merchant account, then generate a sandbox key from the Merchant Portal to make your first API call in minutes."
-          primaryLabel="Create Merchant Account to Generate API Keys"
+          description="Create a account, then generate a sandbox key from the dashboard to make your first API call in minutes."
+          primaryLabel="Create an Account to Generate API Keys"
           primaryHref="/create-account"
           secondaryLabel="Already have an account? Log in"
           secondaryHref="/dashboard/login"

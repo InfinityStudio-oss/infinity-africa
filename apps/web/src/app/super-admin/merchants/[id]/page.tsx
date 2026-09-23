@@ -99,7 +99,7 @@ export default async function SuperAdminMerchantDetailPage({ params }: { params:
     <div className="space-y-8">
       <PageHeader
         title={merchant.business_name}
-        description={`${merchant.merchant_code ? `Merchant ID: ${merchant.merchant_code} · ` : ""}${merchant.email}${merchant.contact_phone ? ` · ${merchant.contact_phone}` : ""}`}
+        description={`${merchant.merchant_code ? `ID: ${merchant.merchant_code} · ` : ""}${merchant.email}${merchant.contact_phone ? ` · ${merchant.contact_phone}` : ""}`}
         action={<StatusBadge {...badge} />}
       />
 

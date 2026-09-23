@@ -8,9 +8,9 @@ export const metadata = {
 };
 
 const EVENTS: Array<{ event: string; description: string; live: boolean }> = [
-  { event: "collection.success", description: "A collection reached successful — the merchant wallet was credited. The only event safe to mark an order paid from.", live: true },
+  { event: "collection.success", description: "A collection reached successful — the business wallet was credited. The only event safe to mark an order paid from.", live: true },
   { event: "collection.failed", description: "A push or QR collection was declined, rejected, or timed out.", live: true },
-  { event: "collection.pending_review", description: "Held before crediting — the payer's phone matched the merchant's own registered phone (self-payment/\"own till\" risk). Requires Super Admin review.", live: true },
+  { event: "collection.pending_review", description: "Held before crediting — the payer's phone matched the business's own registered phone (self-payment/\"own till\" risk). Requires Super Admin review.", live: true },
   { event: "collection.reversed", description: "A previously successful collection was reversed by the provider after settlement — the wallet credit was clawed back.", live: true },
   { event: "disbursement.success", description: "A payout was delivered.", live: true },
   { event: "disbursement.failed", description: "A payout was declined; its balance reservation was reversed.", live: true },
@@ -34,7 +34,7 @@ const LIFECYCLE: Array<{ status: string; meaning: string }> = [
   { status: "created", meaning: "Collection created (an Infinity Payment Page with no method chosen yet). Payment has not started." },
   { status: "processing", meaning: "A prompt was sent or a QR/token was generated. The customer has not yet approved anything." },
   { status: "pending_clearance", meaning: "The provider signaled completion, but a review step still applies before funds become available (currently: self-payment/\"own till\" risk review). Not yet safe to treat as paid." },
-  { status: "successful", meaning: "Final, safe, completed state. The merchant wallet was credited. The only status safe to mark an order paid from." },
+  { status: "successful", meaning: "Final, safe, completed state. The wallet was credited. The only status safe to mark an order paid from." },
   { status: "failed", meaning: "The attempt did not complete. Not payable, not credited." },
   { status: "cancelled", meaning: "The attempt was cancelled. Not payable, not credited." },
   { status: "reversed", meaning: "Was successful, then clawed back by the provider after settlement. Not credited — treat exactly like a failed payment." },
@@ -53,7 +53,7 @@ export default function WebhooksPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Configuring your endpoint</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Set your webhook URL and choose which events to subscribe to from the Merchant Portal&apos;s{" "}
+          Set your webhook URL and choose which events to subscribe to from the dashboard&apos;s{" "}
           <strong>Webhooks</strong> page — generate a signing secret there too (shown once, like an API key), and use
           the page&apos;s <strong>Send Test Webhook</strong> button to confirm your endpoint is reachable before
           going live. The same page shows the status of your most recent delivery attempt.
@@ -153,7 +153,7 @@ export default function WebhooksPage() {
 }`}</CodeBlock>
         <p className="text-xs text-on-surface-variant leading-relaxed mt-3">
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">merchant_code</code> is
-          your Merchant ID — identification only, never a secret and never usable as an API key.{" "}
+          your ID — identification only, never a secret and never usable as an API key.{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">reference</code> and{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">merchant_reference</code>{" "}
           are the same value — kept as two keys so existing integrations parsing{" "}
@@ -170,7 +170,7 @@ export default function WebhooksPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Verifying a delivery</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Every delivery is signed with your merchant&apos;s webhook secret, sent as{" "}
+          Every delivery is signed with your&apos;s webhook secret, sent as{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-Infinity-Signature</code>: an
           HMAC-SHA256 hex digest of the exact raw request body. Recompute it and compare — don&apos;t trust a
           delivery that doesn&apos;t match, and use a constant-time comparison to avoid leaking timing information.

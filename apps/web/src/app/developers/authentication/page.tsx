@@ -14,7 +14,7 @@ export default function AuthenticationPage() {
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">API Key Authentication</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
         Every server-to-server call to InfinityPay is authenticated with an API key — a long-lived credential scoped to
-        your merchant account. There&apos;s no OAuth dance, no token refresh: generate a key once, send it on every
+        your account. There&apos;s no OAuth dance, no token refresh: generate a key once, send it on every
         request.
       </p>
 
@@ -33,7 +33,7 @@ export default function AuthenticationPage() {
           <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-5">
             <h3 className="text-sm font-bold text-on-surface mb-1.5">Dashboard session — for the InfinityPay portal only</h3>
             <p className="text-sm text-on-surface-variant leading-relaxed">
-              The merchant dashboard itself authenticates with a Supabase Auth session token, also sent as{" "}
+              The dashboard itself authenticates with a Supabase Auth session token, also sent as{" "}
               <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">Authorization: Bearer &lt;access_token&gt;</code> —
               InfinityPay tells the two apart by prefix, not by header. You won&apos;t use this in your own integration
               — it&apos;s only relevant if you&apos;re embedding the InfinityPay dashboard itself.
@@ -45,9 +45,9 @@ export default function AuthenticationPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Generating a key</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Full API credentials are only ever generated inside the authenticated Merchant Portal — sign in at{" "}
+          Full API credentials are only ever generated inside the authenticated dashboard — sign in at{" "}
           <a href="/dashboard/login" className="text-primary font-semibold hover:underline">
-            Merchant Portal
+            dashboard
           </a>
           , go to <strong>API Keys</strong>, choose <strong>Sandbox</strong> or <strong>Live</strong>, name the key,
           and check the scopes it needs (least privilege — a checkout integration only needs{" "}
@@ -173,7 +173,7 @@ Authorization: Bearer inf_live_9f2a1c3bd8e7...`}</CodeBlock>
           </li>
           <li>
             <strong className="text-on-surface">Enable IP whitelisting</strong> — requests only succeed from IPs you
-            explicitly approve. Add them from the Merchant Portal&apos;s <strong>IP Allowlist</strong> page (label, IP
+            explicitly approve. Add them from the dashboard&apos;s <strong>IP Allowlist</strong> page (label, IP
             or CIDR, environment); each starts <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">pending</code> until
             a Super Admin approves it. A request from an unapproved IP gets a 403, and the attempt is logged.
           </li>
@@ -190,7 +190,7 @@ Authorization: Bearer inf_live_9f2a1c3bd8e7...`}</CodeBlock>
         <EndpointRow method="PATCH" path="/v1/merchant/api-keys/{key_id}/revoke" description="Revoke a key immediately — any request using it afterward gets 401." auth="MERCHANT_ADMIN, DEVELOPER (dashboard session)" />
         <EndpointRow method="POST" path="/v1/merchant/api-keys/{key_id}/rotate" description="Revoke a key and create its replacement (same name/environment/scopes/IP-whitelist choice) in one call. The new plaintext key is returned once, same as creation." auth="MERCHANT_ADMIN, DEVELOPER (dashboard session)" />
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
-          Rotate keys periodically from the Merchant Portal, revoke any key that may have leaked (committed to a
+          Rotate keys periodically from the dashboard, revoke any key that may have leaked (committed to a
           public repo, shared in a support ticket, etc.) immediately rather than waiting for a scheduled rotation —
           and if you simply lose a key before copying it down, rotate is also how you recover: there is no way to
           view a key&apos;s secret again after creation, by design.

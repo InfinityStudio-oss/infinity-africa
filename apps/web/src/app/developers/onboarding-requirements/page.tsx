@@ -2,13 +2,13 @@ import { Callout } from "@/components/docs/callout";
 import { DocsPager } from "@/components/docs/docs-pager";
 
 export const metadata = {
-  title: "Merchant Onboarding Requirements",
+  title: "Onboarding Requirements",
 };
 
 const REQUIRED_DOCUMENTS: Array<{ label: string; description: string; status: "Requested during review" | "Documentation only" }> = [
   {
     label: "NIDA (National ID) or authorized representative ID",
-    description: "Proof of identity for the business owner or the person authorized to act on the merchant's behalf.",
+    description: "Proof of identity for the business owner or the person authorized to act on the business's behalf.",
     status: "Requested during review",
   },
   {
@@ -62,17 +62,17 @@ export default function OnboardingRequirementsPage() {
   return (
     <div>
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
-      <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Merchant Onboarding Requirements</h1>
+      <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Onboarding Requirements</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-6 max-w-2xl">
         What InfinityPay needs before your account is approved for live API access and withdrawals. Provide your
         business details through the onboarding flow at <code className="font-mono text-sm bg-surface-container-low px-1.5 py-0.5 rounded">/onboarding</code> after
-        creating your merchant account. Identity and compliance documents are not uploaded during onboarding — Infinity
+        creating your account. Identity and compliance documents are not uploaded during onboarding — Infinity
         Africa&apos;s compliance team requests whatever it needs directly during review.
       </p>
 
       <div className="mb-10 max-w-2xl">
         <Callout title="Approval gates both API access and withdrawals">
-          A merchant account must be <code className="font-mono text-xs">active</code> and{" "}
+          A account must be <code className="font-mono text-xs">active</code> and{" "}
           <code className="font-mono text-xs">verified</code> before any withdrawal request is accepted — see the{" "}
           <a href="/developers/disbursements" className="text-primary hover:underline">Disbursements API</a>&apos;s{" "}
           <code className="font-mono text-xs">withdrawal_restricted</code> error. Live API keys are only issued once
@@ -134,7 +134,7 @@ export default function OnboardingRequirementsPage() {
             <tbody className="divide-y divide-outline-variant/30">
               {[
                 ["PENDING_VERIFICATION", "Submitted, awaiting InfinityPay review."],
-                ["VERIFIED", "Approved — merchant account is active and verified, live API access and withdrawals unlocked."],
+                ["VERIFIED", "Approved — account is active and verified, live API access and withdrawals unlocked."],
                 ["REJECTED", "Declined — see the review note for why, and resubmit with corrections."],
                 ["INFO_REQUESTED", "InfinityPay needs more information or documents before deciding — resubmit once addressed."],
               ].map(([status, meaning]) => (

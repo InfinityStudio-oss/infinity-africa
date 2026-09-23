@@ -96,7 +96,7 @@ export function ProfileView({ email }: { email: string }) {
           <form onSubmit={handleSave} className="grid sm:grid-cols-2 gap-5">
             {!canEdit && (
               <p className="sm:col-span-2 text-xs text-on-surface-variant">
-                Only a Merchant Admin can edit the business profile.
+                Only an Admin can edit the business profile.
               </p>
             )}
             {saved && (

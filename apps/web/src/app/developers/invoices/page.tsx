@@ -131,7 +131,7 @@ export default function InvoicesApiPage() {
                 ["PARTIALLY_PAID", "Some, but not all, of total_amount has been collected."],
                 ["PAID", "Fully collected. Terminal."],
                 ["OVERDUE", "Past due_date and not yet fully paid."],
-                ["CANCELLED", "Cancelled by the merchant. Terminal."],
+                ["CANCELLED", "Cancelled by the business. Terminal."],
               ].map(([status, meaning]) => (
                 <tr key={status}>
                   <td className="px-4 py-2.5 font-mono text-xs text-on-surface">{status}</td>

@@ -92,8 +92,8 @@ export default function CollectionsApiPage() {
   "customer_email": "grace@example.com",
   "reference": "ORDER-4821",
   "description": "Payment for order ORDER-4821",
-  "redirect_url": "https://merchantstore.co.tz/thank-you",
-  "cancel_url": "https://merchantstore.co.tz/payment-failed"
+  "redirect_url": "https://businessestore.co.tz/thank-you",
+  "cancel_url": "https://businessestore.co.tz/payment-failed"
 }`}</CodeBlock>
           <CodeBlock language="json — 202 Accepted">{`{
   "success": true,
@@ -108,7 +108,7 @@ export default function CollectionsApiPage() {
         <Callout tone="warning" title="webhook_url is not per-request">
           The <Code>webhook_url</Code> field is accepted for forward compatibility but not yet used — configure
           your webhook URL once for your whole account via <Code>PATCH /v1/merchant/webhook-config</Code> or the
-          Merchant Portal&apos;s Webhooks page. See the Webhooks page for details.
+          dashboard&apos;s Webhooks page. See the Webhooks page for details.
         </Callout>
       </section>
 
@@ -118,6 +118,30 @@ export default function CollectionsApiPage() {
           Same shape, two endpoints — <Code>/wallet-push</Code> for a general Mobile Money Push (STK/USSD, Selcom
           auto-detects the customer&apos;s carrier), <Code>/selcom-pesa</Code> to push specifically to a Selcom
           Pesa wallet. <Code>phone</Code> is required for both — a push has nowhere to go without one.
+        </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Any business or service provider can collect this way. One call to <Code>/wallet-push</Code> reaches
+          every supported wallet and bank — you do <strong>not</strong> need a separate integration, endpoint or
+          credential per network, and you do not need to ask the customer which one they use. Send the phone
+          number and the carrier is resolved for you:
+        </p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {["M-Pesa", "Tigo Pesa", "Airtel Money", "HaloPesa", "Selcom Pesa", "CRDB Bank", "NMB Bank"].map(
+            (network) => (
+              <span
+                key={network}
+                className="rounded-full border border-outline-variant bg-surface-container-low px-3 py-1 text-xs font-medium text-on-surface-variant"
+              >
+                {network}
+              </span>
+            ),
+          )}
+        </div>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Typical integrations: an e-commerce checkout pushing a prompt when the customer clicks Pay, a utility or
+          subscription service collecting a recurring bill, an ISP or property manager billing tenants, or a
+          point-of-sale system taking payment in person. The flow is identical in every case — push, wait for the
+          webhook, then fulfil.
         </p>
         <Callout tone="warning" title="A 202/&quot;processing&quot; response means the prompt was sent — nothing more">
           Wallet push and Selcom Pesa push success only mean Selcom accepted the push request. It does{" "}
@@ -218,7 +242,7 @@ export default function CollectionsApiPage() {
         <h2 className="text-xl font-semibold text-on-surface mb-3">Status lifecycle</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           See the <a href="/developers/webhooks" className="text-primary font-semibold hover:underline">Webhooks</a> page
-          for the full lifecycle table and the merchant order-payment rule. In short:{" "}
+          for the full lifecycle table and the business order-payment rule. In short:{" "}
           <strong className="text-on-surface">only mark an order paid when status is <Code>successful</Code></strong> —
           never from <Code>created</Code>, <Code>processing</Code>, a QR/token being returned, or a wallet-push
           resultcode of <Code>000</Code>.

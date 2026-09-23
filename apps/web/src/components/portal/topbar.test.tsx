@@ -38,7 +38,7 @@ describe("Topbar", () => {
     await waitFor(() => expect(screen.getByText("Amina Admin")).toBeInTheDocument());
     const menu = screen.getByText("Amina Admin").closest("div")!.parentElement as HTMLElement;
     expect(within(menu).getByText("amina@merchant.co.tz")).toBeInTheDocument();
-    expect(within(menu).getByText("Merchant Admin")).toBeInTheDocument();
+    expect(within(menu).getByText("Admin")).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Log out" })).toBeInTheDocument();
     expect(within(menu).getByRole("link", { name: /Profile & Settings/i })).toHaveAttribute(
       "href",

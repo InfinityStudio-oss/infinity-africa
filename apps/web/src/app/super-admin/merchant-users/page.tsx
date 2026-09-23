@@ -25,7 +25,7 @@ export default async function SuperAdminMerchantUsersPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="group" label="Total Users" value={counts.total.toLocaleString()} />
-        <AdminKpiCard variant="brand" icon="admin_panel_settings" label="Merchant Admins" value={counts.admins.toLocaleString()} />
+        <AdminKpiCard variant="brand" icon="admin_panel_settings" label="Admins" value={counts.admins.toLocaleString()} />
         <AdminKpiCard variant="brand" icon="badge" label="Staff" value={counts.staff.toLocaleString()} />
         <AdminKpiCard variant="brand" icon="terminal" label="Developers" value={counts.developers.toLocaleString()} />
       </div>

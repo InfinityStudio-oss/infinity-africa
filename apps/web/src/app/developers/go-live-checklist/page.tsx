@@ -13,9 +13,9 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
   {
     title: "Credentials",
     items: [
-      "Generate a live API key from the Merchant Portal (API Keys → Live) with only the scopes your integration actually uses.",
+      "Generate a live API key from the dashboard (API Keys → Live) with only the scopes your integration actually uses.",
       "Store the key in your backend's secret manager or environment variables — never in a repo, a mobile app bundle, or any frontend/client-side code.",
-      "Set a webhook secret (Merchant Portal → Webhooks, or PATCH /v1/merchant/webhook-config with regenerate_secret) and store it the same way.",
+      "Set a webhook secret (dashboard → Webhooks, or PATCH /v1/merchant/webhook-config with regenerate_secret) and store it the same way.",
     ],
   },
   {
@@ -25,7 +25,7 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
       "Your order-paid logic only triggers on collection.successful (webhook) or status: \"successful\" from GET /v1/collections/{id} — never on created, processing, pending_clearance, a QR/token being returned, or a push's initial resultcode.",
       "Your webhook endpoint verifies X-Infinity-Signature on every delivery before trusting the payload.",
       "Your webhook handler responds quickly (do slow processing asynchronously) and treats deliveries as idempotent — keyed off collection_id.",
-      "You've tested Send Test Webhook from the Merchant Portal against your real endpoint.",
+      "You've tested Send Test Webhook from the dashboard against your real endpoint.",
       "You handle collection.failed, collection.reversed, and collection.pending_review distinctly from collection.successful in your own order state — a reversal after credit is a real scenario, not an edge case to ignore.",
     ],
   },
@@ -39,7 +39,7 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
   {
     title: "Compliance & security",
     items: [
-      "Merchant KYC/onboarding is approved (see Merchant Onboarding Requirements).",
+      "Account KYC/onboarding is approved (see Onboarding Requirements).",
       "HTTPS only — for your webhook endpoint and everywhere you call the InfinityPay API from.",
       "No InfinityPay or Selcom credential appears in any frontend bundle, mobile app package, or public repository.",
     ],

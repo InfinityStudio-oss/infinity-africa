@@ -98,7 +98,7 @@ export default function PaymentLinksApiPage() {
                 ["ACTIVE", "Payable — the default state on creation."],
                 ["PAID", "A collection against this link succeeded. Terminal."],
                 ["EXPIRED", "expires_at has passed. Computed lazily on read, not by a background job."],
-                ["CANCELLED", "Cancelled by the merchant before being paid."],
+                ["CANCELLED", "Cancelled by the business before being paid."],
               ].map(([status, meaning]) => (
                 <tr key={status}>
                   <td className="px-4 py-2.5 font-mono text-xs text-on-surface">{status}</td>

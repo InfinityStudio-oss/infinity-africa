@@ -33,11 +33,11 @@ export default function DisbursementsApiPage() {
 
       <div className="mb-10 max-w-2xl space-y-4">
         <Callout title="Withdrawals vs. Disbursements">
-          In the InfinityPay dashboard, merchants see this feature as <strong>Withdrawals</strong>. In the API, the
+          In the InfinityPay dashboard, businesses see this feature as <strong>Withdrawals</strong>. In the API, the
           technical endpoint may use <code className="font-mono text-xs">disbursements</code> for
           payment-provider compatibility. Internally, withdrawal approvals call the{" "}
           <strong>Selcom Business Disbursement API</strong> — that name only ever appears in backend/internal
-          documentation, never in the dashboard or in merchant-facing copy.
+          documentation, never in the dashboard or in customer-facing copy.
         </Callout>
         <Callout tone="warning" title="Every withdrawal needs Super Admin approval — no exceptions">
           Submitting a withdrawal never calls Selcom. It always comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code>,
@@ -62,7 +62,7 @@ export default function DisbursementsApiPage() {
           Approval itself (<code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">approve</code>/
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">reject</code>/
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">request-info</code>) is a
-          Super Admin action, not something a merchant or API key ever calls — see the Super Admin console, not this API.
+          Super Admin action, not something a business or API key ever calls — see the Super Admin console, not this API.
         </p>
       </section>
 
@@ -93,7 +93,7 @@ export default function DisbursementsApiPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Calculate charges</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Every merchant has their own negotiated fee — call this first to show the full breakdown before submitting.
+          Every business has its own negotiated fee — call this first to show the full breakdown before submitting.
           It never creates a withdrawal or touches your balance.
         </p>
         <div className="space-y-4">
@@ -129,7 +129,7 @@ export default function DisbursementsApiPage() {
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           Charges are recalculated and frozen server-side at submission time — never trust a client-side quote. Most
           requests come back <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PENDING_ADMIN_APPROVAL</code>;
-          a low-value request from an eligible, verified merchant may instead be processed automatically and come
+          a low-value request from an eligible, verified business may instead be processed automatically and come
           back already <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PROCESSING</code> — check the
           response&apos;s <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">status</code> field
           rather than assuming one or the other.
@@ -202,9 +202,9 @@ export default function DisbursementsApiPage() {
       </section>
 
       <section className="mb-12">
-        <h2 className="text-xl font-semibold text-on-surface mb-3">Unverified merchant</h2>
+        <h2 className="text-xl font-semibold text-on-surface mb-3">Unverified account</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Withdrawals are only available to merchants who have completed onboarding verification. A merchant that
+          Withdrawals are only available to businesses who have completed onboarding verification. A business that
           isn&apos;t yet <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">active</code>/<code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">verified</code> gets
           the same <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">409</code> shape,
           before any balance check runs:
@@ -213,7 +213,7 @@ export default function DisbursementsApiPage() {
   "success": false,
   "error": {
     "code": "withdrawal_restricted",
-    "message": "Withdrawals require a verified, active merchant account. Complete onboarding verification first.",
+    "message": "Withdrawals require a verified, active account. Complete onboarding verification first.",
     "details": null
   }
 }`}</CodeBlock>
@@ -247,7 +247,7 @@ export default function DisbursementsApiPage() {
           A withdrawal typically comes back <code className="font-mono text-xs">PENDING_ADMIN_APPROVAL</code> with{" "}
           <code className="font-mono text-xs">requires_approval: true</code> and is <em>not</em> sent to Selcom until
           an InfinityPay Super Admin approves it in the dashboard. If withdrawal automation is enabled and this
-          request is eligible (a verified merchant, within the configured per-transaction/daily automation limits,
+          request is eligible (a verified business, within the configured per-transaction/daily automation limits,
           no open high-risk fraud alert), it&apos;s processed immediately instead and comes back{" "}
           <code className="font-mono text-xs">PROCESSING</code> with{" "}
           <code className="font-mono text-xs">auto_approved: true</code> — never assume which one you&apos;ll get.

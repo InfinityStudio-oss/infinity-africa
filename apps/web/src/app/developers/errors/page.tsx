@@ -8,8 +8,8 @@ export const metadata = {
 const ERRORS: Array<{ status: number; code: string; meaning: string }> = [
   { status: 400, code: "bad_request", meaning: "A generic request problem that doesn't fit a more specific code." },
   { status: 401, code: "unauthorized", meaning: "Missing or invalid credentials — no X-API-Key/Bearer token, or the key was revoked." },
-  { status: 403, code: "forbidden", meaning: "Your credentials are valid, but not authorized for this merchant or resource." },
-  { status: 404, code: "not_found", meaning: "The resource doesn't exist, or doesn't belong to your merchant." },
+  { status: 403, code: "forbidden", meaning: "Your credentials are valid, but not authorized for this account or resource." },
+  { status: 404, code: "not_found", meaning: "The resource doesn't exist, or doesn't belong to your." },
   { status: 409, code: "conflict", meaning: "The request conflicts with the resource's current state (e.g. cancelling an already-paid link)." },
   { status: 409, code: "idempotency_key_reused", meaning: "The same Idempotency-Key was sent with a different request body." },
   { status: 409, code: "insufficient_balance", meaning: "A disbursement amount exceeds your current available balance." },

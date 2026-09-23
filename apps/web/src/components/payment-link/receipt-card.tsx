@@ -51,7 +51,7 @@ export function ReceiptCard({ receipt, slug }: { receipt: PublicCollectionReceip
           <Row label="Status" value="Successful" />
           <Row label="Receipt no." value={receiptNumber(receipt.collection_id)} mono />
           <Row label="Paid to" value={receipt.merchant_name} />
-          {receipt.merchant_code && <Row label="Merchant ID" value={receipt.merchant_code} mono />}
+          {receipt.merchant_code && <Row label="ID" value={receipt.merchant_code} mono />}
           {receipt.description && <Row label="Description" value={receipt.description} />}
           {(receipt.customer_name || receipt.customer_phone) && (
             <Row
