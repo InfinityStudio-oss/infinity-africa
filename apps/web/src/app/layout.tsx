@@ -49,11 +49,31 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <head>
-        {/* eslint-disable-next-line @next/next/no-page-custom-font -- the
-            no-page-custom-font rule predates the App Router; app/layout.tsx
-            *is* the documented place for a site-wide font link. */}
+        {/* Sets .icons-pending before the body paints, so a Material Symbols
+            ligature is never shown as its own name ("smartphone",
+            "qr_code_scanner") while the icon font is still loading. Removed
+            as soon as the font is usable, and on a timeout so icons can
+            never stay hidden if the font fails outright. Inline and
+            synchronous on purpose: anything deferred runs after first paint,
+            which is exactly the frame we need to cover. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var d=document.documentElement;d.classList.add('icons-pending');function show(){d.classList.remove('icons-pending')}if(document.fonts&&document.fonts.load){document.fonts.load('24px "Material Symbols Outlined"').then(show).catch(show)}else{show()}setTimeout(show,3000)})();`,
+          }}
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font, @next/next/google-font-display --
+            no-page-custom-font predates the App Router; app/layout.tsx *is*
+            the documented place for a site-wide font link.
+            google-font-display warns against display=block because, for a
+            *text* font, it means invisible text while the font loads. This
+            is an *icon* font: the fallback does not render a blank, it
+            renders the ligature's name as readable words over the UI.
+            display=block is what Google's own Material Symbols guidance
+            recommends for exactly this reason. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block"
           rel="stylesheet"
         />
       </head>

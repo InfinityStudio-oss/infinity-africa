@@ -144,6 +144,40 @@ describe("root layout.tsx metadata", () => {
   });
 });
 
+describe("Material Symbols icon font loading", () => {
+  // Regression cover for raw ligature names ("smartphone",
+  // "account_balance_wallet", "qr_code_scanner") rendering as readable text
+  // over the UI on a hard refresh. The glyph IS the span's text content, so
+  // the fix is entirely about never painting that text.
+  const layoutSource = readFileSync(join(appDir, "layout.tsx"), "utf8");
+  const globalsSource = readFileSync(join(appDir, "globals.css"), "utf8");
+
+  it("requests the icon font with display=block, never display=swap", () => {
+    // swap paints the fallback immediately; for an icon font that means
+    // showing the ligature's own name until the real font arrives.
+    expect(layoutSource).toContain("display=block");
+    expect(layoutSource).not.toContain("Outlined:wght,FILL@100..700,0..1&display=swap");
+  });
+
+  it("marks icons pending inline, before the first paint", () => {
+    // Anything deferred runs after the frame this is meant to cover.
+    expect(layoutSource).toContain("icons-pending");
+    expect(layoutSource).toContain("dangerouslySetInnerHTML");
+  });
+
+  it("releases the pending guard even if the font never loads", () => {
+    // Otherwise a blocked font would leave every icon permanently invisible.
+    expect(layoutSource).toContain("setTimeout(show,3000)");
+  });
+
+  it("declares the icon font-family locally, not only via Google's stylesheet", () => {
+    // That remote stylesheet is what defines the class — until it arrives the
+    // span has no icon font at all and renders its ligature as plain words.
+    expect(globalsSource).toContain('font-family: "Material Symbols Outlined"');
+    expect(globalsSource).toContain(".icons-pending .material-symbols-outlined");
+  });
+});
+
 describe("private route groups are noindex", () => {
   const privateLayoutFiles = [
     "portal/layout.tsx",

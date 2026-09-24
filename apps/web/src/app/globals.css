@@ -110,12 +110,39 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* font-family is declared here, not left to Google's remote stylesheet.
+   That stylesheet is what defines the class, so until it arrives the span
+   has no icon font at all and renders its ligature as plain words in
+   whatever font is inherited — which is how "smartphone" and
+   "qr_code_scanner" ended up printed over the payment page. Declaring it
+   locally closes the window between our CSS and theirs. */
 .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
   font-variation-settings:
     "FILL" 0,
     "wght" 400,
     "GRAD" 0,
     "opsz" 24;
+}
+
+/* Set on <html> before first paint by the inline script in app/layout.tsx,
+   and removed once the icon font is usable (or after a 3s timeout, so a
+   failed font never leaves icons invisible). visibility rather than
+   display so the glyph still occupies its box and nothing shifts when it
+   appears. */
+.icons-pending .material-symbols-outlined {
+  visibility: hidden;
 }
 
 /* Merchant Portal (/merchant/*, /portal/*) and Super Admin (/super-admin/*,
