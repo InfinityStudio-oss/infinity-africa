@@ -17,13 +17,8 @@ export function AdminSidebar({ open, onClose }: { open: boolean; onClose: () => 
         className={`fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-sidebar to-sidebar-strong shadow-lg z-50 flex flex-col py-8 px-4 overflow-y-auto transition-transform duration-200 md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-8 flex items-center gap-3 px-4 shrink-0">
-          <Link href="/super-admin" className="flex flex-col gap-1 flex-1 min-w-0">
-            <span className="flex items-center">
-              <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
-            </span>
-            <p className="text-[11px] font-semibold tracking-wide text-sidebar-text-muted">
-              Super Admin
-            </p>
+          <Link href="/super-admin" className="flex items-center flex-1 min-w-0">
+            <span className="text-xl font-bold text-white tracking-tight truncate">InfinityPay</span>
           </Link>
           <button onClick={onClose} className="md:hidden text-sidebar-text p-1" aria-label="Close menu">
             <Icon name="close" />

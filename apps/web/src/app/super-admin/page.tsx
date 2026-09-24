@@ -12,7 +12,6 @@ export const metadata = {
 
 const MODULES = [
   { href: "/super-admin/merchants", icon: "storefront", title: "Business Management", description: "Onboard, verify & manage businesses" },
-  { href: "/super-admin/payment-links", icon: "link", title: "Payment Links Monitoring", description: "Platform-wide link activity" },
   { href: "/super-admin/invoices", icon: "receipt", title: "Invoice Management", description: "Track invoices across businesses" },
   { href: "/super-admin/withdrawals", icon: "receipt_long", title: "Withdrawal Monitoring", description: "Approve & track payouts" },
   { href: "/admin/reconciliation-center", icon: "account_balance", title: "Reconciliation Center", description: "Callback logs & unmatched txns" },
