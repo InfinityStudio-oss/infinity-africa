@@ -5,6 +5,7 @@ select/insert/update/delete, .eq()/.is_()/.in_(), .order(), .range(),
 code end-to-end in tests without a real Supabase project.
 """
 
+import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -177,6 +178,7 @@ class _FakeQuery:
         if self._op == "update":
             matched = [row for row in self._table.rows if self._matches(row)]
             for row in matched:
+                _assert_wire_safe(self._table.name, self._payload)
                 row.update(self._payload)
                 row["updated_at"] = datetime.now(timezone.utc).isoformat()
             return _Result([dict(r) for r in matched])
@@ -189,12 +191,33 @@ class _FakeQuery:
         raise NotImplementedError(self._op)
 
 
+def _assert_wire_safe(table_name: str, payload) -> None:
+    """Rejects anything a real PostgREST write could not send.
+
+    supabase-py serialises the body with json.dumps, so a uuid.UUID,
+    Decimal, datetime or enum reaches production as a TypeError even though
+    this in-memory store would happily keep the object as-is. That gap let a
+    withdrawal-OTP bug (uuid.UUID passed where a str id was expected) pass
+    the whole suite and fail on the first real request, after the email had
+    already gone out. Failing here keeps that class of bug in the tests.
+    """
+    for column, value in (payload or {}).items():
+        try:
+            json.dumps(value)
+        except TypeError:
+            raise TypeError(
+                f"{table_name}.{column} is {type(value).__name__}, which PostgREST cannot "
+                f"serialise — pass a JSON-native value (str/int/bool/None/list/dict)."
+            ) from None
+
+
 class _FakeTable:
     def __init__(self, name: str):
         self.name = name
         self.rows: list[dict] = []
 
     def insert(self, payload: dict) -> dict:
+        _assert_wire_safe(self.name, payload)
         row = dict(payload)
         row.setdefault("id", str(uuid.uuid4()))
         now = datetime.now(timezone.utc).isoformat()

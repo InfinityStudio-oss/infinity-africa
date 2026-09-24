@@ -1476,7 +1476,10 @@ def send_withdrawal_otp_email(
     not enter this code. Contact us immediately at {settings.email_reply_to}.</p>
     """
     html = _email_shell(body_html=body)
-    merchant_id = uuid.UUID(merchant["id"]) if merchant.get("id") else None
+    # A plain string id, exactly as every other sender passes it. Wrapping
+    # this in uuid.UUID puts a non-JSON-serialisable object into the
+    # PostgREST body, which fails only against a real database.
+    merchant_id = merchant.get("id")
 
     try:
         message_id = send_email(
