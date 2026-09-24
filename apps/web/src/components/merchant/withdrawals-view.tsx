@@ -475,7 +475,15 @@ export function WithdrawalsView() {
             setNotes("");
             setQuote(null);
             setQuotedFor(null);
-            setSuccess("Withdrawal request submitted. It is pending approval.");
+            // Reports what the backend actually did rather than assuming.
+            // Hardcoding "pending approval" would misreport a withdrawal
+            // that automation had already sent to the provider, which is
+            // precisely the case a merchant most needs told accurately.
+            setSuccess(
+              disbursement.auto_approved
+                ? "Withdrawal submitted and sent for processing."
+                : "Withdrawal request submitted. It is pending approval.",
+            );
           }}
         />
       )}
