@@ -8,9 +8,9 @@ const inter = Inter({
 });
 
 const SITE_DESCRIPTION =
-  "Secure payment infrastructure for African businesses and service providers. Create payment links, request collections, send invoices, manage wallet ledger, withdrawals, and developer APIs from one platform.";
+  "Secure payment infrastructure for African businesses and service providers. Create Pay by Links, request collections, send invoices, manage wallet ledger, withdrawals, and developer APIs from one platform.";
 const OG_DESCRIPTION =
-  "Payment infrastructure for African businesses and service providers, payment links, invoices, collections, wallet ledger, and business tools.";
+  "Payment infrastructure for African businesses and service providers, Pay by Links, invoices, collections, wallet ledger, and business tools.";
 
 // Versioned filename (v1 under the InfinityPay brand — supersedes the old
 // infinity-africa-og-v2.png, itself the successor to the original
