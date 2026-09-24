@@ -132,25 +132,6 @@ export function CreateAccountForm() {
       )}
 
       <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>Account owner</legend>
-        <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field name="firstName" label="First Name" autoComplete="given-name" placeholder="Amani" defaultValue={v.firstName} errors={err.firstName} />
-          <Field name="lastName" label="Last Name" autoComplete="family-name" placeholder="Mushi" defaultValue={v.lastName} errors={err.lastName} />
-          <Field name="email" label="Work Email" type="email" autoComplete="off" placeholder="you@business.co.tz" defaultValue={v.email} errors={err.email} />
-          <Field name="phone" label="Phone Number" type="tel" autoComplete="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.phone} errors={err.phone} />
-        </div>
-        <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <div>
-            <Field name="password" label="Password" type="password" autoComplete="new-password" errors={err.password} />
-            <p className="mt-1.5 text-xs text-on-surface-variant">
-              At least 8 characters, with uppercase, lowercase, a number, and a symbol.
-            </p>
-          </div>
-          <Field name="confirmPassword" label="Confirm Password" type="password" autoComplete="new-password" errors={err.confirmPassword} />
-        </div>
-      </fieldset>
-
-      <fieldset className={fieldsetClass}>
         <legend className={legendClass}>Business details</legend>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessName" label="Business / Trading Name" defaultValue={v.businessName} errors={err.businessName} />
@@ -167,6 +148,25 @@ export function CreateAccountForm() {
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="tinNumber" label="TIN" optional hideOptionalHint placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
+        </div>
+      </fieldset>
+
+      {/* Business Email above is the login email — there is no separate
+          account-owner email any more, so this section only has to collect
+          the password that goes with it. */}
+      <fieldset className={fieldsetClass}>
+        <legend className={legendClass}>Create your password</legend>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          You&apos;ll sign in with your business email and this password.
+        </p>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <div>
+            <Field name="password" label="Password" type="password" autoComplete="new-password" errors={err.password} />
+            <p className="mt-1.5 text-xs text-on-surface-variant">
+              At least 8 characters, with uppercase, lowercase, a number, and a symbol.
+            </p>
+          </div>
+          <Field name="confirmPassword" label="Confirm Password" type="password" autoComplete="new-password" errors={err.confirmPassword} />
         </div>
       </fieldset>
 

@@ -5,7 +5,7 @@ import { Icon } from "@/components/portal/icon";
 const QUICK_LINKS = [
   { href: "/", label: "Home" },
   { href: "/solutions", label: "Solutions" },
-  { href: "/payment-links", label: "Payment Links" },
+  { href: "/payment-links", label: "Pay by Link" },
   { href: "/invoices", label: "Invoices" },
   { href: "/contact", label: "Contact" },
   { href: "/create-account", label: "Get Started" },

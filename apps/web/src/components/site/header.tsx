@@ -9,7 +9,7 @@ import { Icon } from "@/components/portal/icon";
 export const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/solutions", label: "Solutions" },
-  { href: "/payment-links", label: "Payment Links" },
+  { href: "/payment-links", label: "Pay by Link" },
   { href: "/invoices", label: "Invoices" },
   { href: "/api-docs", label: "API Docs" },
   { href: "/contact", label: "Contact" },

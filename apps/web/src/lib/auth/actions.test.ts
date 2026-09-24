@@ -64,10 +64,6 @@ function form(fields: Record<string, string>): FormData {
 }
 
 const VALID_SIGNUP = {
-  firstName: "Amani",
-  lastName: "Mushi",
-  email: "amani@shop.co.tz",
-  phone: "+255700000000",
   nidaNumber: "19900101-12345-12345-12",
   password: "Str0ng!pass",
   confirmPassword: "Str0ng!pass",
@@ -110,15 +106,16 @@ describe("signupWithBusinessAction", () => {
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
-  it("requires both first and last name", async () => {
+  it("requires a business name", async () => {
+    // The Account owner section was removed, so there is no separate first
+    // or last name — the business name is what identifies the account.
     const { signupWithBusinessAction } = await importActions();
-    const state = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, firstName: "", lastName: "" }));
-    expect(state?.errors?.firstName?.[0]).toMatch(/first name is required/i);
-    expect(state?.errors?.lastName?.[0]).toMatch(/last name is required/i);
+    const state = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessName: "" }));
+    expect(state?.errors?.businessName?.[0]).toMatch(/business name is required/i);
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
-  it("requires a valid business email, distinct from the owner's own email", async () => {
+  it("requires a valid business email — it is the login email", async () => {
     const { signupWithBusinessAction } = await importActions();
     const missing = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessEmail: "" }));
     expect(missing?.errors?.businessEmail?.[0]).toMatch(/business email is required/i);
@@ -135,7 +132,7 @@ describe("signupWithBusinessAction", () => {
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
-  it("combines first and last name into full_name, and reuses the business type as nature_of_business", async () => {
+  it("derives full_name and the login email from the business fields", async () => {
     submitMerchantSignup.mockResolvedValue({
       merchant_id: "m1",
       merchant_code: "MER-1",
@@ -144,13 +141,19 @@ describe("signupWithBusinessAction", () => {
     });
     const { signupWithBusinessAction } = await importActions();
 
-    // The Notes field was removed from signup, so nature_of_business (a
-    // NOT NULL column) is now always the business type — never notes, and
-    // notes is no longer sent at all.
+    // With the Account owner section gone, the backend's required
+    // full_name/email/contact_phone all come from the business fields.
+    // nature_of_business (NOT NULL) reuses the business type, since the
+    // Notes field that used to feed it was also removed.
     await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, notes: "Also sells on Instagram" }));
     const payload = submitMerchantSignup.mock.calls[0][0];
     expect(payload).toEqual(
-      expect.objectContaining({ full_name: "Amani Mushi", nature_of_business: "Retail" }),
+      expect.objectContaining({
+        full_name: "Amani Traders",
+        email: "hello@amanitraders.co.tz",
+        contact_phone: "+255711222333",
+        nature_of_business: "Retail",
+      }),
     );
     expect(payload).not.toHaveProperty("notes");
   });
@@ -170,8 +173,8 @@ describe("signupWithBusinessAction", () => {
     expect(state?.awaitingEmailVerification).toBe(true);
     expect(submitMerchantSignup).toHaveBeenCalledWith(
       expect.objectContaining({
-        full_name: "Amani Mushi",
-        email: "amani@shop.co.tz",
+        full_name: "Amani Traders",
+        email: "hello@amanitraders.co.tz",
         nida_number: "19900101-12345-12345-12",
         business_name: "Amani Traders",
         business_email: "hello@amanitraders.co.tz",

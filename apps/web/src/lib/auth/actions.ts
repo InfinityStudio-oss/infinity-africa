@@ -107,10 +107,6 @@ const SIGNUP_SUCCESS_NO_VERIFY =
 export async function signupWithBusinessAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
 
-  const firstName = get("firstName");
-  const lastName = get("lastName");
-  const email = get("email");
-  const phone = get("phone");
   const nidaNumber = get("nidaNumber");
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
@@ -128,10 +124,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const confirmedAccurate = formData.get("confirmedAccurate") === "on";
 
   const values: Record<string, string> = {
-    firstName,
-    lastName,
-    email,
-    phone,
     businessName,
     legalBusinessName,
     businessCategory,
@@ -142,11 +134,6 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   };
 
   const errors: Record<string, string[]> = {};
-  if (!firstName) errors.firstName = ["First name is required."];
-  if (!lastName) errors.lastName = ["Last name is required."];
-  if (!email) errors.email = ["Email address is required."];
-  else if (!isEmail(email)) errors.email = ["Enter a valid email address."];
-  if (!phone) errors.phone = ["Phone number is required."];
 
   if (!nidaNumber) errors.nidaNumber = ["NIDA number is required."];
   else if (!isValidNida(nidaNumber)) errors.nidaNumber = ["Enter a valid NIDA number — it should be 20 digits."];
@@ -173,10 +160,15 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   let result;
   try {
     result = await submitMerchantSignup({
-      full_name: `${firstName} ${lastName}`.trim(),
-      email,
+      // The Account owner section was removed from the form: the business
+      // email IS the login email, and the business phone the contact phone.
+      // full_name is required by the backend (it becomes the auth user's
+      // user_metadata.full_name and the submission's contact name) and is
+      // no longer collected separately, so the business name stands in.
+      full_name: businessName,
+      email: businessEmail,
       password,
-      contact_phone: phone,
+      contact_phone: businessPhone,
       nida_number: nidaNumber,
       business_name: businessName,
       legal_business_name: legalBusinessName || null,
@@ -212,7 +204,9 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
 
   return {
     errors: {},
-    values: { email },
+    // The resend-verification form reads this to know where to resend, so
+    // it has to be the address the account was actually created with.
+    values: { email: businessEmail },
     awaitingEmailVerification: result.email_confirmation_required,
     notice: result.email_confirmation_required ? SIGNUP_SUCCESS_VERIFY : SIGNUP_SUCCESS_NO_VERIFY,
   };

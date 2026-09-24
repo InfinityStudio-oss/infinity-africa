@@ -5,7 +5,7 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "Payment Links | InfinityPay",
+  title: "Pay by Link | InfinityPay",
   description: "Create shareable payment links with amount, customer phone, description, and expiry — let customers pay however suits them best.",
 };
 
@@ -39,7 +39,7 @@ export default function PaymentLinksPage() {
         <section className="py-16 md:py-20 px-4 md:px-10 bg-surface-container-lowest">
           <div className="max-w-[1280px] mx-auto grid md:grid-cols-2 gap-14 items-center">
             <div>
-              <span className="text-xs font-semibold text-primary-container uppercase tracking-wide">Payment Links</span>
+              <span className="text-xs font-semibold text-primary-container uppercase tracking-wide">Pay by Link</span>
               <h1 className="text-2xl md:text-4xl font-bold mt-2 mb-4 text-on-surface tracking-tight">
                 Get paid without a website or app
               </h1>
@@ -98,7 +98,7 @@ export default function PaymentLinksPage() {
 
         <section className="py-16 px-4 md:px-10 bg-surface">
           <div className="max-w-[1280px] mx-auto">
-            <SectionHeading eyebrow="Creating a Link" title="What Goes Into a Payment Link" description="Every payment link carries everything the customer needs to pay with confidence." />
+            <SectionHeading eyebrow="Creating a Link" title="What Goes Into a Pay by Link" description="Every Pay by Link carries everything the customer needs to pay with confidence." />
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mt-10">
               {CREATE_FIELDS.map((field) => (
                 <div key={field.label} className="bg-surface-container-lowest border border-outline-variant/40 rounded-xl p-6">
@@ -127,7 +127,7 @@ export default function PaymentLinksPage() {
         <CTASection
           title="Create your first payment link"
           description="Tell us about your business and start sharing payment links with your customers."
-          primaryLabel="Create Payment Link"
+          primaryLabel="Create Pay by Link"
           primaryHref="/create-account"
           secondaryLabel="View API Docs"
           secondaryHref="/api-docs"

@@ -13,7 +13,7 @@ import { Icon } from "@/components/portal/icon";
 export const metadata = {
   title: "InfinityPay — Collect Payments, Create Links, and Get Paid Faster in Tanzania",
   description:
-    "InfinityPay helps business and services providers accept mobile money payments, create secure payment links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
+    "InfinityPay helps business and services providers accept mobile money payments, create secure Pay by Links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
 };
 
 const NETWORKS = [
@@ -35,8 +35,8 @@ const HIGHLIGHTS = [
   },
   {
     icon: "link",
-    title: "Payment Links",
-    description: "Generate a secure payment link in seconds and share it via SMS, WhatsApp, or email — no website required.",
+    title: "Pay by Link",
+    description: "Generate a secure Pay by Link in seconds and share it via SMS, WhatsApp, or email — no website required.",
   },
   {
     icon: "receipt_long",
@@ -52,7 +52,7 @@ const HIGHLIGHTS = [
 
 const HOW_IT_WORKS = [
   { step: 1, title: "Create Your Account", description: "Sign up and get verified as a business or service provider in minutes." },
-  { step: 2, title: "Collect Payments", description: "Accept mobile money, share payment links, or send invoices with Pay Now." },
+  { step: 2, title: "Collect Payments", description: "Accept mobile money, share Pay by Links, or send invoices with Pay Now." },
   { step: 3, title: "Track in Real Time", description: "Monitor collections, balances, and payment status from one dashboard." },
   { step: 4, title: "Get Paid Faster", description: "Funds settle to your available balance — manage withdrawals anytime from your portal." },
 ];
@@ -75,12 +75,12 @@ export default function Home() {
           <div className="relative z-10 grid md:grid-cols-2 gap-14 items-center">
             <div className="space-y-8">
               <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-on-surface leading-tight tracking-tight">
-                Collect Payments. <span className="text-primary-container">Create Payment Links.</span> Get Paid
+                Collect Payments. <span className="text-primary-container">Create Pay by Links.</span> Get Paid
                 Faster.
               </h1>
               <p className="text-lg text-on-surface-variant max-w-xl leading-relaxed">
                 InfinityPay helps business and services providers accept mobile money payments, create secure
-                payment links, generate invoices, and integrate payment collection into websites, mobile apps,
+                Pay by Links, generate invoices, and integrate payment collection into websites, mobile apps,
                 ecommerce platforms, and web apps.
               </p>
               <p className="text-sm text-on-surface-variant/80 max-w-xl">
@@ -145,7 +145,7 @@ export default function Home() {
                   </div>
                   <div className="space-y-2.5 pt-1">
                     {[
-                      { icon: "link", title: "Payment Link · Grace M.", subtitle: "via M-Pesa", amount: "+25,000", muted: false },
+                      { icon: "link", title: "Pay by Link · Grace M.", subtitle: "via M-Pesa", amount: "+25,000", muted: false },
                       { icon: "receipt_long", title: "Invoice #1042", subtitle: "Paid by customer", amount: "+120,000", muted: false },
                       { icon: "payments", title: "Collection · Neema Salon", subtitle: "via Airtel Money", amount: "+18,000", muted: false },
                     ].map((row) => (

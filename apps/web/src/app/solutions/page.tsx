@@ -36,8 +36,8 @@ const SOLUTIONS = [
   },
   {
     icon: "link",
-    title: "Payment Links",
-    description: "Create a shareable payment link with amount, description, and expiry — send it via SMS, WhatsApp, or email.",
+    title: "Pay by Link",
+    description: "Create a shareable Pay by Link with amount, description, and expiry — send it via SMS, WhatsApp, or email.",
   },
   {
     icon: "receipt_long",
@@ -62,7 +62,7 @@ const SOLUTIONS = [
   {
     icon: "webhook",
     title: "Webhooks for Developers",
-    description: "Get signed, real-time event notifications the moment a payment link is paid or an invoice settles.",
+    description: "Get signed, real-time event notifications the moment a Pay by Link is paid or an invoice settles.",
   },
 ];
 
@@ -95,7 +95,7 @@ export default function SolutionsPage() {
           <div className="max-w-[1280px] mx-auto grid sm:grid-cols-3 gap-6 text-center">
             <Link href="/payment-links" className="bg-surface border border-outline-variant/40 rounded-xl p-6 hover:border-primary-container transition-colors">
               <Icon name="link" className="text-primary-container text-[28px] mb-2 block mx-auto" />
-              <p className="text-sm font-bold text-on-surface mb-1">Payment Links</p>
+              <p className="text-sm font-bold text-on-surface mb-1">Pay by Link</p>
               <p className="text-xs text-on-surface-variant">See how shareable links work</p>
             </Link>
             <Link href="/invoices" className="bg-surface border border-outline-variant/40 rounded-xl p-6 hover:border-primary-container transition-colors">
