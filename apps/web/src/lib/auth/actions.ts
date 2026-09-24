@@ -112,7 +112,7 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
   const businessName = get("businessName");
-  const legalBusinessName = get("legalBusinessName");
+  const ownerName = get("ownerName");
   const businessCategory = get("businessCategory");
   const businessEmail = get("businessEmail");
   const businessPhone = get("businessPhone");
@@ -125,7 +125,7 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
 
   const values: Record<string, string> = {
     businessName,
-    legalBusinessName,
+    ownerName,
     businessCategory,
     businessEmail,
     businessPhone,
@@ -144,9 +144,10 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
   else if (confirmPassword !== password) errors.confirmPassword = ["Passwords do not match."];
 
   if (!businessName) errors.businessName = ["Business name is required."];
+  if (!ownerName) errors.ownerName = ["Your name is required."];
   if (!businessCategory) errors.businessCategory = ["Business type is required."];
-  if (!businessEmail) errors.businessEmail = ["Business email is required."];
-  else if (!isEmail(businessEmail)) errors.businessEmail = ["Enter a valid business email address."];
+  if (!businessEmail) errors.businessEmail = ["Email address is required."];
+  else if (!isEmail(businessEmail)) errors.businessEmail = ["Enter a valid email address."];
   if (!businessPhone) errors.businessPhone = ["Business phone is required."];
 
   if (!agreedToTerms) errors.agreedToTerms = ["You must agree to the Terms of Service."];
@@ -162,16 +163,15 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
     result = await submitMerchantSignup({
       // The Account owner section was removed from the form: the business
       // email IS the login email, and the business phone the contact phone.
-      // full_name is required by the backend (it becomes the auth user's
-      // user_metadata.full_name and the submission's contact name) and is
-      // no longer collected separately, so the business name stands in.
-      full_name: businessName,
+      // "Your Name" carries the person signing up, so it feeds full_name
+      // (the auth user's user_metadata.full_name and the submission's
+      // contact name) — it is not a second business name.
+      full_name: ownerName,
       email: businessEmail,
       password,
       contact_phone: businessPhone,
       nida_number: nidaNumber,
       business_name: businessName,
-      legal_business_name: legalBusinessName || null,
       business_category: businessCategory,
       // Required (NOT NULL) by the backend but not asked for separately on
       // this form — the business type answers the same question, so it is

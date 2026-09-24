@@ -12,7 +12,6 @@ export function ContactForm() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [businessType, setBusinessType] = useState("");
-  const [location, setLocation] = useState("");
   const [message, setMessage] = useState("");
 
   const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
@@ -38,7 +37,7 @@ export function ContactForm() {
 
     setStatus("loading");
     try {
-      const context = [businessType && `Business Type: ${businessType}`, location && `Location: ${location}`]
+      const context = [businessType && `Business Type: ${businessType}`]
         .filter(Boolean)
         .join("\n");
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/public/inquiries`, {
@@ -131,16 +130,6 @@ export function ContactForm() {
           className={inputClass}
           value={businessType}
           onChange={(event) => setBusinessType(event.target.value)}
-        />
-      </div>
-      <div>
-        <label className={labelClass}>Physical Location</label>
-        <input
-          type="text"
-          placeholder="e.g. Kinondoni, Dar es Salaam"
-          className={inputClass}
-          value={location}
-          onChange={(event) => setLocation(event.target.value)}
         />
       </div>
       <div>

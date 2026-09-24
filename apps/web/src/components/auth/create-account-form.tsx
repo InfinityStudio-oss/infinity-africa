@@ -134,15 +134,15 @@ export function CreateAccountForm() {
       <fieldset className={fieldsetClass}>
         <legend className={legendClass}>Business details</legend>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field name="businessName" label="Business / Trading Name" defaultValue={v.businessName} errors={err.businessName} />
-          <Field name="legalBusinessName" label="Legal Business Name" optional hideOptionalHint defaultValue={v.legalBusinessName} errors={err.legalBusinessName} />
+          <Field name="businessName" label="Business Name" defaultValue={v.businessName} errors={err.businessName} />
+          <Field name="ownerName" label="Your Name" placeholder="e.g. Amani Mushi" defaultValue={v.ownerName} errors={err.ownerName} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="businessCategory" label="Business Type" placeholder="e.g. Retail, Logistics, Restaurant" defaultValue={v.businessCategory} errors={err.businessCategory} />
           <Field name="nidaNumber" label="NIDA Number" placeholder="20-digit National ID number" defaultValue={v.nidaNumber} errors={err.nidaNumber} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field name="businessEmail" label="Business Email" type="email" placeholder="hello@business.co.tz" defaultValue={v.businessEmail} errors={err.businessEmail} />
+          <Field name="businessEmail" label="Email" type="email" placeholder="hello@business.co.tz" defaultValue={v.businessEmail} errors={err.businessEmail} />
           <Field name="businessPhone" label="Business Phone" type="tel" placeholder="+255 7XX XXX XXX" defaultValue={v.businessPhone} errors={err.businessPhone} />
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">

@@ -64,6 +64,7 @@ function form(fields: Record<string, string>): FormData {
 }
 
 const VALID_SIGNUP = {
+  ownerName: "Amani Mushi",
   nidaNumber: "19900101-12345-12345-12",
   password: "Str0ng!pass",
   confirmPassword: "Str0ng!pass",
@@ -118,10 +119,10 @@ describe("signupWithBusinessAction", () => {
   it("requires a valid business email — it is the login email", async () => {
     const { signupWithBusinessAction } = await importActions();
     const missing = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessEmail: "" }));
-    expect(missing?.errors?.businessEmail?.[0]).toMatch(/business email is required/i);
+    expect(missing?.errors?.businessEmail?.[0]).toMatch(/email address is required/i);
 
     const invalid = await signupWithBusinessAction(null, form({ ...VALID_SIGNUP, businessEmail: "not-an-email" }));
-    expect(invalid?.errors?.businessEmail?.[0]).toMatch(/valid business email/i);
+    expect(invalid?.errors?.businessEmail?.[0]).toMatch(/valid email address/i);
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
@@ -132,7 +133,7 @@ describe("signupWithBusinessAction", () => {
     expect(submitMerchantSignup).not.toHaveBeenCalled();
   });
 
-  it("derives full_name and the login email from the business fields", async () => {
+  it("takes full_name from Your Name and the login email from the business email", async () => {
     submitMerchantSignup.mockResolvedValue({
       merchant_id: "m1",
       merchant_code: "MER-1",
@@ -149,7 +150,7 @@ describe("signupWithBusinessAction", () => {
     const payload = submitMerchantSignup.mock.calls[0][0];
     expect(payload).toEqual(
       expect.objectContaining({
-        full_name: "Amani Traders",
+        full_name: "Amani Mushi",
         email: "hello@amanitraders.co.tz",
         contact_phone: "+255711222333",
         nature_of_business: "Retail",
@@ -173,7 +174,7 @@ describe("signupWithBusinessAction", () => {
     expect(state?.awaitingEmailVerification).toBe(true);
     expect(submitMerchantSignup).toHaveBeenCalledWith(
       expect.objectContaining({
-        full_name: "Amani Traders",
+        full_name: "Amani Mushi",
         email: "hello@amanitraders.co.tz",
         nida_number: "19900101-12345-12345-12",
         business_name: "Amani Traders",
