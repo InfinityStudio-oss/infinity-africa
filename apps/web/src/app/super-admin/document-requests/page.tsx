@@ -11,7 +11,7 @@ export default async function SuperAdminDocumentRequestsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Document Requests" description="Supporting evidence requested from merchants for flagged transactions." />
+      <PageHeader title="Document Requests" description="Supporting evidence requested from businesses for flagged transactions." />
       <DocumentRequestsTable rows={requests} />
     </div>
   );

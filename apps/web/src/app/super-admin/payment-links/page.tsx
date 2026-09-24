@@ -26,7 +26,7 @@ export default async function SuperAdminPaymentLinksPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Payment Links Monitoring" description="Platform-wide view of every payment link created by merchants." />
+      <PageHeader title="Payment Links Monitoring" description="Platform-wide view of every payment link created by businesses." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="link" label="Total Links" value={links.length.toLocaleString()} />
@@ -37,7 +37,7 @@ export default async function SuperAdminPaymentLinksPage() {
 
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <input className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" placeholder="Link ID, merchant, or customer" />
+          <input className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" placeholder="Link ID, business, or customer" />
           <select className="px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
             <option>All Statuses</option>
             <option>Active</option>

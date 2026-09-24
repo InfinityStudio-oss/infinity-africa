@@ -19,7 +19,7 @@ export default async function SuperAdminDisputesPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Disputes" description="Customer-reported chargebacks and product/service issues across all merchants." />
+      <PageHeader title="Disputes" description="Customer-reported chargebacks and product/service issues across all businesses." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="gavel" label="Total Disputes" value={counts.total.toLocaleString()} />

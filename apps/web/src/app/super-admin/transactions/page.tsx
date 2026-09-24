@@ -40,7 +40,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
     <div className="space-y-8">
       <PageHeader
         title="Transactions"
-        description="The full platform ledger — every collection, withdrawal, fee, refund, and reversal across all merchants."
+        description="The full platform ledger — every collection, withdrawal, fee, refund, and reversal across all businesses."
         action={<ExportTransactionsCsvButton transactions={transactions} />}
       />
 

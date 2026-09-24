@@ -320,8 +320,8 @@ export function PricingRulesView({
 
       {selectedMerchantId && (
         <PricingRuleSection
-          title="Merchant Pricing Rules"
-          description="Negotiated fees for this merchant — take precedence over the platform fallback below."
+          title="Business Pricing Rules"
+          description="Negotiated fees for this business — take precedence over the platform fallback below."
           rules={merchantRules}
           createAction={createMerchantPricingRuleAction.bind(null, selectedMerchantId)}
         />
@@ -329,7 +329,7 @@ export function PricingRulesView({
 
       <PricingRuleSection
         title="Platform Fallback Rules"
-        description="Applied to any withdrawal with no matching merchant-specific rule."
+        description="Applied to any withdrawal with no matching business-specific rule."
         rules={platformRules}
         createAction={createPlatformFallbackPricingRuleAction}
       />

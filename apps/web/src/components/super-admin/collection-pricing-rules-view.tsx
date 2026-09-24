@@ -68,14 +68,14 @@ function RuleFields({ rule }: { rule?: CollectionPricingRuleRow }) {
       </div>
       <div>
         <label className={labelClass}>Label (optional)</label>
-        <input name="label" defaultValue={rule?.label ?? ""} placeholder="e.g. Merchant A negotiated rate" className={inputClass} />
+        <input name="label" defaultValue={rule?.label ?? ""} placeholder="e.g. Business A negotiated rate" className={inputClass} />
       </div>
       <div className="col-span-2 sm:col-span-4">
         <label className={labelClass}>Notes / Agreement Reference (optional)</label>
         <input
           name="notes"
           defaultValue={rule?.notes ?? ""}
-          placeholder="e.g. Contract #2026-114, signed 2026-08-30 — never shown to the merchant"
+          placeholder="e.g. Contract #2026-114, signed 2026-08-30 — never shown to the business"
           className={inputClass}
         />
       </div>
@@ -293,8 +293,8 @@ export function CollectionPricingRulesView({
       <div className="rounded-lg bg-primary-container/10 text-on-background px-4 py-3 text-sm flex items-start gap-2.5">
         <Icon name="info" className="text-[18px] shrink-0 mt-0.5 text-primary" />
         <div className="space-y-1">
-          <p>These fees apply to collection transactions only. Withdrawals do not charge merchant fees during MVP.</p>
-          <p className="text-on-surface-variant">Collection pricing is negotiated separately with each merchant/customer.</p>
+          <p>These fees apply to collection transactions only. Withdrawals do not charge business fees during MVP.</p>
+          <p className="text-on-surface-variant">Collection pricing is negotiated separately with each business/customer.</p>
         </div>
       </div>
 
@@ -319,8 +319,8 @@ export function CollectionPricingRulesView({
 
       {selectedMerchantId && (
         <RuleSection
-          title="Merchant Collection Pricing Rules"
-          description="Negotiated collection fees for this merchant — take precedence over the platform default below."
+          title="Business Collection Pricing Rules"
+          description="Negotiated collection fees for this business — take precedence over the platform default below."
           rules={merchantRules}
           createAction={createMerchantCollectionPricingRuleAction.bind(null, selectedMerchantId)}
         />
@@ -328,7 +328,7 @@ export function CollectionPricingRulesView({
 
       <RuleSection
         title="Platform Fallback Collection Rules"
-        description="Applied to any merchant with no matching merchant-specific rule."
+        description="Applied to any business with no matching business-specific rule."
         rules={platformRules}
         createAction={createPlatformFallbackCollectionPricingRuleAction}
       />

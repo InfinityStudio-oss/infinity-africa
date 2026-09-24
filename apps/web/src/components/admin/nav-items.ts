@@ -26,11 +26,10 @@ export interface AdminNavItem {
 // longer reachable from here.
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Dashboard", href: "/super-admin", icon: "dashboard" },
-  { label: "Merchants", href: "/super-admin/merchants", icon: "storefront" },
-  { label: "Merchant Users", href: "/super-admin/merchant-users", icon: "manage_accounts" },
+  { label: "Businesses", href: "/super-admin/merchants", icon: "storefront" },
+  { label: "Business Users", href: "/super-admin/merchant-users", icon: "manage_accounts" },
   { label: "Onboarding & Compliance/KYC", href: "/super-admin/onboarding", icon: "assignment_ind" },
   { label: "Collections", href: "/super-admin/collections", icon: "payments" },
-  { label: "Payment Links", href: "/super-admin/payment-links", icon: "link" },
   { label: "Pay by Link", href: "/super-admin/pay-by-link", icon: "storefront" },
   { label: "Invoices", href: "/super-admin/invoices", icon: "receipt" },
   { label: "Customers", href: "/super-admin/customers", icon: "group" },

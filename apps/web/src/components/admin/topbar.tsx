@@ -45,7 +45,7 @@ export function AdminTopbar({
           <Icon name="search" className="text-on-surface-variant mr-2 text-[20px]" />
           <input
             className="bg-transparent border-none outline-none w-full text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant p-0"
-            placeholder="Search merchants, transactions, invoices, payment links..."
+            placeholder="Search businesses, transactions, invoices..."
             type="text"
           />
         </div>

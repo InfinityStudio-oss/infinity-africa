@@ -154,7 +154,7 @@ function RequestInfoForm({ id }: { id: string }) {
       <input
         name="message"
         required
-        placeholder="What do you need from the merchant?"
+        placeholder="What do you need from the business?"
         className={`${inputClass} max-w-md`}
       />
       <input

@@ -18,7 +18,7 @@ export default async function SuperAdminApiKeysPage() {
     <div className="space-y-8">
       <PageHeader
         title="API Keys"
-        description="Oversee sandbox and live API keys issued to every merchant on the platform."
+        description="Oversee sandbox and live API keys issued to every business on the platform."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">

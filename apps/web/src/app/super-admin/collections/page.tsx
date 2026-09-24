@@ -41,7 +41,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Collections" description="Platform-wide mobile money collections across every merchant." />
+      <PageHeader title="Collections" description="Platform-wide mobile money collections across every business." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="payments" label="Collections Today" value={overview ? formatCurrency(overview.collections_today, "TZS") : "—"} />

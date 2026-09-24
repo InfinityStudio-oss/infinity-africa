@@ -97,7 +97,7 @@ export function DisputesTable({ rows }: { rows: AdminDisputeRow[] }) {
                             </select>
                             <input
                               name="note"
-                              placeholder="Note to merchant (optional)"
+                              placeholder="Note to business (optional)"
                               className="px-3 py-2 bg-surface border border-surface-container-highest rounded-lg text-xs w-64"
                             />
                             <button type="submit" className="bg-primary-container text-on-primary text-xs font-semibold py-2 px-4 rounded-lg hover:opacity-90">

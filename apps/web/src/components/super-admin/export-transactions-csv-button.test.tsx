@@ -60,7 +60,7 @@ describe("ExportTransactionsCsvButton", () => {
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
     const text = await blob.text();
     expect(text).toContain(
-      '"Date","Merchant","ID","Type","Transaction ID","Reference","Provider Reference","Method","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status"',
+      '"Date","Business","ID","Type","Transaction ID","Reference","Provider Reference","Method","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status"',
     );
     expect(text).toContain("Juma Traders Ltd");
     expect(text).toContain("27048391");

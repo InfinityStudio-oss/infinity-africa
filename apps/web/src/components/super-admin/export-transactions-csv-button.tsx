@@ -6,7 +6,7 @@ import type { AdminTransactionRow } from "@/lib/admin/types";
 
 const CSV_HEADER = [
   "Date",
-  "Merchant",
+  "Business",
   "ID",
   "Type",
   "Transaction ID",

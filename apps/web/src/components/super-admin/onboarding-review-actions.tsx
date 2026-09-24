@@ -58,7 +58,7 @@ export function OnboardingReviewActions({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={3}
-        placeholder="Add a note (optional) — shown to the merchant for Reject / Request More Info"
+        placeholder="Add a note (optional) — shown to the business for Reject / Request More Info"
         className="w-full rounded-lg border border-outline-variant bg-transparent px-3 py-2 text-sm text-on-surface placeholder-outline focus:outline-none focus:border-primary-container"
       />
       {buttons}

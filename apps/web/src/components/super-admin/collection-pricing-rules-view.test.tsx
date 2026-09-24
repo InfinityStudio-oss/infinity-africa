@@ -72,9 +72,9 @@ describe("CollectionPricingRulesView", () => {
     );
 
     expect(
-      screen.getByText("These fees apply to collection transactions only. Withdrawals do not charge merchant fees during MVP."),
+      screen.getByText("These fees apply to collection transactions only. Withdrawals do not charge business fees during MVP."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Collection pricing is negotiated separately with each merchant/customer.")).toBeInTheDocument();
+    expect(screen.getByText("Collection pricing is negotiated separately with each business/customer.")).toBeInTheDocument();
     expect(screen.getByText("Juma Traders Ltd")).toBeInTheDocument();
     expect(screen.getAllByText("Add Collection Pricing Rule").length).toBeGreaterThan(0);
     expect(screen.getByText("Platform default", { exact: false })).toBeInTheDocument();

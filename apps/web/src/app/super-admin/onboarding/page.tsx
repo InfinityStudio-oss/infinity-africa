@@ -25,11 +25,11 @@ export default async function SuperAdminOnboardingPage() {
     <div className="space-y-8">
       <PageHeader
         title="Onboarding & Compliance/KYC"
-        description="Review merchant onboarding submissions and manage verification across the platform."
+        description="Review business onboarding submissions and manage verification across the platform."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <AdminKpiCard variant="brand" icon="verified_user" label="Verified Merchants" value={verified.toLocaleString()} />
+        <AdminKpiCard variant="brand" icon="verified_user" label="Verified Businesses" value={verified.toLocaleString()} />
         <AdminKpiCard variant="brand" icon="hourglass_empty" label="Pending Review" value={pending.toLocaleString()} />
         <AdminKpiCard variant="brand" icon="mark_email_unread" label="Info Requested" value={infoRequested.toLocaleString()} />
         <AdminKpiCard variant="brand" icon="block" label="Rejected" value={rejected.toLocaleString()} />

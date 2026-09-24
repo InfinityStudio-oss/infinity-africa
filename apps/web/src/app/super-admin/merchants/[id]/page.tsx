@@ -30,7 +30,7 @@ import { getOnboardingSubmission } from "@/lib/onboarding/api";
 import { merchantStatusBadge } from "@/lib/admin/status-tones";
 
 export const metadata = {
-  title: "Merchant Detail | InfinityPay Super Admin",
+  title: "Business Detail | InfinityPay Super Admin",
 };
 
 function SectionCard({ title, viewAllHref, children }: { title: string; viewAllHref?: string; children: React.ReactNode }) {
@@ -111,10 +111,10 @@ export default async function SuperAdminMerchantDetailPage({ params }: { params:
             </p>
             <p className="text-sm text-on-surface-variant">
               {merchant.api_access_suspended
-                ? "Suspended — no API key (sandbox or live) will authenticate for this merchant."
+                ? "Suspended — no API key (sandbox or live) will authenticate for this business."
                 : merchant.production_api_eligible
-                  ? "Production keys are self-service: this merchant is approved, verified, and priced, so they can create live keys themselves — no approval step needed here."
-                  : "Sandbox keys are self-service. Production keys aren't available yet — this merchant isn't approved, KYC-verified, and priced all at once."}
+                  ? "Production keys are self-service: this business is approved, verified, and priced, so they can create live keys themselves — no approval step needed here."
+                  : "Sandbox keys are self-service. Production keys aren't available yet — this business isn't approved, KYC-verified, and priced all at once."}
             </p>
           </div>
           {merchant.api_access_suspended ? (
@@ -131,7 +131,7 @@ export default async function SuperAdminMerchantDetailPage({ params }: { params:
               <button
                 type="submit"
                 className="border border-error text-error text-sm font-medium py-2 px-4 rounded-lg hover:bg-error-container/10 transition-colors"
-                title="Blocks all API key authentication for this merchant (sandbox and live) — for abuse/fraud response"
+                title="Blocks all API key authentication for this business (sandbox and live) — for abuse/fraud response"
               >
                 Suspend API Access
               </button>
@@ -335,7 +335,7 @@ export default async function SuperAdminMerchantDetailPage({ params }: { params:
 
         <SectionCard title="Pricing Rules" viewAllHref={`/super-admin/pricing-rules?merchant_id=${merchantId}`}>
           {pricingRules.length === 0 ? (
-            <EmptyRow label="No merchant-specific pricing — platform fallback applies." />
+            <EmptyRow label="No business-specific pricing — platform fallback applies." />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left min-w-[500px]">

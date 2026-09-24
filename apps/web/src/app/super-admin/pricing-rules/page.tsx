@@ -33,7 +33,7 @@ export default async function SuperAdminPricingRulesPage({
     <div className="space-y-8">
       <PageHeader
         title="Collection Pricing Rules"
-        description="Configure flexible, per-merchant collection fees — the exact rate is negotiated separately with each merchant/customer."
+        description="Configure flexible, per-business collection fees — the exact rate is negotiated separately with each business/customer."
       />
       <CollectionPricingRulesView
         merchants={merchants}

@@ -46,7 +46,7 @@ export function MerchantUsersTable({ rows }: { rows: MerchantUserRow[] }) {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <input
             className="sm:col-span-3 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm"
-            placeholder="Search by user name, merchant, or email"
+            placeholder="Search by user name, business, or email"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -66,7 +66,7 @@ export function MerchantUsersTable({ rows }: { rows: MerchantUserRow[] }) {
 
       <Card padded={false}>
         <div className="p-5 pb-3">
-          <h3 className="text-2xl font-semibold text-on-background">All Merchant Users</h3>
+          <h3 className="text-2xl font-semibold text-on-background">All Business Users</h3>
         </div>
         {filtered.length === 0 ? (
           <p className="p-6 text-sm text-on-surface-variant">No merchant users match your filters.</p>

@@ -18,7 +18,7 @@ export default async function SuperAdminInvoicesPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Invoice Management" description="Track every invoice issued across all merchants on the platform." />
+      <PageHeader title="Invoice Management" description="Track every invoice issued across all businesses on the platform." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <AdminKpiCard variant="brand" icon="receipt" label="Total Invoices" value={invoices.length.toLocaleString()} />
@@ -29,7 +29,7 @@ export default async function SuperAdminInvoicesPage() {
 
       <Card>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <input className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" placeholder="Invoice number, merchant, or customer" />
+          <input className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" placeholder="Invoice number, business, or customer" />
           <select className="px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
             <option>All Statuses</option>
             <option>Draft</option>

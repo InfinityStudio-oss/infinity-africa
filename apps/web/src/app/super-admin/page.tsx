@@ -11,9 +11,9 @@ export const metadata = {
 };
 
 const MODULES = [
-  { href: "/super-admin/merchants", icon: "storefront", title: "Merchant Management", description: "Onboard, verify & manage merchants" },
+  { href: "/super-admin/merchants", icon: "storefront", title: "Business Management", description: "Onboard, verify & manage businesses" },
   { href: "/super-admin/payment-links", icon: "link", title: "Payment Links Monitoring", description: "Platform-wide link activity" },
-  { href: "/super-admin/invoices", icon: "receipt", title: "Invoice Management", description: "Track invoices across merchants" },
+  { href: "/super-admin/invoices", icon: "receipt", title: "Invoice Management", description: "Track invoices across businesses" },
   { href: "/super-admin/withdrawals", icon: "receipt_long", title: "Withdrawal Monitoring", description: "Approve & track payouts" },
   { href: "/admin/reconciliation-center", icon: "account_balance", title: "Reconciliation Center", description: "Callback logs & unmatched txns" },
   { href: "/admin/provider-status", icon: "dns", title: "Provider Status", description: "Selcom, M-Pesa, bank uptime" },
@@ -39,7 +39,7 @@ export default async function SuperAdminCommandCenterPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <AdminKpiCard variant="brand" icon="store" label="Total Merchants" value={overview.total_merchants.toLocaleString()} />
+          <AdminKpiCard variant="brand" icon="store" label="Total Businesses" value={overview.total_merchants.toLocaleString()} />
           <AdminKpiCard variant="brand" icon="account_balance_wallet" label="Collections Today" value={formatCurrency(overview.collections_today, "TZS")} />
           <AdminKpiCard variant="brand" icon="send_money" label="Withdrawals Today" value={formatCurrency(overview.withdrawals_today, "TZS")} />
           <AdminKpiCard variant="brand" icon="link" label="Active Payment Links" value={overview.active_payment_links.toLocaleString()} />
