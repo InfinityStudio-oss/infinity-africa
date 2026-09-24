@@ -149,16 +149,6 @@ export function CreateAccountForm() {
           <Field name="tinNumber" label="TIN" optional hideOptionalHint placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
         </div>
-      </fieldset>
-
-      {/* Business Email above is the login email — there is no separate
-          account-owner email any more, so this section only has to collect
-          the password that goes with it. */}
-      <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>Create your password</legend>
-        <p className="mt-2 text-sm text-on-surface-variant">
-          You&apos;ll sign in with your business email and this password.
-        </p>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <div>
             <Field name="password" label="Password" type="password" autoComplete="new-password" errors={err.password} />
