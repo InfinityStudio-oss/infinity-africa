@@ -372,22 +372,14 @@ def test_auto_processed_withdrawal_writes_an_audit_log(fake_client, fake_resend,
     assert len(audit_rows) == 1
 
 
-# --- Emails: CEO request notification suppressed by default ------------------
+# --- Emails: CEO request notification ----------------------------------------
 
 
-def test_ceo_withdrawal_request_email_not_sent_by_default(fake_client, fake_resend):
-    # Default settings — SEND_WITHDRAWAL_REQUEST_EMAILS is false.
-    merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _fund_wallet(fake_client, merchant_id, "1000000.00")
-
-    _request_withdrawal(merchant_id, admin_id, "50000.00")
-
-    assert fake_resend.calls == []
-
-
-def test_ceo_withdrawal_request_email_sent_when_flag_enabled(fake_client, fake_resend, monkeypatch):
-    monkeypatch.setenv("SEND_WITHDRAWAL_REQUEST_EMAILS", "true")
-    get_settings.cache_clear()
+def test_ceo_is_notified_of_every_withdrawal_awaiting_approval(fake_client, fake_resend):
+    """No longer gated by SEND_WITHDRAWAL_REQUEST_EMAILS. A withdrawal that
+    is sitting unpaid waiting on a human is exactly the message that must
+    not be suppressed for email-volume reasons — the flag used to hide it,
+    which meant a request could wait indefinitely with nobody told."""
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -395,6 +387,18 @@ def test_ceo_withdrawal_request_email_sent_when_flag_enabled(fake_client, fake_r
 
     assert len(fake_resend.calls) == 1
     assert fake_resend.calls[0]["to"] == ["ceo@infinitypay.me"]
+
+
+def test_no_ceo_notification_when_no_ceo_email_is_configured(fake_client, fake_resend, monkeypatch):
+    """An unset CEO_EMAIL still skips it — there is nowhere to send."""
+    monkeypatch.setenv("CEO_EMAIL", "")
+    get_settings.cache_clear()
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "1000000.00")
+
+    _request_withdrawal(merchant_id, admin_id, "50000.00")
+
+    assert fake_resend.calls == []
 
 
 # --- Super Admin visibility ----------------------------------------------------

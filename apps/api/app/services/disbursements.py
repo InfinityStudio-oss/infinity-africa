@@ -219,6 +219,39 @@ def quote_withdrawal_fee(
     )
 
 
+def preflight_withdrawal(
+    client: Client,
+    *,
+    merchant_id: uuid.UUID,
+    amount: Decimal,
+    currency: str,
+    method: DisbursementMethod,
+    destination_code: DestinationCode,
+) -> None:
+    """Every gate execute_disbursement applies, run WITHOUT creating
+    anything — used by the withdrawal OTP request endpoint so a merchant is
+    not emailed a code for a request that could never succeed.
+
+    This is a courtesy check, never a substitute. execute_disbursement runs
+    all of it again once the OTP verifies, and approve_disbursement runs the
+    standing/risk gates a third time before the provider is called, because
+    minutes or days can pass between a request and its approval. Nothing
+    here is cached or trusted later."""
+    _check_merchant_is_verified(client, merchant_id=merchant_id)
+    _check_no_open_high_risk_alerts(client, merchant_id=merchant_id)
+    _check_withdrawal_amount_limits(client, merchant_id=merchant_id, amount=amount)
+
+    breakdown = calculate_withdrawal_fee(
+        client, merchant_id=merchant_id, amount=amount, channel=method, destination_code=destination_code
+    )
+    available = get_wallet_balance(client, merchant_id=merchant_id, currency=currency)
+    if breakdown.total_reserved_amount > available:
+        raise InsufficientBalanceError(
+            f"Insufficient balance: available {available} {currency}, "
+            f"requested {breakdown.total_reserved_amount} {currency} (amount + fees)"
+        )
+
+
 async def execute_disbursement(
     client: Client,
     *,

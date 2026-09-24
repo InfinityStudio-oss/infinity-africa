@@ -66,6 +66,36 @@ def fake_resend(monkeypatch):
     return fake
 
 
+def _request_and_verify_withdrawal(fake_client, user_id, body: dict, *, idem: str | None = None):
+    """The withdrawal flow is two steps now: POST /withdrawals returns an OTP
+    challenge and creates nothing, then verifying the emailed code creates
+    the PENDING_ADMIN_APPROVAL disbursement. Reads the code straight out of
+    the challenge row — it is only ever stored hashed, so the test hashes
+    candidate codes rather than reading a plaintext that does not exist."""
+    import hashlib
+
+    response = client.post(
+        "/v1/merchant/withdrawals",
+        headers={**auth_headers(user_id), "Idempotency-Key": idem or _idem()},
+        json=body,
+    )
+    if response.status_code != 202:
+        return response
+    challenge_id = response.json()["data"]["challenge_id"]
+    row = next(
+        r for r in fake_client.table("merchant_withdrawal_otp_challenges")._table.rows if r["id"] == challenge_id
+    )
+    code = next(
+        f"{n:06d}" for n in range(1_000_000)
+        if hashlib.sha256(f"{n:06d}".encode()).hexdigest() == row["otp_hash"]
+    )
+    return client.post(
+        f"/v1/merchant/withdrawals/{challenge_id}/verify",
+        headers=auth_headers(user_id),
+        json={"code": code},
+    )
+
+
 def _merchant_and_member(fake_client, role: str = "MERCHANT_ADMIN", **merchant_overrides):
     merchant = create_merchant(fake_client, **merchant_overrides)
     merchant_id = uuid.UUID(merchant["id"])
@@ -1370,10 +1400,10 @@ def test_withdrawal_dispatches_to_correct_method(fake_client, method, destinatio
     merchant_id, user_id = _merchant_and_member(fake_client)
     _fund_wallet(fake_client, merchant_id, "100000")
 
-    response = client.post(
-        "/v1/merchant/withdrawals",
-        headers={**auth_headers(user_id), "Idempotency-Key": _idem()},
-        json={
+    response = _request_and_verify_withdrawal(
+        fake_client,
+        user_id,
+        {
             "method": method,
             "destination_code": destination_code,
             "amount": "10000",
@@ -1381,7 +1411,7 @@ def test_withdrawal_dispatches_to_correct_method(fake_client, method, destinatio
             **body_extra,
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 202, response.text
     body = response.json()["data"]
     assert body["method"] == method
     assert body["merchant_id"] == str(merchant_id)
@@ -1472,10 +1502,10 @@ def test_withdrawal_mobile_money_accepts_optional_network(fake_client):
     merchant_id, user_id = _merchant_and_member(fake_client)
     _fund_wallet(fake_client, merchant_id, "100000")
 
-    response = client.post(
-        "/v1/merchant/withdrawals",
-        headers={**auth_headers(user_id), "Idempotency-Key": _idem()},
-        json={
+    response = _request_and_verify_withdrawal(
+        fake_client,
+        user_id,
+        {
             "method": "MOBILE_MONEY",
             "amount": "10000",
             "destination_name": "Jane",

@@ -15,6 +15,7 @@ the Merchant Portal frontend's existing "Withdraw"/"Withdrawals" copy. The
 existing /v1/disbursements/* routes are untouched.
 """
 
+import logging
 import secrets
 import uuid
 from datetime import date, datetime, timezone
@@ -36,7 +37,7 @@ from fastapi import (
 
 from app.auth import get_current_user, hash_api_key, require_own_merchant_role
 from app.config import get_settings
-from app.core.errors import ConflictError, NotFoundError, ValidationAPIError
+from app.core.errors import APIError, ConflictError, NotFoundError, ValidationAPIError
 from app.core.feature_flags import (
     require_merchant_api_keys_enabled,
     require_withdrawals_enabled,
@@ -70,7 +71,7 @@ from app.schemas.disputes import (
     RequestRefundInput,
 )
 from app.schemas.document_requests import DocumentRequestResponse
-from app.schemas.enums import CollectionMethod, UserRole
+from app.schemas.enums import CollectionMethod, DisbursementMethod, UserRole
 from app.schemas.fraud import FraudAlertResponse
 from app.schemas.invoices import InvoiceItemResponse, InvoiceResponse, InvoiceUpdate
 from app.schemas.ip_allowlist import IpAllowlistCreate, IpAllowlistResponse
@@ -92,6 +93,8 @@ from app.schemas.merchant_portal import (
     MerchantUserUpdate,
     WalletLedgerEntryResponse,
     WithdrawalCreate,
+    WithdrawalOtpChallengeResponse,
+    WithdrawalOtpVerify,
 )
 from app.schemas.merchants import MerchantResponse
 from app.schemas.notifications import NotificationResponse
@@ -117,11 +120,16 @@ from app.services.crud import (
     list_for_merchant,
     update_row,
 )
-from app.services.disbursements import execute_disbursement, quote_withdrawal_fee
+from app.services.disbursements import (
+    execute_disbursement,
+    preflight_withdrawal,
+    quote_withdrawal_fee,
+)
 from app.services.email import (
     send_invoice_email,
     send_payment_link_customer_email,
     send_staff_invite_email,
+    send_withdrawal_otp_email,
 )
 from app.services.hosted_checkout import execute_hosted_checkout_collection
 from app.services.idempotency import run_idempotent
@@ -144,6 +152,15 @@ from app.services.payment_links import (
 )
 from app.services.wallet_ledger_export import build_wallet_ledger_workbook
 from app.services.wallet_push import execute_wallet_push_collection
+from app.services.withdrawal_otp import (
+    create_challenge,
+    get_own_challenge,
+    mask_email,
+    rotate_otp,
+    verify_otp,
+)
+
+logger = logging.getLogger("infinity.merchant_portal")
 
 router = APIRouter(prefix="/merchant", tags=["merchant-portal"])
 
@@ -1055,66 +1072,289 @@ def list_my_withdrawals(
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
 
-@router.post("/withdrawals", response_model=APIResponse[DisbursementResponse], status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/withdrawals",
+    response_model=APIResponse[WithdrawalOtpChallengeResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def create_my_withdrawal(
     payload: WithdrawalCreate,
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="withdrawal_otp_request", limit=5, window_seconds=300))
+    ],
 ):
     """Merchant-admin only — a deliberate tightening vs. the existing
     /v1/disbursements/{method} routes, which also allow MERCHANT_STAFF.
 
-    Always *creates* PENDING_ADMIN_APPROVAL, fee recalculated and frozen
-    server-side (never trusts a client-supplied fee). It stays pending for
-    a Super Admin (app/routers/admin_withdrawals.py) unless withdrawal
-    automation is enabled and this request passes the eligibility check,
-    in which case execute_disbursement auto-processes it inline — see
-    app/services/disbursements.py::execute_disbursement. Automation is off
-    by default, so the historical "always needs a human" behavior is what
-    a deployment gets unless it deliberately opts in."""
-    # ENABLE_WITHDRAWALS kill switch — checked first, before auth-independent
-    # idempotency bookkeeping, exactly like the /v1/disbursements/{method}
-    # routes and require_merchant_api_keys_enabled() above. Was missing here,
-    # so the Merchant Portal's own withdrawal route ignored the platform-wide
-    # pause switch entirely.
+    **This no longer creates a withdrawal.** It validates the request, then
+    emails a 6-digit code to the merchant's own registered contact address
+    and returns a challenge. The disbursement is only created by
+    POST /withdrawals/{challenge_id}/verify, and even then as
+    PENDING_ADMIN_APPROVAL — the provider is still reached only from a
+    Super Admin's approval, and the balance/standing/fraud gates still
+    re-run there.
+
+    Nothing is written to disbursements, nothing is reserved, and no CEO
+    notification is sent until the code verifies. An abandoned challenge is
+    therefore inert: it holds no funds and is invisible to every approval,
+    payout, sweep and reconciliation path.
+
+    Validation deliberately runs here rather than at verify time so a
+    merchant learns about an unverified account, a blocked balance or a bad
+    destination immediately, instead of after fetching a code from their
+    inbox."""
     require_withdrawals_enabled()
     client = get_supabase_admin()
+
+    merchant = require_approved_merchant(client, membership.merchant_id)
+    recipient_email = (merchant.get("contact_email") or "").strip()
+    if not recipient_email:
+        raise ValidationAPIError(
+            "No contact email is set for this business, so we can't send a verification code. "
+            "Add one in Settings first."
+        )
+
+    # The same gates execute_disbursement applies, run now so the merchant
+    # is not sent a code for a request that could never succeed. They are
+    # NOT trusted to still hold at verify time — execute_disbursement runs
+    # every one of them again, and a Super Admin's approval re-runs them a
+    # third time before any money moves.
+    preflight_withdrawal(
+        client,
+        merchant_id=membership.merchant_id,
+        amount=payload.amount,
+        currency=payload.currency,
+        method=payload.method,
+        destination_code=payload.destination_code,
+    )
+
+    stored_payload = {
+        "method": payload.method.value,
+        "amount": str(payload.amount),
+        "currency": payload.currency,
+        "destination_name": payload.resolved_destination_name,
+        "destination_identifier": payload.destination_identifier,
+        "destination_code": payload.destination_code,
+        "bank_name": payload.bank_name if payload.method.value == "BANK_ACCOUNT" else None,
+        "network": payload.network if payload.method.value == "MOBILE_MONEY" else None,
+        "description": payload.description,
+        # Carried so the eventual withdrawal inherits the caller's key —
+        # replaying the same key cannot create two withdrawals.
+        "idempotency_key": idempotency_key,
+    }
+
+    challenge, code = create_challenge(
+        client,
+        merchant_id=membership.merchant_id,
+        requested_by=membership.user_id,
+        payload=stored_payload,
+    )
+
+    # Raises if it cannot send. The merchant must never be shown a code
+    # entry box for a code that was never delivered.
+    send_withdrawal_otp_email(
+        client,
+        merchant=merchant,
+        recipient_email=recipient_email,
+        code=code,
+        expires_minutes=get_settings().withdrawal_otp_expires_minutes,
+    )
+
+    write_audit_log(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="withdrawal.otp_requested",
+        resource_type="withdrawal_otp_challenge",
+        resource_id=uuid.UUID(challenge["id"]),
+        # Amount and method only — never the code, and never the full
+        # destination identifier.
+        metadata={"method": payload.method.value, "amount": str(payload.amount)},
+    )
+
+    settings = get_settings()
+    return APIResponse(
+        data=WithdrawalOtpChallengeResponse(
+            challenge_id=uuid.UUID(challenge["id"]),
+            masked_email=mask_email(recipient_email),
+            expires_at=challenge["expires_at"],
+            resend_cooldown_seconds=settings.withdrawal_otp_resend_cooldown_seconds,
+            max_attempts=settings.withdrawal_otp_max_attempts,
+        )
+    )
+
+
+@router.post(
+    "/withdrawals/{challenge_id}/verify",
+    response_model=APIResponse[DisbursementResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def verify_my_withdrawal_otp(
+    challenge_id: uuid.UUID,
+    payload: WithdrawalOtpVerify,
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="withdrawal_otp_verify", limit=10, window_seconds=300))
+    ],
+):
+    """Verifies the emailed code and, only then, creates the withdrawal.
+
+    The withdrawal is built from the payload stored on the challenge, never
+    from anything re-sent now, so the amount and destination that were
+    validated and emailed are exactly the ones created — there is no window
+    in which a verified code could be applied to a different request.
+
+    The result is a normal PENDING_ADMIN_APPROVAL disbursement. No provider
+    is called here; that still happens only from a Super Admin's approval.
+    """
+    require_withdrawals_enabled()
+    client = get_supabase_admin()
+
+    challenge = get_own_challenge(client, challenge_id=challenge_id, merchant_id=membership.merchant_id)
+    # A challenge belongs to the person who raised it, not to the merchant
+    # at large — a second admin on the same account cannot complete someone
+    # else's withdrawal using a code sent to the shared mailbox.
+    if str(challenge.get("requested_by")) != str(membership.user_id):
+        raise NotFoundError("Verification request not found")
+
+    try:
+        verified = verify_otp(client, challenge=challenge, submitted_code=payload.code)
+    except APIError:
+        write_audit_log(
+            client,
+            actor_id=membership.user_id,
+            actor_type="user",
+            merchant_id=membership.merchant_id,
+            action="withdrawal.otp_verify_failed",
+            resource_type="withdrawal_otp_challenge",
+            resource_id=challenge_id,
+            metadata={"attempts": int(challenge.get("attempts") or 0) + 1},
+        )
+        raise
+
+    write_audit_log(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="withdrawal.otp_verified",
+        resource_type="withdrawal_otp_challenge",
+        resource_id=challenge_id,
+    )
+
+    stored = verified.get("withdrawal_payload") or challenge.get("withdrawal_payload") or {}
+    method = DisbursementMethod(stored["method"])
 
     async def _handler() -> tuple[int, dict]:
         disbursement = await execute_disbursement(
             client,
             merchant_id=membership.merchant_id,
-            method=payload.method,
-            amount=payload.amount,
-            currency=payload.currency,
-            destination_name=payload.resolved_destination_name,
-            destination_identifier=payload.destination_identifier,
-            destination_code=payload.destination_code,
-            bank_name=payload.bank_name if payload.method.value == "BANK_ACCOUNT" else None,
-            network=payload.network if payload.method.value == "MOBILE_MONEY" else None,
-            description=payload.description,
+            method=method,
+            amount=Decimal(str(stored["amount"])),
+            currency=stored.get("currency") or "TZS",
+            destination_name=stored.get("destination_name"),
+            destination_identifier=stored["destination_identifier"],
+            destination_code=stored["destination_code"],
+            bank_name=stored.get("bank_name"),
+            network=stored.get("network"),
+            description=stored.get("description"),
         )
         write_audit_log(
             client,
             actor_id=membership.user_id,
             actor_type="user",
             merchant_id=membership.merchant_id,
-            action="disbursement.requested",
+            action="withdrawal.submitted_after_otp",
             resource_type="disbursement",
             resource_id=uuid.UUID(disbursement["id"]),
-            metadata={"method": payload.method.value},
+            metadata={"method": stored["method"], "challenge_id": str(challenge_id)},
         )
         return status.HTTP_202_ACCEPTED, disbursement
 
+    # Reuses the idempotency key from the original request, carried on the
+    # challenge. A repeated verify therefore returns the first withdrawal
+    # rather than creating a second, on top of used_at already making the
+    # challenge single-use.
     _status_code, body = await run_idempotent(
         client,
         merchant_id=membership.merchant_id,
         endpoint="POST /v1/merchant/withdrawals",
-        idempotency_key=idempotency_key,
-        request_payload=payload.model_dump(mode="json"),
+        idempotency_key=str(stored.get("idempotency_key") or challenge_id),
+        request_payload={k: v for k, v in stored.items() if k != "idempotency_key"},
         handler=_handler,
     )
+
+    # The Super Admin notification is sent by execute_disbursement, which
+    # owns it for every withdrawal route — not duplicated here.
+
     return APIResponse(data=DisbursementResponse(**body))
+
+
+@router.post(
+    "/withdrawals/{challenge_id}/resend",
+    response_model=APIResponse[WithdrawalOtpChallengeResponse],
+)
+async def resend_my_withdrawal_otp(
+    challenge_id: uuid.UUID,
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="withdrawal_otp_resend", limit=5, window_seconds=600))
+    ],
+):
+    """Issues a fresh code on the same challenge, replacing the previous one.
+
+    The stored payload is untouched, so a resend cannot change the amount or
+    destination the code was bound to. rotate_otp enforces the cooldown and
+    resets the attempt counter — the new code gets its own budget, since
+    being locked out of a code you have not seen yet would be nonsense."""
+    require_withdrawals_enabled()
+    client = get_supabase_admin()
+
+    challenge = get_own_challenge(client, challenge_id=challenge_id, merchant_id=membership.merchant_id)
+    if str(challenge.get("requested_by")) != str(membership.user_id):
+        raise NotFoundError("Verification request not found")
+    if challenge.get("used_at") or challenge.get("locked_at"):
+        raise ValidationAPIError("This request can no longer be verified. Start a new withdrawal.")
+
+    merchant = require_approved_merchant(client, membership.merchant_id)
+    recipient_email = (merchant.get("contact_email") or "").strip()
+    if not recipient_email:
+        raise ValidationAPIError("No contact email is set for this business.")
+
+    code = rotate_otp(client, challenge=challenge)
+    send_withdrawal_otp_email(
+        client,
+        merchant=merchant,
+        recipient_email=recipient_email,
+        code=code,
+        expires_minutes=get_settings().withdrawal_otp_expires_minutes,
+    )
+
+    write_audit_log(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="withdrawal.otp_resent",
+        resource_type="withdrawal_otp_challenge",
+        resource_id=challenge_id,
+        metadata={"resend_count": int(challenge.get("resend_count") or 0) + 1},
+    )
+
+    settings = get_settings()
+    refreshed = get_own_challenge(client, challenge_id=challenge_id, merchant_id=membership.merchant_id)
+    return APIResponse(
+        data=WithdrawalOtpChallengeResponse(
+            challenge_id=challenge_id,
+            masked_email=mask_email(recipient_email),
+            expires_at=refreshed["expires_at"],
+            resend_cooldown_seconds=settings.withdrawal_otp_resend_cooldown_seconds,
+            max_attempts=settings.withdrawal_otp_max_attempts,
+        )
+    )
 
 
 # --- Transactions ---------------------------------------------------------

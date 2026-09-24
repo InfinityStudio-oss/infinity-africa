@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+import { WithdrawalOtpModal } from "@/components/merchant/withdrawal-otp-modal";
 import {
   DESTINATION_CODE_LABELS,
   DESTINATION_CODES_BY_METHOD,
@@ -20,6 +22,7 @@ import {
   getAvailableBalance,
   InsufficientBalanceError,
   listDisbursements,
+  type WithdrawalOtpChallenge,
 } from "@/lib/portal/api";
 import { disbursementBadge } from "@/lib/portal/status-tones";
 import type { Disbursement, FeeBreakdown } from "@/lib/portal/types";
@@ -77,6 +80,9 @@ export function WithdrawalsView() {
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Non-null while the merchant is verifying an emailed code. Nothing exists
+  // server-side in this state, so cancelling simply drops it.
+  const [challenge, setChallenge] = useState<WithdrawalOtpChallenge | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -159,7 +165,10 @@ export function WithdrawalsView() {
 
     setSubmitting(true);
     try {
-      const disbursement = await createDisbursement({
+      // Creates nothing yet — the backend emails a code and returns a
+      // challenge. The form is deliberately left filled in: if the merchant
+      // cancels or the code expires they should not have to retype it.
+      const challenge = await createDisbursement({
         method,
         destination_name: recipientName,
         destination_identifier: recipientIdentifier,
@@ -169,20 +178,7 @@ export function WithdrawalsView() {
         amount,
         description: notes || null,
       });
-      setDisbursements((prev) => [disbursement, ...prev]);
-      setRecipientName("");
-      setRecipientIdentifier("");
-      setBankName("");
-      setNetwork("");
-      setAmount("");
-      setNotes("");
-      setQuote(null);
-      setQuotedFor(null);
-      setSuccess(
-        disbursement.auto_approved
-          ? "Withdrawal submitted for processing."
-          : "Withdrawal submitted for review.",
-      );
+      setChallenge(challenge);
     } catch (err) {
       // InsufficientBalanceError already carries the backend's safe message;
       // withdrawalErrorMessage() handles every other structured backend
@@ -463,6 +459,26 @@ export function WithdrawalsView() {
           </table>
         </div>
       </Card>
+      {challenge && (
+        <WithdrawalOtpModal
+          challenge={challenge}
+          onCancel={() => setChallenge(null)}
+          onVerified={(disbursement) => {
+            setChallenge(null);
+            setDisbursements((prev) => [disbursement, ...prev]);
+            // Cleared only now, once the withdrawal actually exists.
+            setRecipientName("");
+            setRecipientIdentifier("");
+            setBankName("");
+            setNetwork("");
+            setAmount("");
+            setNotes("");
+            setQuote(null);
+            setQuotedFor(null);
+            setSuccess("Withdrawal request submitted. It is pending approval.");
+          }}
+        />
+      )}
     </div>
   );
 }

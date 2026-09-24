@@ -309,6 +309,19 @@ class Settings(BaseSettings):
     # comment.
     auto_withdrawal_require_approved_merchant: bool = True
 
+    # Email OTP on merchant withdrawals (app/services/withdrawal_otp.py).
+    # The merchant proves control of their registered email before a
+    # withdrawal request is created at all — nothing is written to
+    # disbursements, no provider is called, and no CEO notification is sent
+    # until the code verifies. Defaults are deliberately usable as-is so a
+    # deployment cannot end up with OTP effectively disabled by forgetting
+    # an env var; there is no flag to turn this off, because "skip the
+    # verification step on money movement" is not a configuration this
+    # should offer.
+    withdrawal_otp_expires_minutes: int = 10
+    withdrawal_otp_max_attempts: int = 5
+    withdrawal_otp_resend_cooldown_seconds: int = 60
+
     # Transactional email (Resend) — see app/services/email.py and
     # docs/email-delivery.md. Backend/Railway only, NEVER set
     # RESEND_API_KEY in apps/web/Vercel. Blank RESEND_API_KEY means email

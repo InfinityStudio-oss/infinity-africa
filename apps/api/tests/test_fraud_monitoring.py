@@ -9,6 +9,7 @@ after these hooks were added.
 import uuid
 
 import pytest
+import resend
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
@@ -28,8 +29,16 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
+def _fake_resend(monkeypatch):
+    """Withdrawal requests now send an OTP email before creating anything,
+    and that send raises if it fails — so it has to be stubbed here."""
+    monkeypatch.setattr(resend.Emails, "send", lambda params: {"id": "resend-test-message-id"})
+
+
+@pytest.fixture(autouse=True)
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
+    monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
     monkeypatch.setenv("MOCK_PROVIDER_FAILURE_RATE", "0")
     monkeypatch.setenv("MOCK_PROVIDER_LATENCY_SECONDS", "0")
     get_settings.cache_clear()
@@ -297,4 +306,8 @@ def test_withdrawal_allowed_when_only_low_risk_alerts_open(fake_client):
         },
     )
 
+    # A MEDIUM alert must not block the request. With OTP in front of every
+    # withdrawal, "not blocked" means a challenge was issued — the
+    # disbursement itself is created only after the code verifies.
     assert response.status_code == 202, response.text
+    assert response.json()["data"]["otp_required"] is True

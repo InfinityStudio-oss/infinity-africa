@@ -337,3 +337,24 @@ class MerchantUserResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class WithdrawalOtpChallengeResponse(BaseModel):
+    """What POST /withdrawals returns now: the withdrawal has NOT been
+    created, only a verification challenge. Carries nothing sensitive — no
+    code, no hash, and the email only in masked form, so the response is
+    safe to render and safe to log."""
+
+    otp_required: bool = True
+    challenge_id: uuid.UUID
+    masked_email: str
+    expires_at: datetime
+    resend_cooldown_seconds: int
+    max_attempts: int
+
+
+class WithdrawalOtpVerify(BaseModel):
+    # Exactly six digits, enforced here so a malformed code never reaches
+    # the comparison or burns an attempt on something that could not have
+    # been valid.
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")

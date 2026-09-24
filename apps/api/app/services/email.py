@@ -939,7 +939,13 @@ def send_withdrawal_request_notification_email(
     is already saved by the time this runs, so a failed notification must
     never be mistaken for a failed withdrawal request."""
     settings = get_settings()
-    if not settings.send_withdrawal_request_emails or not settings.ceo_email:
+    # Deliberately NOT gated by send_withdrawal_request_emails any more.
+    # Every withdrawal now reaches this point only after the merchant has
+    # verified an emailed OTP, and it then sits unpaid until a Super Admin
+    # acts — so this is the one message telling a human there is something
+    # to approve. Suppressing it to save email volume would strand real
+    # withdrawals. An unset CEO_EMAIL still skips it: nowhere to send.
+    if not settings.ceo_email:
         return None
 
     business_name = merchant.get("business_name") or "A merchant"
@@ -1430,3 +1436,76 @@ def send_merchant_collection_notification_email(
         )
 
     return delivery_rows
+
+
+def send_withdrawal_otp_email(
+    client: Client, *, merchant: dict, recipient_email: str, code: str, expires_minutes: int
+) -> None:
+    """The 6-digit code that has to be entered before a withdrawal request is
+    created at all (app/services/withdrawal_otp.py).
+
+    Unlike almost every other send_* here this one **raises** on failure.
+    Everything else is best-effort because the thing it announces has already
+    happened; here the email *is* the mechanism. If it cannot be delivered
+    the merchant has no way to complete the withdrawal, so failing loudly at
+    request time is far better than showing them a code entry box for a code
+    that was never sent.
+
+    Goes only to the merchant's own registered contact address, never to
+    CEO_EMAIL — the CEO is notified after verification, not before, and
+    never receives the code.
+
+    The code is passed to _log_delivery nowhere: the delivery record keeps
+    the recipient and status, never the code itself.
+    """
+    settings = get_settings()
+    subject = "InfinityPay withdrawal verification code"
+    sender = settings.email_from
+    business_name = merchant.get("business_name") or "your business"
+
+    body = f"""
+    <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Verify your withdrawal request</h1>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">Enter this code in the InfinityPay portal to submit the
+    withdrawal request for {business_name}.</p>
+    <p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:6px;color:#04332a;">{code}</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151;">The code expires in {expires_minutes} minutes and can
+    only be used once.</p>
+    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Entering this code submits the request for approval — it
+    does not release any funds. Every withdrawal is reviewed by InfinityPay before payment.</p>
+    <p style="margin:12px 0 0;font-size:13px;color:#6b7280;"><strong>If you did not request a withdrawal</strong>, do
+    not enter this code. Contact us immediately at {settings.email_reply_to}.</p>
+    """
+    html = _email_shell(body_html=body)
+    merchant_id = uuid.UUID(merchant["id"]) if merchant.get("id") else None
+
+    try:
+        message_id = send_email(
+            to=recipient_email, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
+        )
+    except EmailDeliveryError as exc:
+        _log_delivery(
+            client,
+            merchant_id=merchant_id,
+            email_type="withdrawal_otp",
+            related_resource_type=None,
+            related_resource_id=None,
+            recipient_email=recipient_email,
+            sender_email=sender,
+            subject=subject,
+            status="failed",
+            error_message=str(exc),
+        )
+        raise
+
+    _log_delivery(
+        client,
+        merchant_id=merchant_id,
+        email_type="withdrawal_otp",
+        related_resource_type=None,
+        related_resource_id=None,
+        recipient_email=recipient_email,
+        sender_email=sender,
+        subject=subject,
+        status="sent",
+        provider_message_id=message_id,
+    )

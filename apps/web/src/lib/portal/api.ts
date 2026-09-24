@@ -385,7 +385,7 @@ export interface CreateDisbursementInput {
 
 export class InsufficientBalanceError extends Error {}
 
-export async function createDisbursement(input: CreateDisbursementInput): Promise<Disbursement> {
+export async function createDisbursement(input: CreateDisbursementInput): Promise<WithdrawalOtpChallenge> {
   const isBank = input.method === "BANK_ACCOUNT";
   const isMobileMoney = input.method === "MOBILE_MONEY";
   const payload = {
@@ -403,7 +403,11 @@ export async function createDisbursement(input: CreateDisbursementInput): Promis
   };
 
   try {
-    return await apiWrite<Disbursement>("/v1/merchant/withdrawals", "POST", payload, { idempotent: true });
+    // Returns an OTP challenge, NOT a withdrawal. Nothing is created until
+    // verifyWithdrawalOtp() succeeds — see the backend endpoint's docstring.
+    return await apiWrite<WithdrawalOtpChallenge>("/v1/merchant/withdrawals", "POST", payload, {
+      idempotent: true,
+    });
   } catch (err) {
     const error = err as Error & { code?: string };
     if (error.code === "insufficient_balance") {
@@ -847,4 +851,28 @@ export async function acceptRefund(disputeId: string, amount: string): Promise<R
 
 export async function listMyNotifications(): Promise<AppNotification[]> {
   return (await apiGet<AppNotification[]>("/v1/merchant/notifications")) ?? [];
+}
+
+
+/** The challenge returned by POST /v1/merchant/withdrawals. Carries no code
+ *  and no hash — only enough to render the verification step. */
+export interface WithdrawalOtpChallenge {
+  otp_required: boolean;
+  challenge_id: string;
+  masked_email: string;
+  expires_at: string;
+  resend_cooldown_seconds: number;
+  max_attempts: number;
+}
+
+/** Verifies the emailed code. Only this creates the withdrawal, and only as
+ *  PENDING_ADMIN_APPROVAL — payment still needs a Super Admin. */
+export async function verifyWithdrawalOtp(challengeId: string, code: string): Promise<Disbursement> {
+  return apiWrite<Disbursement>(`/v1/merchant/withdrawals/${challengeId}/verify`, "POST", { code });
+}
+
+/** Sends a fresh code for the same challenge. The withdrawal details are
+ *  fixed at request time, so a resend cannot change what was asked for. */
+export async function resendWithdrawalOtp(challengeId: string): Promise<WithdrawalOtpChallenge> {
+  return apiWrite<WithdrawalOtpChallenge>(`/v1/merchant/withdrawals/${challengeId}/resend`, "POST", {});
 }
