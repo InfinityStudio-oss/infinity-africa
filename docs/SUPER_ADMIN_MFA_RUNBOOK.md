@@ -66,22 +66,28 @@ Do not start until **all** of these hold:
 
 ### Current state (checked 2026-09-25)
 
-**One Super Admin exists: `ceo@infinitypay.me`** — email confirmed, last
-signed in 2026-09-24. Healthy, but a single point of failure.
+**Two Super Admins exist:**
 
-**This blocks mandatory MFA.** With one admin and enforcement on, a lost or
-wiped phone means nobody can approve a withdrawal until someone gets into
-the Railway dashboard to flip the flag back — while real merchant money
-sits unpaid. Add a second Super Admin before enabling enforcement.
+| Account | Email confirmed | Signed in yet |
+|---|---|---|
+| `ceo@infinitypay.me` | yes | yes |
+| `paulmasanja27@icloud.com` | yes | **no** |
 
-Adding one is deliberately manual and is the owner's decision, not
-something to automate:
+The second was added on 2026-09-25 by direct service-role insert into
+`platform_admins`, with an `audit_logs` entry recording it — that table has
+no product write path, so a grant leaves no trace unless one is written
+deliberately.
 
-1. Create (or identify) the user in Supabase Auth and confirm their email.
-2. Insert their `user_id` into `public.platform_admins` via the SQL editor.
-3. Confirm they can log in **before** MFA is enforced.
+**The count precondition is met. The login precondition is not.**
+`paulmasanja27@icloud.com` has never signed in, so it is currently an
+untested backup: it satisfies the "two admins" rule on paper while being
+unproven in practice, which is the failure mode this precondition exists to
+prevent. Sign in with it at least once, and confirm it reaches the Super
+Admin dashboard, **before** MFA enforcement is enabled.
 
-Re-run the query below afterwards; it should return two rows.
+Adding an admin is deliberately manual and is the owner's decision. There
+is no product path that writes `platform_admins`, and adding one would turn
+a merchant account takeover into a platform takeover.
 
 ### Verifying the admin accounts
 
@@ -100,12 +106,10 @@ select pa.user_id,
 Expected: **two or more rows**, each a real address the owner controls,
 each `email_confirmed = true`, each with a recent `last_sign_in_at`.
 
-One row means stop and add a second admin before going further.
-
-Admins are created by hand in SQL, deliberately — there is no product path
-that writes `platform_admins`, and adding one would turn a merchant account
-takeover into a platform takeover. Creating the second admin is an explicit
-owner decision, not something to automate.
+One row means stop and add a second admin before going further. A row with
+a null `last_sign_in_at` counts toward the two but does **not** satisfy the
+precondition — an admin nobody has ever logged in as is not a proven way
+back in.
 
 ## Rollout flag
 
