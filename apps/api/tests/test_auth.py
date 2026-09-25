@@ -294,7 +294,7 @@ def test_require_super_admin_denies_regular_user(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        deps.require_super_admin(user)
+        deps.require_super_admin(_FakeRequest(), user)
 
     assert exc_info.value.status_code == 403
 
@@ -308,4 +308,4 @@ def test_require_super_admin_allows_admin(monkeypatch):
         lambda: _FakeClient({"platform_admins": {"id": str(uuid.uuid4())}}),
     )
 
-    assert deps.require_super_admin(user) is user
+    assert deps.require_super_admin(_FakeRequest(), user) is user

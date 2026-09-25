@@ -30,6 +30,8 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 
 from app.auth.hashing import hash_api_key
 from app.auth.jwt import InvalidTokenError, decode_access_token
+from app.config import get_settings
+from app.core.errors import MfaRequiredError
 from app.core.request_ip import client_ip
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
@@ -66,7 +68,7 @@ def get_current_user(
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject claim")
 
-    return AuthenticatedUser(id=user_id, email=claims.get("email"))
+    return AuthenticatedUser(id=user_id, email=claims.get("email"), assurance_level=claims.get("aal"))
 
 
 def get_current_user_id(
@@ -134,12 +136,55 @@ def require_role(*allowed_roles: UserRole):
 
 
 def require_super_admin(
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> AuthenticatedUser:
-    """For platform-only endpoints with no merchant_id in the path at all."""
+    """For platform-only endpoints with no merchant_id in the path at all.
+
+    Two independent checks, in this order and never collapsed into one:
+    the caller must be in platform_admins (the DB role, unchanged), and —
+    when REQUIRE_SUPER_ADMIN_MFA is on — must additionally hold an `aal2`
+    session. MFA never substitutes for the role check: a second factor
+    proves who you are, not what you are allowed to do.
+
+    Enforced here rather than route by route so every current AND future
+    /v1/admin endpoint is covered the day it is written. Reads are covered
+    too, deliberately: a platform admin session can see every merchant's
+    data, so it is worth a second factor even when nothing is being
+    changed."""
     if not is_super_admin(user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
+
+    if get_settings().require_super_admin_mfa and user.assurance_level != "aal2":
+        _write_mfa_block_audit_log(request=request, user=user)
+        raise MfaRequiredError(
+            "Two-factor authentication is required for platform admin access. "
+            "Complete the verification step and try again."
+        )
+
     return user
+
+
+def _write_mfa_block_audit_log(*, request: Request, user: AuthenticatedUser) -> None:
+    """A real admin turned away for want of a second factor is worth a
+    record — it is both a legitimate-user-locked-out signal and what a
+    stolen-password attempt looks like. Best-effort: never let the audit
+    write turn a clean 403 into a 500. Records no token and no code."""
+    try:
+        get_supabase_admin().table("audit_logs").insert(
+            {
+                "actor_id": str(user.id),
+                "actor_type": "user",
+                "action": "super_admin.mfa.required_block",
+                "resource_type": "platform_admin",
+                "resource_id": str(user.id),
+                "ip_address": client_ip(request),
+                "user_agent": request.headers.get("user-agent"),
+                "metadata": {"path": request.url.path, "assurance_level": user.assurance_level or "none"},
+            }
+        ).execute()
+    except Exception:  # noqa: BLE001, S110 — best-effort audit only
+        pass
 
 
 def verify_api_key(

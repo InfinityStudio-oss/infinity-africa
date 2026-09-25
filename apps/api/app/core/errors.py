@@ -73,6 +73,20 @@ class WithdrawalRestrictedError(ConflictError):
     code = "withdrawal_restricted"
 
 
+class MfaRequiredError(APIError):
+    """A verified Super Admin whose session has not presented a second
+    factor, while REQUIRE_SUPER_ADMIN_MFA is on.
+
+    403 rather than 401: the caller IS authenticated and IS a platform
+    admin, so re-logging-in is not the remedy — they need to complete a
+    TOTP challenge on the session they already have. The distinct
+    `mfa_required` code is what lets the portal route them to the
+    challenge page instead of showing a generic "not authorized"."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+    code = "mfa_required"
+
+
 class FeatureDisabledError(APIError):
     """A Super Admin has flipped one of the ENABLE_COLLECTIONS/
     ENABLE_WITHDRAWALS/ENABLE_MERCHANT_API_KEYS kill switches off in

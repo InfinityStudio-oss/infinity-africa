@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     # instead of the real client.
     trusted_proxy_hops: int = 1
 
+    # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
+    # When true, require_super_admin additionally demands a Supabase `aal2`
+    # session — a Super Admin holding only a password is refused with
+    # `mfa_required` on every /v1/admin route.
+    #
+    # Default false so deploying this code changes nothing: enrolment has to
+    # happen before enforcement, or the first deploy locks every admin out of
+    # approving withdrawals. Turning it on is the documented, deliberate step,
+    # and setting it back to false is the whole rollback.
+    require_super_admin_mfa: bool = False
+
     # Every logger in this app is named "infinity.X" (logging.getLogger(
     # "infinity.scheduler"), "infinity.webhooks", etc.) — see
     # app/main.py::_configure_logging, which sets this level on their

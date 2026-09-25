@@ -25,18 +25,24 @@ def _next_test_merchant_code() -> str:
     return f"27{next(_merchant_code_seq):06d}"
 
 
-def token_for(user_id: uuid.UUID) -> str:
+def token_for(user_id: uuid.UUID, *, aal: str | None = None) -> str:
+    """`aal` mirrors Supabase's own assurance-level claim: "aal1" for a
+    password-only session, "aal2" once a second factor has been
+    presented. Omitted by default so every existing test keeps building
+    the token it always did."""
     payload = {
         "sub": str(user_id),
         "email": "user@example.com",
         "aud": "authenticated",
         "exp": int(time.time()) + 3600,
     }
+    if aal is not None:
+        payload["aal"] = aal
     return jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
 
 
-def auth_headers(user_id: uuid.UUID) -> dict:
-    return {"Authorization": f"Bearer {token_for(user_id)}"}
+def auth_headers(user_id: uuid.UUID, *, aal: str | None = None) -> dict:
+    return {"Authorization": f"Bearer {token_for(user_id, aal=aal)}"}
 
 
 def make_super_admin(fake_client, user_id: uuid.UUID) -> None:

@@ -1,7 +1,34 @@
 # Super Admin MFA (TOTP) rollout runbook
 
-**Status: not implemented.** This is the plan and its preconditions. No
-code reads `REQUIRE_SUPER_ADMIN_MFA` today.
+**Status: implemented, enforcement OFF.** The code is shipped and
+`REQUIRE_SUPER_ADMIN_MFA` is read on both the API and the portal. It
+defaults to `false`, so nothing is enforced until it is deliberately turned
+on.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| Backend gate | `require_super_admin` — DB role first, then an `aal2` check when the flag is on |
+| Error | `403 mfa_required` (`app/core/errors.py::MfaRequiredError`) |
+| Enrolment page | `/admin-mfa/enroll` |
+| Challenge page | `/admin-mfa/verify` |
+| Portal gate | `requireSuperAdmin()` redirects to those pages |
+| Audit | `super_admin.mfa.required_block` on every refusal |
+
+Enforcement sits inside `require_super_admin` rather than on individual
+routes, so **all 67 `/v1/admin` endpoints are covered**, including ones
+written later. A test enumerates the live route table and asserts each one
+returns `mfa_required` for an `aal1` admin, so a new admin route cannot
+quietly ship unguarded.
+
+Reads are covered as well as writes, deliberately: a platform admin session
+can see every merchant's data, which is worth a second factor even when
+nothing is being changed.
+
+The MFA pages live at `/admin-mfa/*`, **outside** `/super-admin`. That tree's
+layout redirects unverified admins to them, so hosting them inside it would
+be an infinite redirect.
 
 Written 2026-09-25, after the auth hardening pass in `43478d2`.
 
@@ -113,7 +140,14 @@ back in.
 
 ## Rollout flag
 
-`REQUIRE_SUPER_ADMIN_MFA`, on the Railway API service.
+`REQUIRE_SUPER_ADMIN_MFA` — set it on **both** the Railway API service and
+the Vercel web project, to the same value.
+
+The API is the authority: it refuses any `/v1/admin` call from an `aal1`
+session on its own. The portal's copy only decides whether an admin is sent
+to the MFA pages before the console renders. If the two ever disagree in the
+unsafe direction, the console renders and every API call behind it fails
+with `mfa_required` — confusing, but it fails closed.
 
 - `false` — enrollment available, enforcement off. Ships in this state.
 - `true` — a Super Admin without `aal2` is refused on `/v1/admin/*`.

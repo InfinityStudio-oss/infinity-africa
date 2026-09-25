@@ -5,6 +5,13 @@ import type { UserRole } from "@infinity/shared";
 
 import { getSession } from "./session";
 
+import {
+  MFA_ENROLL_PATH,
+  MFA_VERIFY_PATH,
+  getSuperAdminMfaState,
+  superAdminMfaRequired,
+} from "@/lib/auth/super-admin-mfa";
+
 /**
  * Require an authenticated user for a Server Component route (layout or
  * page). Redirects to /login if there's no valid session.
@@ -35,6 +42,19 @@ export async function requireSuperAdmin() {
 
   if (!data) {
     redirect("/portal");
+  }
+
+  // Second factor, when the rollout flag requires it. Deliberately after
+  // the platform_admins lookup and never instead of it: MFA proves who the
+  // caller is, the role decides what they may do.
+  //
+  // This redirect is a convenience, not the control. The backend refuses
+  // every /v1/admin call from an aal1 session on its own, so a page that
+  // somehow rendered without it would show no data anyway.
+  if (superAdminMfaRequired()) {
+    const state = await getSuperAdminMfaState(supabase);
+    if (state === "needs-enrollment") redirect(MFA_ENROLL_PATH);
+    if (state === "needs-verification") redirect(MFA_VERIFY_PATH);
   }
 
   return user;

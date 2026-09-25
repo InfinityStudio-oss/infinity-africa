@@ -27,6 +27,12 @@ class AuthenticatedUser(BaseModel):
 
     id: uuid.UUID
     email: str | None = None
+    # Supabase's own `aal` claim: "aal1" for password-only, "aal2" once a
+    # second factor has been presented on THIS session. Safe to trust
+    # because it is inside the signed token and set by Supabase, unlike
+    # user_metadata, which the user can influence. None when the token
+    # predates MFA or the claim is absent — treated as "not aal2".
+    assurance_level: str | None = None
 
 
 class MerchantMembership(BaseModel):
