@@ -1428,7 +1428,13 @@ def _insert_ip_allowlist_entries(
                     "merchant_id": str(merchant_id),
                     "api_key_id": str(api_key_id),
                     "environment": environment,
-                    "label": entry.label,
+                    # api_ip_allowlist.label is NOT NULL while the API schema
+                    # leaves it optional, so an unlabelled row reaches PostgREST
+                    # as a null and 500s -- surfacing in the portal as the
+                    # generic "Couldn't reach InfinityPay". Fall back to the IP
+                    # itself, which is what ApiKeyAllowedIp already documents
+                    # ("falls back to the IP itself for display").
+                    "label": (entry.label or "").strip() or entry.ip_address_or_cidr,
                     "ip_address_or_cidr": entry.ip_address_or_cidr,
                     "notes": None,
                     "status": status_value,

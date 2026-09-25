@@ -505,6 +505,52 @@ def test_create_api_key_reconciles_conflicting_ip_whitelist_flags(fake_client):
     assert body["continue_without_ip_whitelist"] is False
 
 
+def test_create_api_key_stores_a_label_when_the_merchant_leaves_it_blank(fake_client):
+    """api_ip_allowlist.label is NOT NULL, but the request schema leaves the
+    label optional -- the portal's inline "Allowed server IPs" list lets you
+    add an IP without one. Passing that through as null reached PostgREST as
+    a null and 500d, which the portal showed as "Couldn't reach InfinityPay".
+    The fake client does not enforce NOT NULL, so this asserts the stored
+    value directly rather than relying on an insert failing."""
+    _merchant_id, user_id = _merchant_and_member(fake_client, role="DEVELOPER")
+
+    response = client.post(
+        "/v1/merchant/api-keys",
+        headers=auth_headers(user_id),
+        json={
+            "name": "Website checkout API",
+            "scopes": ["collections:write"],
+            "ip_whitelist_enabled": True,
+            "allowed_ips": [{"ip_address_or_cidr": "41.86.0.0/24"}],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    rows = fake_client.table("api_ip_allowlist")._table.rows
+    assert len(rows) == 1
+    # Falls back to the IP itself, as ApiKeyAllowedIp documents.
+    assert rows[0]["label"] == "41.86.0.0/24"
+    assert rows[0]["status"] == "pending"
+
+
+def test_create_api_key_keeps_a_label_the_merchant_did_supply(fake_client):
+    _merchant_id, user_id = _merchant_and_member(fake_client, role="DEVELOPER")
+
+    response = client.post(
+        "/v1/merchant/api-keys",
+        headers=auth_headers(user_id),
+        json={
+            "name": "Website checkout API",
+            "scopes": ["collections:write"],
+            "ip_whitelist_enabled": True,
+            "allowed_ips": [{"ip_address_or_cidr": "41.86.0.0/24", "label": "Main ecommerce server"}],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert fake_client.table("api_ip_allowlist")._table.rows[0]["label"] == "Main ecommerce server"
+
+
 def test_create_api_key_with_ip_whitelisting_enabled_requires_at_least_one_ip(fake_client):
     _merchant_id, user_id = _merchant_and_member(fake_client, role="DEVELOPER")
     response = client.post(
