@@ -61,7 +61,27 @@ from nobody being able to approve a withdrawal.
   as verification and reset mail landing in spam is an auth availability
   problem, not just a deliverability one.
 - `CEO_EMAIL` set in Railway, or withdrawal and signup notifications
-  silently no-op.
+  silently no-op. Accepts a comma-separated list.
+
+### TEMPORARY (2026-09-25): CEO_EMAIL points away from the domain
+
+`ceo@infinitypay.me` is **suppressed in Resend** — it hard-bounced while
+Google Workspace was still verifying `infinitypay.me`, so the mailbox was
+not accepting mail. Resend will not send to a suppressed address, and our
+own `email_deliveries` rows still said `sent` because that status means
+"Resend accepted the API call", not "it was delivered".
+
+While Workspace verification is pending, `CEO_EMAIL` points at an external
+inbox that works. Sending is unaffected — the `from` domain is verified
+with Resend independently of Workspace, which is why merchant OTP mail to
+Gmail keeps arriving.
+
+**When Workspace verification completes, do all three:**
+1. Remove `ceo@infinitypay.me` from Resend's suppression list.
+2. Send a test and confirm it actually lands in that mailbox.
+3. Only then put it back in `CEO_EMAIL`, alongside the external address.
+
+Until step 2 passes, putting it back just produces silent failures again.
 
 ## Railway (API)
 
