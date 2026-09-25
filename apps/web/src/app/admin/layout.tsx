@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/supabase/protected-route";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { listAdminNotifications } from "@/lib/admin/live-api";
+import { uiPreviewEnabled } from "@/lib/auth/ui-preview";
 
 export const metadata = {
   title: "Super Admin | InfinityPay",
@@ -12,7 +13,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = process.env.__PORTAL_UI_PREVIEW__ ? null : await requireSuperAdmin();
+  const user = uiPreviewEnabled() ? null : await requireSuperAdmin();
 
   const notifications = await listAdminNotifications();
   const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;

@@ -13,6 +13,18 @@ class Settings(BaseSettings):
 
     environment: str = "development"
 
+    # How many proxies of OUR OWN sit in front of this app, for reading
+    # X-Forwarded-For (see app/core/request_ip.py). Railway's edge is one,
+    # which is the default. Anything a client sends in that header to the
+    # left of our proxies' own entries is unverifiable, so this decides how
+    # far in from the right to read — and therefore whether a caller can
+    # choose their own IP and walk through every rate limit and the
+    # API-key IP allowlist. Set to 0 when no proxy is in front (the header
+    # is then ignored entirely); raise it to 2 if Cloudflare or similar is
+    # ever put ahead of Railway, or this reads the intermediate proxy
+    # instead of the real client.
+    trusted_proxy_hops: int = 1
+
     # Every logger in this app is named "infinity.X" (logging.getLogger(
     # "infinity.scheduler"), "infinity.webhooks", etc.) — see
     # app/main.py::_configure_logging, which sets this level on their

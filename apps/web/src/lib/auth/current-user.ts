@@ -6,6 +6,7 @@ import { getSession } from "@/lib/supabase/session";
 
 import { findById } from "./mock-store";
 import { getMockSession } from "./mock-session";
+import { mockAuthEnabled } from "./mock-auth-enabled";
 
 export interface CurrentUser {
   id: string;
@@ -34,6 +35,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       phone: typeof meta.phone === "string" ? meta.phone : "",
       source: "supabase",
     };
+  }
+
+  // Production never falls back to the mock identity store, even if a
+  // forged cookie is presented — see mock-auth-enabled.ts.
+  if (!mockAuthEnabled()) {
+    return null;
   }
 
   const mockUserId = await getMockSession();

@@ -13,10 +13,10 @@ _EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 
 class ForgotPasswordRequest(BaseModel):
     """POST /v1/auth/forgot-password — redirect_path is deliberately a
-    closed choice (see _ALLOWED_RESET_REDIRECT_PATHS in
-    app/routers/auth_actions.py), never an arbitrary URL a caller could
-    use to redirect a real Supabase recovery link somewhere attacker-
-    controlled."""
+    closed set of two values, not an arbitrary URL, so a caller cannot
+    point a real Supabase recovery link at a host they control. The
+    Literal below IS the allow-list; Supabase's own redirect allow-list
+    (docs/AUTH_SECURITY_CHECKLIST.md) is the second layer."""
 
     email: str = Field(pattern=_EMAIL_PATTERN)
     redirect_path: Literal["/dashboard/reset-password", "/admin-login/reset-password"] = "/dashboard/reset-password"

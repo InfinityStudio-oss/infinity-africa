@@ -12,6 +12,7 @@ import { isValidNida } from "./nida";
 import { isEmail, validatePassword } from "./password";
 import { findByEmail, verifyPassword } from "./mock-store";
 import { setMockSession } from "./mock-session";
+import { mockAuthEnabled } from "./mock-auth-enabled";
 import { isKnownAuthRejection, isSupabaseConfigured } from "./supabase-status";
 
 /**
@@ -261,6 +262,16 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
       }
       // Connectivity failure — fall through to the mock store below.
     }
+  }
+
+  if (!usedSupabase && !mockAuthEnabled()) {
+    // A Supabase outage in production is an outage, not a reason to
+    // authenticate someone by weaker means.
+    return {
+      errors: {},
+      formError: "We couldn't reach the sign-in service. Please try again in a moment.",
+      values: { email },
+    };
   }
 
   if (!usedSupabase) {

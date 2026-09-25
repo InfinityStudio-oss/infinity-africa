@@ -5,6 +5,7 @@ import { getOnboardingStatus } from "@/lib/onboarding/api";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { PendingVerificationBanner } from "@/components/portal/pending-verification-banner";
 import { AccountStatus } from "@infinity/shared";
+import { uiPreviewEnabled } from "@/lib/auth/ui-preview";
 
 export const metadata = {
   title: "Merchant Portal | InfinityPay",
@@ -16,7 +17,7 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (!process.env.__PORTAL_UI_PREVIEW__) {
+  if (!uiPreviewEnabled()) {
     await requireUser("/dashboard/login");
     const onboarding = await getOnboardingStatus();
     if (!onboarding || onboarding.next_path === "/onboarding") redirect("/onboarding");
