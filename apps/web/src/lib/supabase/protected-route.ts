@@ -27,6 +27,34 @@ export async function requireUser(redirectTo = "/login") {
 }
 
 /**
+ * An authenticated platform admin, with NO MFA gate applied.
+ *
+ * This is what the MFA pages themselves use. They cannot use
+ * requireSuperAdmin(), which redirects an unverified admin *to* those
+ * pages — that would loop forever. Splitting the two lets "you must be an
+ * admin to be here" and "you must have verified" be enforced separately.
+ *
+ * Lives here rather than beside the other MFA helpers on purpose: it needs
+ * requireUser, and importing that from lib/auth/super-admin-mfa would make
+ * a cycle with this module, which leaves one side undefined at runtime.
+ */
+export async function requireSuperAdminIdentity() {
+  const { user, supabase } = await requireUser("/admin-login");
+
+  const { data } = await supabase
+    .from("platform_admins")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!data) {
+    redirect("/portal");
+  }
+
+  return { user, supabase };
+}
+
+/**
  * Require the current user to be a platform super admin (platform_admins
  * membership — never user_metadata/app_metadata). Redirects non-admins to
  * the merchant portal rather than exposing a 403 page.

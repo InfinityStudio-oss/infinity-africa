@@ -5,9 +5,9 @@ import { SignOutLink } from "@/components/admin/sign-out-link";
 import {
   MFA_VERIFY_PATH,
   getSuperAdminMfaState,
-  requireSuperAdminIdentity,
   superAdminMfaRequired,
 } from "@/lib/auth/super-admin-mfa";
+import { requireSuperAdminIdentity } from "@/lib/supabase/protected-route";
 
 export default async function AdminMfaEnrollPage() {
   // Admin identity only — not requireSuperAdmin(), which would redirect
