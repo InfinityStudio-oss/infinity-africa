@@ -30,7 +30,9 @@ from app.services.payment_links import build_public_url
 logger = logging.getLogger("infinity.email")
 
 
-def send_email(*, to: str, subject: str, html: str, sender: str, reply_to: str | None = None) -> str:
+def send_email(
+    *, to: str | list[str], subject: str, html: str, sender: str, reply_to: str | None = None
+) -> str:
     """Sends one email through Resend. Returns the provider's message id
     (empty string if Resend didn't return one). Raises EmailDeliveryError
     on any failure — a missing API key, a rejected send, or the request
@@ -42,14 +44,17 @@ def send_email(*, to: str, subject: str, html: str, sender: str, reply_to: str |
         raise EmailDeliveryError("Email delivery is not configured yet.")
 
     resend.api_key = settings.resend_api_key
-    params: dict[str, Any] = {"from": sender, "to": [to], "subject": subject, "html": html}
+    # Resend takes an array either way. Normalising here means callers can
+    # pass one address or several without each of them re-deriving this.
+    recipients = [to] if isinstance(to, str) else list(to)
+    params: dict[str, Any] = {"from": sender, "to": recipients, "subject": subject, "html": html}
     if reply_to:
         params["reply_to"] = reply_to
 
     try:
         result = resend.Emails.send(params)
     except Exception:
-        logger.exception("Resend send failed (to=%s, subject=%s)", to, subject)
+        logger.exception("Resend send failed (to=%s, subject=%s)", ", ".join(recipients), subject)
         raise EmailDeliveryError("Couldn't send the email — the email provider rejected the request.") from None
 
     if isinstance(result, dict):
@@ -650,7 +655,7 @@ def send_inquiry_notification_email(client: Client, *, inquiry: dict) -> dict | 
     committed (app/routers/public_inquiries.py) — the inquiry must never
     be lost just because the notification email failed."""
     settings = get_settings()
-    if not settings.ceo_email:
+    if not settings.ceo_emails:
         return None
 
     subject = "New InfinityPay inquiry received"
@@ -684,7 +689,7 @@ def send_inquiry_notification_email(client: Client, *, inquiry: dict) -> dict | 
     html = _email_shell(body_html=body)
 
     try:
-        message_id = send_email(to=settings.ceo_email, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to)
+        message_id = send_email(to=settings.ceo_emails, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to)
     except EmailDeliveryError as exc:
         _log_delivery(
             client,
@@ -692,7 +697,7 @@ def send_inquiry_notification_email(client: Client, *, inquiry: dict) -> dict | 
             email_type="inquiry_notification",
             related_resource_type="inquiry",
             related_resource_id=inquiry.get("id"),
-            recipient_email=settings.ceo_email,
+            recipient_email=", ".join(settings.ceo_emails),
             sender_email=sender,
             subject=subject,
             status="failed",
@@ -706,7 +711,7 @@ def send_inquiry_notification_email(client: Client, *, inquiry: dict) -> dict | 
         email_type="inquiry_notification",
         related_resource_type="inquiry",
         related_resource_id=inquiry.get("id"),
-        recipient_email=settings.ceo_email,
+        recipient_email=", ".join(settings.ceo_emails),
         sender_email=sender,
         subject=subject,
         status="sent",
@@ -848,7 +853,7 @@ def send_merchant_signup_notification_email(
     that's guaranteed true (see AccountStatus.PENDING_VERIFICATION, the
     fixed initial review_status _submission_data sets)."""
     settings = get_settings()
-    if not settings.ceo_email:
+    if not settings.ceo_emails:
         return None
 
     business_name = merchant.get("business_name") or "A merchant"
@@ -896,7 +901,7 @@ def send_merchant_signup_notification_email(
 
     try:
         message_id = send_email(
-            to=settings.ceo_email, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
+            to=settings.ceo_emails, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
         )
     except EmailDeliveryError as exc:
         _log_delivery(
@@ -905,7 +910,7 @@ def send_merchant_signup_notification_email(
             email_type="merchant_signup_notification",
             related_resource_type="merchant",
             related_resource_id=merchant.get("id"),
-            recipient_email=settings.ceo_email,
+            recipient_email=", ".join(settings.ceo_emails),
             sender_email=sender,
             subject=subject,
             status="failed",
@@ -919,7 +924,7 @@ def send_merchant_signup_notification_email(
         email_type="merchant_signup_notification",
         related_resource_type="merchant",
         related_resource_id=merchant.get("id"),
-        recipient_email=settings.ceo_email,
+        recipient_email=", ".join(settings.ceo_emails),
         sender_email=sender,
         subject=subject,
         status="sent",
@@ -945,7 +950,7 @@ def send_withdrawal_request_notification_email(
     # acts — so this is the one message telling a human there is something
     # to approve. Suppressing it to save email volume would strand real
     # withdrawals. An unset CEO_EMAIL still skips it: nowhere to send.
-    if not settings.ceo_email:
+    if not settings.ceo_emails:
         return None
 
     business_name = merchant.get("business_name") or "A merchant"
@@ -997,7 +1002,7 @@ def send_withdrawal_request_notification_email(
 
     try:
         message_id = send_email(
-            to=settings.ceo_email, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
+            to=settings.ceo_emails, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
         )
     except EmailDeliveryError as exc:
         _log_delivery(
@@ -1006,7 +1011,7 @@ def send_withdrawal_request_notification_email(
             email_type="withdrawal_request_notification",
             related_resource_type="disbursement",
             related_resource_id=disbursement.get("id"),
-            recipient_email=settings.ceo_email,
+            recipient_email=", ".join(settings.ceo_emails),
             sender_email=sender,
             subject=subject,
             status="failed",
@@ -1020,7 +1025,7 @@ def send_withdrawal_request_notification_email(
         email_type="withdrawal_request_notification",
         related_resource_type="disbursement",
         related_resource_id=disbursement.get("id"),
-        recipient_email=settings.ceo_email,
+        recipient_email=", ".join(settings.ceo_emails),
         sender_email=sender,
         subject=subject,
         status="sent",

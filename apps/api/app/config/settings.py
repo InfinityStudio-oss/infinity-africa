@@ -356,10 +356,15 @@ class Settings(BaseSettings):
     # Reply-to for every transactional email — the customer/merchant
     # support contact shown in every template's footer.
     email_reply_to: str = "info@infinitypay.me"
-    # Where the "contact us" inquiry notification email goes — see
-    # app/services/email.py::send_inquiry_notification_email, triggered by
-    # POST /v1/public/inquiries. Set via Railway's CEO_EMAIL env var (no
-    # code default).
+    # Where internal notifications go — new inquiries, new merchant signups,
+    # and withdrawal requests awaiting approval. Set via Railway's CEO_EMAIL
+    # env var (no code default).
+    #
+    # Accepts a comma-separated list, so a second Super Admin can be copied
+    # in without code changes. Being in platform_admins does NOT subscribe
+    # anyone to these — admin *authorisation* and notification *delivery*
+    # are deliberately separate, so adding an admin never silently starts
+    # mailing a new address. Read it through ceo_emails, never directly.
     ceo_email: str = ""
     # General site base URL for links inside emails (distinct from
     # public_app_url, which specifically builds the /pay/{slug} payment
@@ -399,6 +404,21 @@ class Settings(BaseSettings):
     # (notify_merchant(...WITHDRAWAL_SUCCESS...)) and the webhook event
     # are unconditional either way — only this email is gated.
     send_merchant_withdrawal_emails: bool = False
+
+    @property
+    def ceo_emails(self) -> list[str]:
+        """CEO_EMAIL parsed into recipients, in the order given.
+
+        Blanks and duplicates are dropped so a trailing comma or a repeated
+        address cannot send someone the same alert twice, and an empty
+        result is the signal callers already use to skip the send entirely.
+        """
+        seen: list[str] = []
+        for part in (self.ceo_email or "").split(","):
+            address = part.strip()
+            if address and address not in seen:
+                seen.append(address)
+        return seen
 
     @property
     def invoice_email_from(self) -> str:
