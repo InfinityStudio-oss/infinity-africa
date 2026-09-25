@@ -44,9 +44,14 @@ recovery link anywhere else. The allow-list is the second layer.
 
 Not implemented. A Super Admin can approve withdrawals and change pricing,
 so a single stolen password is currently enough to reach real money
-movement. Supabase supports TOTP enrollment; enabling it for the accounts
-in `platform_admins` is the single highest-value remaining auth hardening
-step. Tracked here rather than silently left out.
+movement. Client-library support is confirmed on both halves of the stack
+(supabase-js 2.112.3, supabase-py 2.22.4) — no dependency upgrade needed.
+
+The rollout plan, preconditions, recovery path and smoke checklist are in
+**docs/SUPER_ADMIN_MFA_RUNBOOK.md**. The two hard preconditions are a
+verified `TRUSTED_PROXY_HOPS` in production and **at least two** Super
+Admin accounts, since one admin plus mandatory MFA is one lost phone away
+from nobody being able to approve a withdrawal.
 
 ## Resend
 
