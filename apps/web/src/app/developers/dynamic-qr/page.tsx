@@ -45,7 +45,7 @@ export default function DynamicQrApiPage() {
           .
         </p>
         <CodeBlock language="bash — cURL">{`curl -X POST https://api.infinitypay.me/v1/collections/dynamic-qr \\
-  -H "Authorization: Bearer inf_live_xxxxxxxxxxxxx" \\
+  -H "Authorization: Bearer sk_live_xxxxxxxxxxxxx" \\
   -H "Idempotency-Key: 6f1e2a3b-..." \\
   -H "Content-Type: application/json" \\
   -d '{

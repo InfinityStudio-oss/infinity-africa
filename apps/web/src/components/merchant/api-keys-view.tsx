@@ -56,8 +56,11 @@ const STEPS = [
 export function ApiKeysView() {
   const [environment, setEnvironment] = useState<"sandbox" | "live">("sandbox");
   const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [revealed, setRevealed] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Both halves of a freshly minted pair. The secret exists only in this
+  // state and only until acknowledged — it is never re-fetchable, so
+  // clearing it really is final.
+  const [revealed, setRevealed] = useState<{ publicKey: string | null; secret: string } | null>(null);
+  const [copied, setCopied] = useState<"public" | "secret" | null>(null);
   const [generating, setGenerating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
@@ -243,8 +246,8 @@ export function ApiKeysView() {
         allowed_ips: ipWhitelistChoice === "enabled" ? allowedIps : undefined,
       });
       setKeys((prev) => [key, ...prev]);
-      setRevealed(plaintext_key);
-      setCopied(false);
+      setRevealed({ publicKey: key.public_key, secret: plaintext_key });
+      setCopied(null);
       setFormOpen(false);
       setKeyName("");
       setScopes([]);
@@ -268,10 +271,12 @@ export function ApiKeysView() {
     setRenamingId(null);
   }
 
-  async function handleCopy() {
+  async function handleCopy(which: "public" | "secret") {
     if (!revealed) return;
-    await navigator.clipboard?.writeText(revealed);
-    setCopied(true);
+    const value = which === "secret" ? revealed.secret : revealed.publicKey;
+    if (!value) return;
+    await navigator.clipboard?.writeText(value);
+    setCopied(which);
   }
 
   async function handleRevoke(keyId: string) {
@@ -289,8 +294,8 @@ export function ApiKeysView() {
     try {
       const { key, plaintext_key } = await rotateApiKey(keyId);
       setKeys((prev) => [key, ...prev.map((k) => (k.id === keyId ? { ...k, status: "revoked" as const } : k))]);
-      setRevealed(plaintext_key);
-      setCopied(false);
+      setRevealed({ publicKey: key.public_key, secret: plaintext_key });
+      setCopied(null);
     } finally {
       setRotatingId(null);
     }
@@ -350,25 +355,65 @@ export function ApiKeysView() {
 
       {revealed && (
         <Card className="border-primary">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-on-background mb-1">Your new API key</h3>
-              <p className="text-sm text-error font-medium mb-3">
-                Copy this key now. You will not be able to view it again.
-              </p>
-              <code className="block bg-on-surface text-primary-fixed text-sm px-4 py-3 rounded-lg font-mono break-all">
-                {revealed}
+          <h3 className="text-lg font-semibold text-on-background mb-1">Your new API key pair</h3>
+          <p className="text-sm text-error font-medium mb-4">
+            Store the secret key now. For your security, it will not be shown again.
+          </p>
+
+          {revealed.publicKey && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+                  Public key
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy("public")}
+                  className="shrink-0 p-2 bg-primary-container/10 text-primary rounded-lg hover:bg-primary-container/20 transition-colors"
+                  title="Copy public key"
+                >
+                  <Icon name={copied === "public" ? "check" : "content_copy"} className="text-[18px]" />
+                </button>
+              </div>
+              <code className="block bg-surface-variant/40 text-on-surface text-sm px-4 py-3 rounded-lg font-mono break-all">
+                {revealed.publicKey}
               </code>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Safe to keep in configuration or quote to support. It cannot authorize requests on its own.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="shrink-0 p-2.5 bg-primary-container/10 text-primary rounded-lg hover:bg-primary-container/20 transition-colors"
-              title="Copy key"
-            >
-              <Icon name={copied ? "check" : "content_copy"} className="text-[20px]" />
-            </button>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-error">Secret key</span>
+              <button
+                type="button"
+                onClick={() => handleCopy("secret")}
+                className="shrink-0 p-2 bg-primary-container/10 text-primary rounded-lg hover:bg-primary-container/20 transition-colors"
+                title="Copy secret key"
+              >
+                <Icon name={copied === "secret" ? "check" : "content_copy"} className="text-[18px]" />
+              </button>
+            </div>
+            <code className="block bg-on-surface text-primary-fixed text-sm px-4 py-3 rounded-lg font-mono break-all">
+              {revealed.secret}
+            </code>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Server-side only. Never put this in a browser, a mobile app, or a code repository.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRevealed(null);
+              setCopied(null);
+            }}
+            className="mt-5 w-full sm:w-auto rounded-lg bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary hover:opacity-90 transition-opacity"
+          >
+            I&apos;ve saved my secret key
+          </button>
         </Card>
       )}
 
@@ -641,7 +686,14 @@ export function ApiKeysView() {
                       )}
                     </td>
                     <td className={`${tdClass} font-mono text-xs`}>
-                      {key.key_prefix}••••••••{key.key_last4 ?? ""}
+                      {/* The public half in full — it is an identifier, not a
+                          credential. The secret is only ever masked. */}
+                      {key.public_key && (
+                        <span className="block break-all text-on-surface">{key.public_key}</span>
+                      )}
+                      <span className="block text-on-surface-variant">
+                        {key.key_prefix}••••••••{key.key_last4 ?? ""}
+                      </span>
                     </td>
                     <td className={tdClass}>
                       <button type="button" onClick={() => toggleExpandKey(key)} className="hover:opacity-80">

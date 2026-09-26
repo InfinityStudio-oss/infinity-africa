@@ -23,6 +23,7 @@ const key: ApiKey = {
   name: "Sandbox key",
   environment: "sandbox",
   key_prefix: "inf_sandbox_abc123",
+  public_key: "pk_test_examplepublickey",
   key_last4: "9zk1",
   scopes: ["collections:write"],
   status: "active",

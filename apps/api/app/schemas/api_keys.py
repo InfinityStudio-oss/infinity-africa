@@ -100,12 +100,18 @@ class ApiKeyIpWhitelistUpdate(BaseModel):
 
 
 class ApiKeyCreateResponse(BaseModel):
-    """Returned exactly once, at creation — the plaintext key is never
-    retrievable again afterward (only its hash is stored)."""
+    """The ONLY response that ever carries the secret key.
+
+    Only the secret's hash is stored, so it cannot be re-read later by
+    anyone — including Super Admin and including us. The public key is
+    stored in plaintext and appears in every later response, because it
+    identifies the key rather than authorizing it.
+    """
 
     id: uuid.UUID
     name: str
     environment: str
+    public_key: str | None = None
     key_prefix: str
     key_last4: str | None = None
     scopes: list[str]
@@ -116,9 +122,15 @@ class ApiKeyCreateResponse(BaseModel):
 
 
 class ApiKeyResponse(BaseModel):
+    """Every response except creation. Deliberately has no field that
+    could carry the secret — not even an optional one, so no future
+    handler can populate it by accident. public_key is null for keys
+    issued before the pk/sk pair existed."""
+
     id: uuid.UUID
     name: str
     environment: str
+    public_key: str | None = None
     key_prefix: str
     key_last4: str | None = None
     scopes: list[str]

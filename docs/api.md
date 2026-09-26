@@ -33,11 +33,52 @@ Two independent schemes, enforced per-endpoint by `apps/api/app/auth`:
 - **Dashboard (Supabase Auth JWT)** — `Authorization: Bearer <access_token>`.
   Used by `apps/web`. Role comes from `merchant_users`/`platform_admins`,
   never from the token's own claims/metadata.
-- **API key** — `X-API-Key: <key>`, from `POST /v1/merchants/{id}/api-keys`.
-  For a merchant's own backend calling InfinityPay directly. Accepted
-  alongside a JWT on the handful of endpoints marked "dashboard or API key"
-  below (creating a payment link, invoice, collection, or disbursement);
-  everything else is dashboard-only.
+- **API key** — `X-API-Key: <secret key>` or
+  `Authorization: Bearer <secret key>`. For a merchant's own backend calling
+  InfinityPay directly. Accepted alongside a JWT on the handful of endpoints
+  marked "dashboard or API key" below (creating a payment link, invoice,
+  collection, or disbursement); everything else is dashboard-only.
+
+### Key pairs: public and secret
+
+Each key is a **pair**, created together in the Merchant Portal under API
+Credentials:
+
+| | Sandbox | Live |
+|---|---|---|
+| Public key | `pk_test_…` | `pk_live_…` |
+| Secret key | `sk_test_…` | `sk_live_…` |
+
+**The secret key authenticates requests. The public key never does.** The
+public half identifies a key and its environment — safe to keep in
+configuration, show in a dashboard, or quote to support. Sending it as a
+credential is refused with a message saying so, rather than a generic
+"invalid key", because the usual cause is wiring up the wrong half.
+
+**The secret is shown exactly once**, in the response that creates it. Only
+its SHA-256 hash is stored, so nobody can retrieve it later — not support,
+not Super Admin, not us. Lose it and you rotate.
+
+Keys issued before pairs existed (`inf_…`) keep working unchanged and have
+no public half. Rotating one issues a full pair.
+
+### This is not your Merchant ID
+
+The permanent **27-series Merchant ID** identifies your business inside
+InfinityPay — for support, receipts, invoices and reconciliation. It is not
+a credential, it never expires, and it must never be used as an API secret.
+An API key is per-integration and revocable; the Merchant ID is neither.
+
+### Security rules
+
+- Secret keys belong on a **server** you control. Never in browser
+  JavaScript, a mobile app binary, a git repository, a screenshot, or a
+  support ticket.
+- Keep sandbox and live configuration separate.
+- Revoke immediately if a key is exposed — rotation issues a new pair and
+  revokes the old one in the same step.
+- Enable the IP allowlist on live keys if your backend has stable
+  addresses.
 
 A few endpoints require neither — the public checkout endpoints, and the
 provider webhook — see the tables below. The provider webhook instead
@@ -271,6 +312,73 @@ which `dynamic-qr` omits entirely. `method` itself isn't a body field — the
 endpoint you call is the method. When `payment_link_id` is given, it's
 cross-validated: it must belong to the same `merchant_id`, be currently
 `ACTIVE`, and accept the method you're calling (`409`/`422` otherwise).
+
+## Integrating InfinityPay into another platform
+
+For a partner adding InfinityPay as a payment option inside their own
+product — an ISP billing system, a school fees portal, a booking platform.
+
+### Where the keys live
+
+Your backend holds `sk_live_…`. Nothing else does. The customer's browser
+never sees it, your mobile app never ships it, your repository never
+contains it. If your platform has a per-tenant settings screen, store it
+encrypted and never render it back — show `pk_live_…` instead, which is
+what it is for.
+
+### Sequence
+
+1. **Sandbox first.** Create a sandbox pair and integrate against
+   `sk_test_…`. Sandbox never moves real money. Collections accept an
+   optional `simulate_status` so you can drive success, failure and
+   pending-clearance paths deliberately instead of waiting for them.
+2. **Create a collection** per bill or invoice, passing your own account or
+   subscriber reference as `merchant_reference`. That reference comes back
+   on every status read and webhook, and is how you match a payment to the
+   right customer without keeping your own mapping table.
+3. **Send an idempotency key** on every create (`Idempotency-Key` header).
+   A retried request with the same key returns the original collection
+   rather than charging twice — this is the single most important header
+   for a billing system that retries.
+4. **Read status** from the documented status endpoint, or receive it by
+   webhook if you have merchant webhooks configured. Verify the signature
+   on any webhook before acting on it.
+5. **Go live**: swap `sk_test_…` for `sk_live_…`. Nothing else changes.
+
+### Operating at volume
+
+- **Rate limits** are per-endpoint and per-IP. Collection creation is 20
+  requests per minute. A bulk run of thousands of bills should be paced or
+  queued rather than fired in parallel; a `429` means back off and retry,
+  not that the request failed permanently.
+- **Retries** are safe when they carry the same `Idempotency-Key`. Without
+  one, a retry is a second payment request.
+- **Reconciliation**: treat the status endpoint as the source of truth, not
+  your own optimistic state. A payment is settled when InfinityPay says it
+  is.
+- **IP allowlisting** is recommended for live keys. Add your backend's
+  egress addresses under API Credentials; they take effect once approved.
+
+### What this does not include
+
+InfinityPay collects payments and pays out to merchant-controlled
+destinations. There is **no bill-payment, LUKU, airtime or utility-purchase
+API** — if your platform needs those, they are not available here.
+
+Payouts to your own settlement account follow InfinityPay's withdrawal
+rules, including Super Admin approval, and are not part of the collection
+integration.
+
+### Before going live
+
+- [ ] Sandbox covers success, failure and pending-clearance
+- [ ] Every create sends an `Idempotency-Key`
+- [ ] `merchant_reference` carries your customer/account reference
+- [ ] Status is read back rather than assumed
+- [ ] Webhook signatures verified, if used
+- [ ] `sk_live_…` exists only in server-side configuration
+- [ ] IP allowlist populated and approved, if your IPs are stable
+- [ ] A revocation path exists for a leaked key
 
 ## What's not built yet
 

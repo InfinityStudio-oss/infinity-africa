@@ -237,6 +237,16 @@ def verify_api_key(
     if not raw_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
 
+    if raw_key.startswith("pk_"):
+        # The public half identifies a key; it never authorizes one. Said
+        # plainly because the usual cause is a partner pasting the wrong
+        # half of the pair, and "invalid key" would send them hunting for
+        # a problem that is not there.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A public key cannot authenticate requests. Use your secret key (sk_live_… or sk_test_…).",
+        )
+
     supabase = get_supabase_admin()
     data = execute_maybe_single(
         supabase.table("api_keys")
@@ -398,15 +408,31 @@ def _write_auth_audit_log(
 def _coalesce_api_key(
     api_key: str | None, credentials: HTTPAuthorizationCredentials | None
 ) -> str | None:
-    """API keys can be sent either as `X-API-Key: <key>` or, per the public
-    docs' `Authorization: Bearer <INFINITY_API_KEY>` convention, as a bearer
-    token — distinguished from a Supabase Auth JWT by InfinityPay's own key
-    prefix (JWTs never start with it), so a JWT bearer token is never
-    mistaken for an API key and vice versa."""
-    if api_key:
-        return api_key
-    if credentials and credentials.credentials.startswith("inf_"):
-        return credentials.credentials
+    """API keys arrive either as `X-API-Key: <key>` or, per the public docs'
+    `Authorization: Bearer <secret key>` convention, as a bearer token.
+
+    A bearer token is treated as an API key only when it carries one of
+    InfinityPay's own key prefixes, so a Supabase JWT is never mistaken for
+    a key or vice versa:
+
+      sk_live_ / sk_test_   the current secret key
+      inf_                  keys issued before the pk/sk pair existed, which
+                            keep working unchanged
+
+    `pk_` is deliberately absent. A public key is an identifier, not a
+    credential, and is rejected explicitly below rather than being allowed
+    to fail as a mismatched hash — a partner who wires up the wrong half of
+    the pair should be told exactly that.
+    """
+    candidate = api_key or (credentials.credentials if credentials else None)
+    if not candidate:
+        return None
+    if candidate.startswith(("sk_live_", "sk_test_", "inf_")):
+        return candidate
+    if candidate.startswith("pk_"):
+        # Returned as the key so verify_api_key can reject it with a
+        # specific message; it can never match a stored hash.
+        return candidate
     return None
 
 

@@ -268,6 +268,10 @@ export interface ApiKey {
   name: string;
   environment: "sandbox" | "live";
   key_prefix: string;
+  /** Plaintext public half (pk_test_/pk_live_). Safe to display: it
+   * identifies the key, and can never authorize a request. Null for
+   * keys issued before the pair existed. */
+  public_key: string | null;
   key_last4: string | null;
   scopes: string[];
   status: "active" | "revoked";

@@ -1395,12 +1395,28 @@ def get_my_transaction_by_reference(
 # --- API keys ---------------------------------------------------------------
 
 
-def _generate_api_key(environment: str) -> tuple[str, str, str]:
-    token = secrets.token_urlsafe(24)
-    plaintext = f"inf_{environment}_{token}"
-    prefix = plaintext[: len(f"inf_{environment}_") + 6]
-    last4 = plaintext[-4:]
-    return plaintext, prefix, last4
+# sandbox -> *_test_, live -> *_live_. "test" rather than "sandbox" in the
+# key itself because that is the convention integrators already read at a
+# glance; the stored `environment` column keeps the platform's own wording.
+_KEY_ENV_TAG = {"sandbox": "test", "live": "live"}
+
+
+def _generate_api_key(environment: str) -> tuple[str, str, str, str]:
+    """Returns (public_key, secret_key, secret_prefix, secret_last4).
+
+    Two independent 192-bit values from the OS CSPRNG, not one derived
+    from the other: the public half is shown, logged and quoted freely,
+    so it must reveal nothing about the secret.
+
+    Only the secret is ever hashed and matched at authentication time.
+    The public key is stored in plaintext because it is not a credential.
+    """
+    tag = _KEY_ENV_TAG[environment]
+    public_key = f"pk_{tag}_{secrets.token_urlsafe(24)}"
+    secret_key = f"sk_{tag}_{secrets.token_urlsafe(24)}"
+    prefix = secret_key[: len(f"sk_{tag}_") + 6]
+    last4 = secret_key[-4:]
+    return public_key, secret_key, prefix, last4
 
 
 def _insert_ip_allowlist_entries(
@@ -1478,7 +1494,7 @@ def create_my_api_key(
     else:
         check_sandbox_api_access(merchant)
 
-    plaintext, prefix, last4 = _generate_api_key(payload.environment)
+    public_key, plaintext, prefix, last4 = _generate_api_key(payload.environment)
 
     row = insert_row(
         client,
@@ -1487,6 +1503,7 @@ def create_my_api_key(
             "merchant_id": str(membership.merchant_id),
             "name": payload.name,
             "environment": payload.environment,
+            "public_key": public_key,
             "key_prefix": prefix,
             "key_last4": last4,
             "hashed_key": hash_api_key(plaintext),
@@ -1529,6 +1546,7 @@ def create_my_api_key(
             id=row["id"],
             name=row["name"],
             environment=row["environment"],
+            public_key=row.get("public_key"),
             key_prefix=row["key_prefix"],
             key_last4=row["key_last4"],
             scopes=row["scopes"],
@@ -1637,7 +1655,11 @@ def rotate_my_api_key(
         merchant_id=membership.merchant_id,
     )
 
-    plaintext, prefix, last4 = _generate_api_key(old_row["environment"])
+    # Rotation mints a brand-new pair. The public half changes too: keeping
+    # it would leave a rotated-away secret and its replacement sharing an
+    # identifier, so a leaked key could not be told apart from its
+    # successor in logs or support.
+    public_key, plaintext, prefix, last4 = _generate_api_key(old_row["environment"])
     new_row = insert_row(
         client,
         "api_keys",
@@ -1645,6 +1667,7 @@ def rotate_my_api_key(
             "merchant_id": str(membership.merchant_id),
             "name": old_row["name"],
             "environment": old_row["environment"],
+            "public_key": public_key,
             "key_prefix": prefix,
             "key_last4": last4,
             "hashed_key": hash_api_key(plaintext),
@@ -1704,6 +1727,7 @@ def rotate_my_api_key(
             id=new_row["id"],
             name=new_row["name"],
             environment=new_row["environment"],
+            public_key=new_row.get("public_key"),
             key_prefix=new_row["key_prefix"],
             key_last4=new_row["key_last4"],
             scopes=new_row["scopes"],

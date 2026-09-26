@@ -438,7 +438,9 @@ def test_developer_can_create_api_key(fake_client):
     assert response.status_code == 201
     body = response.json()["data"]
     assert "plaintext_key" in body
-    assert body["plaintext_key"].startswith("inf_sandbox_")
+    # sk_test_ for sandbox, sk_live_ for live — see _generate_api_key.
+    assert body["plaintext_key"].startswith("sk_test_")
+    assert body["public_key"].startswith("pk_test_")
     assert body["scopes"] == ["collections:write", "collections:read"]
 
 
@@ -731,7 +733,8 @@ def test_rotate_api_key_revokes_old_and_creates_new_with_same_settings(fake_clie
     assert new_key["environment"] == "live"
     assert new_key["scopes"] == ["collections:write", "collections:read"]
     assert "plaintext_key" in new_key
-    assert new_key["plaintext_key"].startswith("inf_live_")
+    assert new_key["plaintext_key"].startswith("sk_live_")
+    assert new_key["public_key"].startswith("pk_live_")
 
     rows = {row["id"]: row for row in fake_client.table("api_keys")._table.rows}
     assert rows[created["id"]]["status"] == "revoked"

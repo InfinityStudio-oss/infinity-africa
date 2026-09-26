@@ -71,12 +71,12 @@ export default function AuthenticationPage() {
     "id": "8f14e...",
     "name": "Production checkout server",
     "environment": "live",
-    "key_prefix": "inf_live_9f2a1c3b",
+    "key_prefix": "sk_live_9f2a1c3b",
     "key_last4": "d8e7",
     "scopes": ["collections:write", "payment_links:read"],
     "ip_whitelist_enabled": false,
     "continue_without_ip_whitelist": true,
-    "plaintext_key": "inf_live_9f2a1c3bd8e7...",
+    "plaintext_key": "sk_live_9f2a1c3bd8e7...",
     "status": "active",
     "created_at": "2026-08-14T09:00:00Z"
   }
@@ -129,10 +129,10 @@ export default function AuthenticationPage() {
         <h2 className="text-xl font-semibold text-on-surface mb-3">Sandbox vs. Live</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-3">
           Every key is scoped to an environment. Sandbox keys (prefix{" "}
-          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">inf_sandbox_...</code>) run
+          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">sk_test_...</code>) run
           against a fully simulated provider — nothing settles for real, so you can build and test your entire
           integration risk-free. Live keys (
-          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">inf_live_...</code>) move
+          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">sk_live_...</code>) move
           real money. Sandbox keys never expire on their own; both can be revoked at any time.
         </p>
         <p className="text-sm text-on-surface-variant leading-relaxed">
@@ -158,7 +158,7 @@ export default function AuthenticationPage() {
         </p>
         <CodeBlock language="http">{`GET /v1/transactions/TXN-4821AB HTTP/1.1
 Host: api.infinitypay.me
-Authorization: Bearer inf_live_9f2a1c3bd8e7...`}</CodeBlock>
+Authorization: Bearer sk_live_9f2a1c3bd8e7...`}</CodeBlock>
       </section>
 
       <section className="mb-12">

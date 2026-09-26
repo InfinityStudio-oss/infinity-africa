@@ -37,7 +37,7 @@ export default function TransactionStatusApiPage() {
           on the API key used. A key only ever sees transactions belonging to its own account.
         </p>
         <CodeBlock language="bash — cURL">{`curl https://api.infinitypay.me/v1/transactions/TXN-4821AB \\
-  -H "Authorization: Bearer inf_live_xxxxxxxxxxxxx"`}</CodeBlock>
+  -H "Authorization: Bearer sk_live_xxxxxxxxxxxxx"`}</CodeBlock>
       </section>
 
       <section className="mb-12">

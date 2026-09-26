@@ -9,6 +9,7 @@ const key: ApiKey = {
   name: "Website checkout",
   environment: "sandbox",
   key_prefix: "inf_sandbox_abc123",
+  public_key: "pk_test_examplepublickey",
   key_last4: "9zk1",
   scopes: ["collections:write", "collections:read"],
   status: "active",
@@ -87,7 +88,29 @@ describe("ApiKeysView", () => {
 
     await waitFor(() => expect(rotateApiKey).toHaveBeenCalledWith("key-1"));
     expect(await screen.findByText("inf_sandbox_newkey123")).toBeInTheDocument();
-    expect(screen.getByText("Copy this key now. You will not be able to view it again.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Store the secret key now. For your security, it will not be shown again."),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the secret for good once the merchant confirms they have saved it", async () => {
+    // The secret exists only in component state and is never re-fetchable,
+    // so this button really is the last time it can be read.
+    rotateApiKey.mockResolvedValue({
+      key: { ...key, id: "key-2", status: "active", public_key: "pk_test_newpublic" },
+      plaintext_key: "sk_test_newsecret123",
+    });
+    const { ApiKeysView } = await import("./api-keys-view");
+    render(<ApiKeysView />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
+    expect(await screen.findByText("sk_test_newsecret123")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "I've saved my secret key" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("sk_test_newsecret123")).not.toBeInTheDocument(),
+    );
   });
 
   it("blocks generating a Live key and explains why when the merchant isn't approved yet", async () => {
