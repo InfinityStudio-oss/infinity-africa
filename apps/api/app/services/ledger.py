@@ -171,7 +171,21 @@ def _wallet_ledger_entries(
 
     Joins each entry onto its transactions row (type/reference/provider_
     reference/method/fee_amount/net_amount/status) for the Wallet Ledger's
-    audit columns — batched in one query, not per-row."""
+    audit columns — batched in one query, not per-row.
+
+    The payer's phone comes through a second hop, transactions.collection_id
+    -> collections.customer_phone, resolved on read rather than copied onto
+    ledger_entries at posting time. Two reasons. Writing it would mean
+    changing post_ledger_entries (see supabase/migrations/
+    20260828020000_post_ledger_entries_balance_snapshot.sql), which is the
+    function that also performs the balance check and snapshot — the single
+    riskiest piece of SQL in the system, for a field that is presentational.
+    And a copy can drift from the collection it was copied from, whereas
+    collections is already the record of who paid. Reading it also means
+    every historic entry shows a phone immediately, with no backfill.
+
+    Null for anything that is not a customer collection — a withdrawal has
+    no payer, and a DYNAMIC_QR scan has no phone to capture. Never guessed."""
     account_id = _get_or_create_ledger_account(
         client, merchant_id=merchant_id, purpose="merchant_wallet", account_type="liability", currency=currency
     )
@@ -190,6 +204,24 @@ def _wallet_ledger_entries(
     if transaction_ids:
         txn_rows = client.table("transactions").select("*").in_("id", list(transaction_ids)).execute().data or []
         transactions_by_id = {t["id"]: t for t in txn_rows}
+
+    # Second hop for the payer's phone. Batched the same way, and only for
+    # the transactions that actually reference a collection — withdrawals
+    # never will.
+    collection_ids = {
+        t["collection_id"] for t in transactions_by_id.values() if t.get("collection_id")
+    }
+    payer_phone_by_collection: dict[str, str | None] = {}
+    if collection_ids:
+        collection_rows = (
+            client.table("collections")
+            .select("id,customer_phone")
+            .in_("id", list(collection_ids))
+            .execute()
+            .data
+            or []
+        )
+        payer_phone_by_collection = {c["id"]: c.get("customer_phone") for c in collection_rows}
 
     running = Decimal(0)
     enriched = []
@@ -223,6 +255,7 @@ def _wallet_ledger_entries(
                 "fee_amount": txn.get("fee_amount"),
                 "net_amount": txn.get("net_amount"),
                 "status": txn.get("status"),
+                "payer_phone": payer_phone_by_collection.get(txn.get("collection_id")),
             }
         )
     enriched.reverse()  # newest first, matching every other list endpoint's convention

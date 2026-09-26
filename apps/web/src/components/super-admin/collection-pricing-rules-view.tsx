@@ -22,6 +22,14 @@ const inputClass =
   "w-full px-3 py-2 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary";
 const labelClass = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1.5";
 
+/** A business may be given negotiated pricing once it is both approved and
+ * KYC-verified. Deliberately not used to filter the selector: a merchant
+ * suspended after a rule was agreed must still be reachable, or their rule
+ * becomes invisible and uneditable. It gates creating a rule instead. */
+function isVerified(merchant: Merchant): boolean {
+  return merchant.account_status === "active" && merchant.kyc_status === "verified";
+}
+
 function RuleFields({ rule }: { rule?: CollectionPricingRuleRow }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -158,9 +166,44 @@ function RuleEditForm({ rule, onSaved }: { rule: CollectionPricingRuleRow; onSav
   );
 }
 
-function RuleRow({ rule, onEdit }: { rule: CollectionPricingRuleRow; onEdit: () => void }) {
+/** Who a rule applies to, read from the rule's own merchant_id rather than
+ * from which table it happens to be rendered in — so a row can never claim
+ * an assignment it does not have. A null merchant_id is the platform
+ * fallback, which is a real answer, not a missing one. */
+function RuleAssignment({ rule, merchantsById }: { rule: CollectionPricingRuleRow; merchantsById: Map<string, Merchant> }) {
+  if (!rule.merchant_id) {
+    return (
+      <>
+        <td className={`${tdClass} text-on-surface-variant`}>All businesses (platform default)</td>
+        <td className={`${tdClass} text-on-surface-variant font-mono text-xs`}>—</td>
+      </>
+    );
+  }
+  const merchant = merchantsById.get(rule.merchant_id);
+  return (
+    <>
+      <td className={`${tdClass} font-medium text-on-background`}>
+        {merchant?.business_name ?? "Unknown business"}
+      </td>
+      <td className={`${tdClass} font-mono text-xs text-on-surface-variant whitespace-nowrap`}>
+        {merchant?.merchant_code ?? rule.merchant_id.slice(0, 8)}
+      </td>
+    </>
+  );
+}
+
+function RuleRow({
+  rule,
+  merchantsById,
+  onEdit,
+}: {
+  rule: CollectionPricingRuleRow;
+  merchantsById: Map<string, Merchant>;
+  onEdit: () => void;
+}) {
   return (
     <tr className="border-t border-surface-container-highest">
+      <RuleAssignment rule={rule} merchantsById={merchantsById} />
       <td className={`${tdClass} text-on-surface-variant`}>{rule.label || "—"}</td>
       <td className={`${tdClass} text-on-surface-variant`}>
         {rule.channel ? COLLECTION_METHOD_LABELS[rule.channel] : "All channels"}
@@ -206,15 +249,21 @@ function RuleSection({
   title,
   description,
   rules,
+  merchantsById,
   createAction,
+  blockedReason,
 }: {
   title: string;
   description: string;
   rules: CollectionPricingRuleRow[];
+  merchantsById: Map<string, Merchant>;
   createAction: (
     prevState: CollectionPricingRuleActionState | null,
     formData: FormData,
   ) => Promise<CollectionPricingRuleActionState>;
+  /** Set when a new rule must not be created here — the existing rules
+   * stay listed and editable either way. */
+  blockedReason?: string;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -226,25 +275,36 @@ function RuleSection({
           <h3 className="text-2xl font-semibold text-on-background">{title}</h3>
           <p className="text-sm text-on-surface-variant mt-0.5">{description}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate((v) => !v)}
-          className="flex items-center gap-2 bg-primary-container text-on-primary px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity w-fit"
-        >
-          <Icon name="add" className="text-[20px]" />
-          Add Collection Pricing Rule
-        </button>
+        {!blockedReason && (
+          <button
+            type="button"
+            onClick={() => setShowCreate((v) => !v)}
+            className="flex items-center gap-2 bg-primary-container text-on-primary px-4 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity w-fit"
+          >
+            <Icon name="add" className="text-[20px]" />
+            Add Collection Pricing Rule
+          </button>
+        )}
       </div>
 
-      {showCreate && <RuleCreateForm action={createAction} />}
+      {blockedReason && (
+        <div className="mx-5 mb-4 rounded-lg bg-error/10 px-4 py-3 text-sm text-error flex items-start gap-2.5">
+          <Icon name="block" className="text-[18px] shrink-0 mt-0.5" />
+          <span>{blockedReason}</span>
+        </div>
+      )}
+
+      {showCreate && !blockedReason && <RuleCreateForm action={createAction} />}
 
       {rules.length === 0 ? (
         <p className="p-6 text-sm text-on-surface-variant">No collection pricing rules yet.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[780px]">
+          <table className="w-full text-left min-w-[1040px]">
             <thead>
               <tr className="text-on-surface-variant text-xs font-semibold border-t border-surface-container-highest">
+                <th className={thClass}>Assigned Merchant</th>
+                <th className={thClass}>Merchant ID</th>
                 <th className={thClass}>Label</th>
                 <th className={thClass}>Channel</th>
                 <th className={thClass}>Percentage</th>
@@ -257,10 +317,14 @@ function RuleSection({
             <tbody className="text-sm">
               {rules.map((rule) => (
                 <Fragment key={rule.id}>
-                  <RuleRow rule={rule} onEdit={() => setEditingId((id) => (id === rule.id ? null : rule.id))} />
+                  <RuleRow
+                    rule={rule}
+                    merchantsById={merchantsById}
+                    onEdit={() => setEditingId((id) => (id === rule.id ? null : rule.id))}
+                  />
                   {editingId === rule.id && (
                     <tr className="border-t border-surface-container-highest bg-surface-container-low">
-                      <td className={tdClass} colSpan={7}>
+                      <td className={tdClass} colSpan={9}>
                         <RuleEditForm rule={rule} onSaved={() => setEditingId(null)} />
                       </td>
                     </tr>
@@ -288,6 +352,11 @@ export function CollectionPricingRulesView({
 }) {
   const router = useRouter();
 
+  const merchantsById = new Map(merchants.map((m) => [m.merchant_id, m]));
+  const selectedMerchant = selectedMerchantId ? merchantsById.get(selectedMerchantId) : undefined;
+  const verified = merchants.filter(isVerified);
+  const unverified = merchants.filter((m) => !isVerified(m));
+
   return (
     <div className="space-y-8">
       <div className="rounded-lg bg-primary-container/10 text-on-background px-4 py-3 text-sm flex items-start gap-2.5">
@@ -299,7 +368,7 @@ export function CollectionPricingRulesView({
       </div>
 
       <Card>
-        <label className={labelClass}>Select a merchant to view or set their negotiated collection pricing</label>
+        <label className={labelClass}>Select a business to view or set their negotiated collection pricing</label>
         <select
           value={selectedMerchantId ?? ""}
           onChange={(event) => {
@@ -308,21 +377,61 @@ export function CollectionPricingRulesView({
           }}
           className={inputClass}
         >
-          <option value="">Choose a merchant…</option>
-          {merchants.map((merchant) => (
-            <option key={merchant.merchant_id} value={merchant.merchant_id}>
-              {merchant.business_name}
-            </option>
-          ))}
+          <option value="">Choose a business…</option>
+          {/* Split rather than filtered. Only verified businesses can be
+              given a negotiated rate, but one that was verified when its
+              rate was agreed and has since been suspended must still be
+              selectable, or its existing rule can no longer be found. */}
+          <optgroup label="Verified businesses">
+            {verified.map((merchant) => (
+              <option key={merchant.merchant_id} value={merchant.merchant_id}>
+                {merchant.business_name} — {merchant.merchant_code ?? merchant.merchant_id.slice(0, 8)}
+              </option>
+            ))}
+          </optgroup>
+          {unverified.length > 0 && (
+            <optgroup label="Not verified — view only, no new pricing">
+              {unverified.map((merchant) => (
+                <option key={merchant.merchant_id} value={merchant.merchant_id}>
+                  {merchant.business_name} — {merchant.merchant_code ?? merchant.merchant_id.slice(0, 8)} (
+                  {merchant.kyc_status === "verified" ? merchant.account_status : merchant.kyc_status})
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
+        {selectedMerchant && (
+          <p className="mt-3 text-sm text-on-surface-variant">
+            Showing collection pricing assigned to{" "}
+            <span className="font-medium text-on-background">{selectedMerchant.business_name}</span>
+            {selectedMerchant.merchant_code && (
+              <span className="font-mono text-xs"> ({selectedMerchant.merchant_code})</span>
+            )}
+            .
+          </p>
+        )}
       </Card>
 
       {selectedMerchantId && (
         <RuleSection
-          title="Business Collection Pricing Rules"
-          description="Negotiated collection fees for this business — take precedence over the platform default below."
+          title={
+            selectedMerchant
+              ? `Negotiated Collection Pricing — ${selectedMerchant.business_name}`
+              : "Negotiated Collection Pricing"
+          }
+          description={
+            selectedMerchant?.merchant_code
+              ? `Applies only to ${selectedMerchant.business_name} (${selectedMerchant.merchant_code}) and takes precedence over the platform default below.`
+              : "Applies only to this business and takes precedence over the platform default below."
+          }
           rules={merchantRules}
+          merchantsById={merchantsById}
           createAction={createMerchantCollectionPricingRuleAction.bind(null, selectedMerchantId)}
+          blockedReason={
+            selectedMerchant && !isVerified(selectedMerchant)
+              ? `${selectedMerchant.business_name} is not verified and approved yet (account ${selectedMerchant.account_status}, KYC ${selectedMerchant.kyc_status}), so a negotiated rate cannot be assigned. Any existing rules below stay in force and can still be edited.`
+              : undefined
+          }
         />
       )}
 
@@ -330,6 +439,7 @@ export function CollectionPricingRulesView({
         title="Platform Fallback Collection Rules"
         description="Applied to any business with no matching business-specific rule."
         rules={platformRules}
+        merchantsById={merchantsById}
         createAction={createPlatformFallbackCollectionPricingRuleAction}
       />
     </div>

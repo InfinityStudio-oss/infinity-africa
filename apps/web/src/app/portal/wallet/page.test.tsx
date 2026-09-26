@@ -32,6 +32,7 @@ function ledgerEntry(overrides: Partial<WalletLedgerEntry> = {}): WalletLedgerEn
     fee_amount: "30.00",
     net_amount: "1970.00",
     status: "successful",
+    payer_phone: "+255700000001",
     ...overrides,
   };
 }

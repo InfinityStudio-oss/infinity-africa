@@ -26,6 +26,7 @@ _HEADER = [
     "Reference",
     "Provider Reference",
     "Payment Method",
+    "Payer Phone",
     "Opening Balance",
     "Amount",
     "Charge / Fee",
@@ -64,7 +65,7 @@ def build_wallet_ledger_workbook(*, merchant: dict, rows: list[dict]) -> bytes:
     merchant_code = merchant.get("merchant_code") or ""
     business_name = merchant.get("business_name") or ""
 
-    money_columns = (10, 11, 12, 13, 14)  # Opening Balance .. Closing Balance, 1-indexed
+    money_columns = (11, 12, 13, 14, 15)  # Opening Balance .. Closing Balance, 1-indexed
 
     for row in rows:
         ws.append(
@@ -78,6 +79,7 @@ def build_wallet_ledger_workbook(*, merchant: dict, rows: list[dict]) -> bytes:
                 row.get("reference") or "",
                 row.get("provider_reference") or "",
                 row.get("method") or "",
+                row.get("payer_phone") or "",
                 _money(row.get("balance_before")),
                 _money(row.get("amount")),
                 _money(row.get("fee_amount")),

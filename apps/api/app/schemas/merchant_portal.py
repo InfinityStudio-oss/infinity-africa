@@ -63,6 +63,9 @@ class WalletLedgerEntryResponse(BaseModel):
     fee_amount: Decimal | None = None
     net_amount: Decimal | None = None
     status: str | None = None
+    # The customer who paid, resolved through the entry's collection. Null
+    # for withdrawals (no payer) and for QR scans (no phone is captured).
+    payer_phone: str | None = None
 
 
 # --- Payment links ------------------------------------------------------------

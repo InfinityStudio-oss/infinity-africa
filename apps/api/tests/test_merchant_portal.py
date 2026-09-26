@@ -1216,6 +1216,17 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
     merchant_id, user_id = _merchant_and_member(fake_client, business_name="Masanja Traders", merchant_code="27048391")
     _fund_wallet(fake_client, merchant_id, "0")
     account = next(a for a in fake_client.table("ledger_accounts")._table.rows if a["merchant_id"] == str(merchant_id))
+    collection = fake_client.seed(
+        "collections",
+        {
+            "merchant_id": str(merchant_id),
+            "method": "USSD_PUSH",
+            "amount": "1000",
+            "currency": "TZS",
+            "customer_phone": "+255712345678",
+            "status": "successful",
+        },
+    )
     txn = fake_client.seed(
         "transactions",
         {
@@ -1224,6 +1235,7 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
             "provider_reference": "SELCOM-9",
             "type": "collection",
             "method": "USSD_PUSH",
+            "collection_id": collection["id"],
             "gross_amount": "1000",
             "fee_amount": "15",
             "net_amount": "985",
@@ -1264,6 +1276,7 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
         "Reference",
         "Provider Reference",
         "Payment Method",
+        "Payer Phone",
         "Opening Balance",
         "Amount",
         "Charge / Fee",
@@ -1282,12 +1295,13 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
     assert data_row[6] == "TXN-EXPORT-1"
     assert data_row[7] == "SELCOM-9"
     assert data_row[8] == "USSD_PUSH"
-    assert data_row[9] == 0.0  # opening balance
-    assert data_row[10] == 985.0  # amount
-    assert data_row[11] == 15.0  # charge/fee
-    assert data_row[12] == 985.0  # net amount
-    assert data_row[13] == 985.0  # closing balance
-    assert data_row[14] == "successful"
+    assert data_row[9] == "+255712345678"  # payer phone, via the entry's collection
+    assert data_row[10] == 0.0  # opening balance
+    assert data_row[11] == 985.0  # amount
+    assert data_row[12] == 15.0  # charge/fee
+    assert data_row[13] == 985.0  # net amount
+    assert data_row[14] == 985.0  # closing balance
+    assert data_row[15] == "successful"
 
 
 def test_wallet_ledger_export_respects_the_date_range(fake_client):
@@ -1306,7 +1320,7 @@ def test_wallet_ledger_export_respects_the_date_range(fake_client):
     wb = load_workbook(io.BytesIO(response.content))
     ws = wb.active
     assert ws.max_row == 2  # header + the one entry inside the range
-    assert ws[2][10].value == 500.0  # amount column
+    assert ws[2][11].value == 500.0  # amount column
 
 
 def test_wallet_ledger_export_with_no_entries_in_range_still_returns_a_valid_workbook(fake_client):

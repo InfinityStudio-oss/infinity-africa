@@ -264,7 +264,7 @@ export default function WalletPage() {
           <h3 className="text-2xl font-semibold text-on-background">Wallet Ledger</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[1500px]">
+          <table className="w-full text-left min-w-[1650px]">
             <thead>
               <tr className="text-on-surface-variant text-xs font-semibold border-t border-surface-container-highest">
                 <th className={thClass}>Date</th>
@@ -272,6 +272,7 @@ export default function WalletPage() {
                 <th className={thClass}>Type</th>
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Payment Method</th>
+                <th className={thClass}>Payer Phone</th>
                 <th className={thClass}>Opening Balance</th>
                 <th className={thClass}>Amount</th>
                 <th className={thClass}>Charge / Fee</th>
@@ -284,13 +285,13 @@ export default function WalletPage() {
             <tbody className="text-sm">
               {loading ? (
                 <tr>
-                  <td className={`${tdClass} text-on-surface-variant`} colSpan={12}>
+                  <td className={`${tdClass} text-on-surface-variant`} colSpan={13}>
                     Loading wallet activity…
                   </td>
                 </tr>
               ) : ledger.length === 0 ? (
                 <tr>
-                  <td className={`${tdClass} text-on-surface-variant`} colSpan={12}>
+                  <td className={`${tdClass} text-on-surface-variant`} colSpan={13}>
                     {emptyMessage}
                   </td>
                 </tr>
@@ -306,6 +307,9 @@ export default function WalletPage() {
                     </td>
                     <td className={`${tdClass} font-mono text-sm text-on-background`}>{entry.reference ?? "—"}</td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>{entry.method ?? "—"}</td>
+                    <td className={`${tdClass} font-mono text-xs text-on-background whitespace-nowrap`}>
+                      {entry.payer_phone ?? "—"}
+                    </td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>
                       {formatCurrency(entry.balance_before, "TZS")}
                     </td>

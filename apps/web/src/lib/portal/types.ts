@@ -349,6 +349,9 @@ export interface WalletLedgerEntry {
   fee_amount: string | null;
   net_amount: string | null;
   status: string | null;
+  /** The customer who paid, resolved through the entry's collection.
+   * Null for withdrawals (no payer) and QR scans (no phone captured). */
+  payer_phone: string | null;
 }
 
 /** apps/api's MerchantUserResponse (merchant_users row + the invited

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CollectionPricingRuleRow, Merchant } from "@/lib/admin/types";
@@ -75,9 +75,13 @@ describe("CollectionPricingRulesView", () => {
       screen.getByText("These fees apply to collection transactions only. Withdrawals do not charge business fees during MVP."),
     ).toBeInTheDocument();
     expect(screen.getByText("Collection pricing is negotiated separately with each business/customer.")).toBeInTheDocument();
-    expect(screen.getByText("Juma Traders Ltd")).toBeInTheDocument();
+    // The option now carries the merchant code too, so an admin can tell
+    // two similarly-named businesses apart.
+    expect(screen.getByRole("option", { name: /Juma Traders Ltd — 27048391/ })).toBeInTheDocument();
     expect(screen.getAllByText("Add Collection Pricing Rule").length).toBeGreaterThan(0);
-    expect(screen.getByText("Platform default", { exact: false })).toBeInTheDocument();
+    // Exact: the Assigned Merchant cell also reads "All businesses
+    // (platform default)", so a substring match would hit both.
+    expect(screen.getByText("Platform default", { exact: true })).toBeInTheDocument();
   });
 
   it("surfaces a failed save's error message instead of doing nothing", async () => {
@@ -190,5 +194,150 @@ describe("CollectionPricingRulesView", () => {
 
     expect(screen.getByTitle("Activate")).toBeInTheDocument();
     expect(screen.queryByTitle("Deactivate")).not.toBeInTheDocument();
+  });
+
+  // --- which business a rule is assigned to -------------------------------
+
+  it("names the assigned business and its merchant ID on a negotiated rule", async () => {
+    const merchantRule: CollectionPricingRuleRow = {
+      ...platformRule,
+      id: "rule-2",
+      merchant_id: "merchant-1",
+      label: "Negotiated 0.5%",
+      percentage_fee: "0.500",
+    };
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[merchantRule]}
+      />,
+    );
+
+    const row = screen.getByText("Negotiated 0.5%").closest("tr") as HTMLElement;
+    expect(within(row).getByText("Juma Traders Ltd")).toBeInTheDocument();
+    expect(within(row).getByText("27048391")).toBeInTheDocument();
+  });
+
+  it("labels a platform fallback rule as applying to everyone, not to a business", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId={null}
+        merchantRules={[]}
+      />,
+    );
+
+    const row = screen.getByText("Platform default").closest("tr") as HTMLElement;
+    expect(within(row).getByText("All businesses (platform default)")).toBeInTheDocument();
+    expect(within(row).queryByText("Juma Traders Ltd")).not.toBeInTheDocument();
+  });
+
+  it("reads the assignment from the rule rather than from the table it is shown in", async () => {
+    // A merchant-assigned rule must never render as the platform default
+    // just because of where it appears, and vice versa.
+    const otherMerchant: Merchant = {
+      ...merchant,
+      merchant_id: "merchant-2",
+      merchant_code: "27099999",
+      business_name: "Bahari Foods",
+    };
+    const ruleForOther: CollectionPricingRuleRow = {
+      ...platformRule,
+      id: "rule-3",
+      merchant_id: "merchant-2",
+      label: "Bahari rate",
+    };
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant, otherMerchant]}
+        platformRules={[]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[ruleForOther]}
+      />,
+    );
+
+    const row = screen.getByText("Bahari rate").closest("tr") as HTMLElement;
+    expect(within(row).getByText("Bahari Foods")).toBeInTheDocument();
+    expect(within(row).getByText("27099999")).toBeInTheDocument();
+  });
+
+  it("puts the selected business's name in the section heading", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[]}
+      />,
+    );
+
+    expect(screen.getByText("Negotiated Collection Pricing — Juma Traders Ltd")).toBeInTheDocument();
+  });
+
+  // --- verification gates creating, never viewing -------------------------
+
+  it("refuses to create a negotiated rate for a business that is not verified", async () => {
+    const unverified: Merchant = { ...merchant, kyc_status: "pending", production_api_eligible: false };
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[unverified]}
+        platformRules={[]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[]}
+      />,
+    );
+
+    expect(screen.getByText(/is not verified and approved yet/)).toBeInTheDocument();
+    // The platform fallback section still has its own Add button; the
+    // business section must not.
+    expect(screen.queryAllByText("Add Collection Pricing Rule")).toHaveLength(1);
+  });
+
+  it("still lists and allows editing an existing rule for a business that lost its verification", async () => {
+    // The case a hard filter on the selector would break: pricing was
+    // agreed while the business was verified, and it is now suspended.
+    const suspended: Merchant = { ...merchant, account_status: "suspended" };
+    const existing: CollectionPricingRuleRow = {
+      ...platformRule,
+      id: "rule-4",
+      merchant_id: "merchant-1",
+      label: "Agreed before suspension",
+    };
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[suspended]}
+        platformRules={[]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[existing]}
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: /Juma Traders Ltd/ })).toBeInTheDocument();
+    expect(screen.getByText("Agreed before suspension")).toBeInTheDocument();
+    expect(screen.getByTitle("Edit")).toBeInTheDocument();
+  });
+
+  it("allows creating a negotiated rate for a verified business", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[]}
+        selectedMerchantId="merchant-1"
+        merchantRules={[]}
+      />,
+    );
+
+    expect(screen.queryByText(/is not verified and approved yet/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText("Add Collection Pricing Rule")).toHaveLength(2);
   });
 });
