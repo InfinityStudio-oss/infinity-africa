@@ -30,6 +30,7 @@ from app.auth import require_own_merchant_role
 from app.core.errors import ValidationAPIError
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.secret_box import decrypt_secret, encrypt_secret
+from app.core.url_safety import validate_outbound_url
 from app.database.session import get_supabase_admin
 from app.schemas.auth import MerchantMembership
 from app.schemas.common import APIResponse
@@ -95,7 +96,12 @@ def update_webhook_config(
     client = get_supabase_admin()
     update_data: dict = {}
     if payload.webhook_url is not None:
-        update_data["webhook_url"] = str(payload.webhook_url)
+        # The server fetches this URL on every event, so a merchant
+        # choosing it is choosing where our infrastructure makes
+        # requests. HttpUrl only checks the shape.
+        update_data["webhook_url"] = validate_outbound_url(
+            str(payload.webhook_url), field="Webhook URL"
+        )
     if payload.subscribed_events is not None:
         update_data["webhook_subscribed_events"] = payload.subscribed_events
 
