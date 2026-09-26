@@ -1,4 +1,3 @@
-import { Callout } from "@/components/docs/callout";
 import { CodeBlock } from "@/components/docs/code-block";
 import { DocsPager } from "@/components/docs/docs-pager";
 import { EndpointRow } from "@/components/docs/endpoint-row";
@@ -23,15 +22,6 @@ export default function PaymentLinksApiPage() {
         fits your integration.
       </p>
 
-      <Callout tone="warning" title="Selcom Hosted Checkout is not used">
-        &quot;InfinityPay&apos;s payment page&quot; above means Infinity&apos;s own <code className="font-mono text-xs">/pay/…</code> page,
-        not a redirect to Selcom&apos;s hosted checkout — that product is currently inactive platform-wide (see the{" "}
-        <a href="/developers/go-live-checklist" className="text-primary font-semibold hover:underline">
-          Go-Live Checklist
-        </a>
-        ). A payment link&apos;s <code className="font-mono text-xs">public_url</code> always points at Infinity&apos;s
-        own page.
-      </Callout>
 
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Endpoints</h2>

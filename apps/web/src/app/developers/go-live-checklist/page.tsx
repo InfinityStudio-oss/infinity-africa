@@ -5,10 +5,6 @@ export const metadata = {
   title: "Go-Live Checklist",
 };
 
-function Code({ children }: { children: React.ReactNode }) {
-  return <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">{children}</code>;
-}
-
 const CHECKLIST: Array<{ title: string; items: string[] }> = [
   {
     title: "Credentials",
@@ -30,9 +26,9 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
     ],
   },
   {
-    title: "Selcom account",
+    title: "Payment methods",
     items: [
-      "Confirm with Selcom which of Mobile Money Push / Selcom Pesa / Scan QR your account is actually provisioned for — Hosted Checkout is currently inactive platform-wide (see below), don't build against it.",
+      "Confirm which collection methods your account is provisioned for before you build against one.",
       "Test with a small real amount on a phone/account you control before sending real customer traffic.",
     ],
   },
@@ -41,7 +37,7 @@ const CHECKLIST: Array<{ title: string; items: string[] }> = [
     items: [
       "Account KYC/onboarding is approved (see Onboarding Requirements).",
       "HTTPS only — for your webhook endpoint and everywhere you call the InfinityPay API from.",
-      "No InfinityPay or Selcom credential appears in any frontend bundle, mobile app package, or public repository.",
+      "No InfinityPay or payment-provider credential appears in any frontend bundle, mobile app package, or public repository.",
     ],
   },
 ];
@@ -99,19 +95,6 @@ export default function GoLiveChecklistPage() {
         </div>
       </section>
 
-      <section>
-        <h2 className="text-xl font-semibold text-on-surface mb-3">Hosted Checkout is not available</h2>
-        <p className="text-sm text-on-surface-variant leading-relaxed">
-          Selcom&apos;s hosted checkout redirect (<Code>payment_gateway_url</Code>) is currently inactive
-          platform-wide — it returned &quot;Page Not Found&quot; for every order tested. Don&apos;t build an
-          integration that redirects a customer there. Use the{" "}
-          <a href="/developers/collections" className="text-primary font-semibold hover:underline">
-            Infinity Payment Page flow
-          </a>{" "}
-          instead — it offers the same &quot;you don&apos;t pick a channel&quot; experience via Infinity&apos;s own
-          page, backed by the three active methods (Mobile Money Push, Selcom Pesa, Scan QR / TanQR).
-        </p>
-      </section>
 
       <DocsPager currentHref="/developers/go-live-checklist" />
     </div>

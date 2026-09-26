@@ -4,11 +4,14 @@ import { describe, expect, it } from "vitest";
 import PaymentLinksApiPage from "./page";
 
 describe("PaymentLinksApiPage", () => {
-  it("clarifies that Selcom Hosted Checkout is not used", () => {
-    render(<PaymentLinksApiPage />);
+  it("does not expose the underlying payment provider", () => {
+    // The page used to carry a callout about a third party's hosted
+    // checkout being inactive -- provider internals a partner has no
+    // reason to read.
+    const { container } = render(<PaymentLinksApiPage />);
 
-    expect(screen.getByText("Selcom Hosted Checkout is not used")).toBeInTheDocument();
-    expect(screen.getAllByText(/currently inactive/).length).toBeGreaterThan(0);
+    expect(container.textContent).not.toMatch(/Hosted Checkout/i);
+    expect(container.textContent).not.toMatch(/currently inactive/i);
   });
 
   it("documents the new /pay endpoint, not the legacy /collect method field", () => {

@@ -36,7 +36,7 @@ export default function SandboxPage() {
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">
             POST /v1/collections/{"{wallet-push,selcom-pesa,qr}"}
           </code>{" "}
-          to a fully simulated flow — Selcom is never called, and nothing ever touches a real wallet balance. The
+          to a fully simulated flow — no payment provider is ever called, and nothing ever touches a real wallet balance. The
           collection resolves to <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">successful</code> immediately
           by default. Pass <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">simulate_status</code> to
           test a different outcome:

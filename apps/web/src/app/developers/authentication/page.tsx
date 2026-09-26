@@ -106,7 +106,7 @@ export default function AuthenticationPage() {
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
               {[
-                ["collections:write", "Push USSD/STK/Selcom Pesa collections, generate Dynamic QR codes."],
+                ["collections:write", "Push USSD/STK/wallet collections, generate Dynamic QR codes."],
                 ["collections:read", "Read back collection status (dashboard-scoped listing)."],
                 ["payment_links:write", "Create and cancel payment links."],
                 ["payment_links:read", "Fetch a payment link by ID."],

@@ -17,7 +17,7 @@ export default function CollectionsApiPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">API Reference</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Collections API</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        Three ways to collect a payment, all backed by the same real Selcom Checkout integration and the same
+        Three ways to collect a payment, all backed by the same integration and the same
         reversal-safe crediting lifecycle: hand the customer an Infinity Payment Page, push a prompt straight to
         their phone, or hand them a QR code to scan.
       </p>
@@ -115,8 +115,8 @@ export default function CollectionsApiPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">2. Direct Wallet Push / Selcom Pesa</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Same shape, two endpoints — <Code>/wallet-push</Code> for a general Mobile Money Push (STK/USSD, Selcom
-          auto-detects the customer&apos;s carrier), <Code>/selcom-pesa</Code> to push specifically to a Selcom
+          Same shape, two endpoints — <Code>/wallet-push</Code> for a general Mobile Money Push (STK/USSD, the
+          carrier is detected automatically), <Code>/selcom-pesa</Code> to push specifically to a Selcom
           Pesa wallet. <Code>phone</Code> is required for both — a push has nowhere to go without one.
         </p>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
@@ -144,7 +144,7 @@ export default function CollectionsApiPage() {
           webhook, then fulfil.
         </p>
         <Callout tone="warning" title="A 202/&quot;processing&quot; response means the prompt was sent — nothing more">
-          Wallet push and Selcom Pesa push success only mean Selcom accepted the push request. It does{" "}
+          A successful wallet push only means the prompt was accepted for delivery. It does{" "}
           <strong>not</strong> mean the customer approved it or that funds moved. Never mark an order paid from
           this response — wait for <Code>collection.successful</Code> (webhook) or poll{" "}
           <Code>GET /v1/collections/{"{collection_id}"}</Code> until <Code>status</Code> is{" "}
@@ -180,7 +180,7 @@ export default function CollectionsApiPage() {
         <h2 className="text-xl font-semibold text-on-surface mb-3">3. Scan QR / TanQR</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           <Code>customer_phone</Code> is optional here — nothing gets pushed to it. <Code>qr_payload</Code> and{" "}
-          <Code>payment_token</Code> are exactly what Selcom&apos;s own order-creation response returned:
+          <Code>payment_token</Code> are exactly what the payment provider&apos;s order-creation response returned:
           Infinity never generates its own payment QR. Render <Code>qr_payload</Code> as a scannable code
           client-side (any standard QR library) exactly as received — don&apos;t re-encode it, and don&apos;t
           build your own payload from the order details.
@@ -201,13 +201,13 @@ export default function CollectionsApiPage() {
     "reference": "ORDER-4821",
     "status": "processing",
     "payment_token": "80008000",
-    "qr_payload": "<exact Selcom-returned qr value>",
+    "qr_payload": "<exact provider-returned qr value>",
     "expires_at": null
   }
 }`}</CodeBlock>
         </div>
         <p className="text-xs text-on-surface-variant leading-relaxed mt-3">
-          <Code>expires_at</Code> is always <Code>null</Code> today — Selcom&apos;s order-creation response
+          <Code>expires_at</Code> is always <Code>null</Code> today — the provider&apos;s order-creation response
           doesn&apos;t include a QR/token expiry field, so this is never fabricated. Don&apos;t assume the code is
           time-limited unless a future response actually returns one.
         </p>
@@ -232,7 +232,7 @@ export default function CollectionsApiPage() {
 }`}</CodeBlock>
         </div>
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
-          <Code>POST /v1/collections/{"{collection_id}"}/refresh-status</Code> forces a fresh check with Selcom
+          <Code>POST /v1/collections/{"{collection_id}"}/refresh-status</Code> forces a fresh check with the payment provider
           instead of waiting for a webhook — safe to call repeatedly. It never double-credits or double-reverses,
           and is a no-op if the customer hasn&apos;t picked a method yet on an Infinity Payment Page collection.
         </p>

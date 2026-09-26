@@ -126,7 +126,7 @@ export default function WebhooksPage() {
           </table>
         </div>
         <Callout tone="warning" title="Mark an order paid only on collection.successful">
-          Never mark an order paid from a wallet-push/Selcom Pesa prompt being sent, a QR/token being generated,
+          Never mark an order paid from a wallet-push prompt being sent, a QR/token being generated,
           or a resultcode of <code className="font-mono text-xs">000</code> on the initial push response — all of
           those only mean the provider <em>accepted the request</em>, not that the customer paid. Wait for{" "}
           <code className="font-mono text-xs">collection.successful</code> (webhook) or poll{" "}
