@@ -2,110 +2,82 @@ import { Callout } from "@/components/docs/callout";
 import { DocsPager } from "@/components/docs/docs-pager";
 
 export const metadata = {
-  title: "Onboarding Requirements",
+  title: "Account creation requirements",
 };
 
-const REQUIRED_DOCUMENTS: Array<{ label: string; description: string; status: "Requested during review" | "Documentation only" }> = [
-  {
-    label: "NIDA (National ID) or authorized representative ID",
-    description: "Proof of identity for the business owner or the person authorized to act on the business's behalf.",
-    status: "Requested during review",
-  },
-  {
-    label: "TIN certificate",
-    description: "Tanzania Revenue Authority Taxpayer Identification Number certificate.",
-    status: "Requested during review",
-  },
-  {
-    label: "Business licence",
-    description: "Current, valid business operating licence for the business's registered activity.",
-    status: "Requested during review",
-  },
-  {
-    label: "Business registration / incorporation certificate",
-    description: "If your business is formally registered or incorporated (e.g. BRELA certificate). Provide if available.",
-    status: "Documentation only",
-  },
-  {
-    label: "Physical business address",
-    description: "A verifiable street address — collected during onboarding, not a separate document upload.",
-    status: "Documentation only",
-  },
-  {
-    label: "Contact person details",
-    description: "Full name, email, and phone number of the person InfinityPay should reach for account and compliance matters.",
-    status: "Documentation only",
-  },
-  {
-    label: "Bank account details",
-    description: "Required only if you intend to withdraw to a bank account — bank name, account number, and account holder name.",
-    status: "Documentation only",
-  },
-  {
-    label: "Settlement / withdrawal destination details",
-    description: "Whichever withdrawal channels you plan to use (Selcom Pesa, mobile money, and/or bank account) and their destination details.",
-    status: "Documentation only",
-  },
-  {
-    label: "Signed Terms of Service and Privacy Policy acceptance",
-    description: "Accepted as part of the onboarding submission — see the Terms and Privacy pages.",
-    status: "Documentation only",
-  },
-  {
-    label: "Additional compliance documents",
-    description: "InfinityPay's compliance team may request further documentation during review (see Document Requests in the dashboard).",
-    status: "Documentation only",
-  },
-];
+const SIGNUP_FIELDS: Array<{ label: string; description: string; required: boolean }> = [
+  { label: "Business name", description: "The trading name customers will see on receipts and payment pages.", required: true },
+  { label: "Your name", description: "The person opening the account and responsible for it.", required: true },
+  { label: "Business type", description: "What the business does — e.g. Retail, Logistics, Restaurant.", required: true },
+  { label: "NIDA number", description: "20-digit Tanzanian National ID for the account owner.", required: true },
+  { label: "Email", description: "Used to sign in, and where the verification link and account notices are sent.", required: true },
+  { label: "Business phone", description: "Reachable number for account and compliance matters.", required: true },
+  { label: "TIN", description: "Taxpayer Identification Number. Optional at signup; may be requested during review.", required: false },
+  { label: "Website or app link", description: "Where the business operates online, if it does.", required: false },
+  { label: "Password", description: "At least 8 characters, with uppercase, lowercase, a number and a symbol.", required: true },
+]
+
 
 export default function OnboardingRequirementsPage() {
   return (
     <div>
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
-      <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Onboarding Requirements</h1>
+      <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Account creation requirements</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-6 max-w-2xl">
-        What InfinityPay needs before your account is approved for live API access and withdrawals. Provide your
-        business details through the onboarding flow at <code className="font-mono text-sm bg-surface-container-low px-1.5 py-0.5 rounded">/onboarding</code> after
-        creating your account. Identity and compliance documents are not uploaded during onboarding — Infinity
-        Africa&apos;s compliance team requests whatever it needs directly during review.
+        Everything needed to open an InfinityPay account, and what happens after you submit it.
       </p>
 
+      <section className="mb-10 max-w-2xl">
+        <h2 className="text-xl font-semibold text-on-surface mb-3">How it works</h2>
+        <ol className="text-sm text-on-surface-variant leading-relaxed space-y-2 list-decimal pl-5">
+          <li>
+            Fill in the form at <a href="/create-account" className="text-primary font-semibold hover:underline">Get Started</a> —
+            business details and your password, on one page.
+          </li>
+          <li>Verify your email from the link sent to the address you entered.</li>
+          <li>InfinityPay reviews the business. You can sign in while this is pending.</li>
+          <li>Once approved, live API keys and withdrawals unlock.</li>
+        </ol>
+      </section>
+
       <div className="mb-10 max-w-2xl">
-        <Callout title="Approval gates both API access and withdrawals">
-          A account must be <code className="font-mono text-xs">active</code> and{" "}
-          <code className="font-mono text-xs">verified</code> before any withdrawal request is accepted; an
-          unapproved account is refused with a{" "}
-          <code className="font-mono text-xs">withdrawal_restricted</code> error. Live API keys are only issued once
-          onboarding review is complete.
+        <Callout title="No documents are uploaded at signup">
+          The form collects business details only. If the compliance team needs identity, tax or licence documents,
+          it asks for them directly during review — they appear under Document Requests in your dashboard. There is
+          nothing to prepare in advance.
+        </Callout>
+      </div>
+
+      <div className="mb-10 max-w-2xl">
+        <Callout title="Approval gates live API access and withdrawals">
+          An account must be approved before a withdrawal is accepted; an unapproved account is refused with a{" "}
+          <code className="font-mono text-xs">withdrawal_restricted</code> error. Live API keys are issued only once
+          review is complete. Sandbox keys are available sooner, so you can build while you wait.
         </Callout>
       </div>
 
       <section className="mb-12">
-        <h2 className="text-xl font-semibold text-on-surface mb-3">Required documents and information</h2>
+        <h2 className="text-xl font-semibold text-on-surface mb-3">What the form asks for</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border border-outline-variant/40 rounded-xl overflow-hidden">
             <thead className="bg-surface-container-low">
               <tr>
-                <th className="px-4 py-2.5 font-semibold text-on-surface-variant">Requirement</th>
+                <th className="px-4 py-2.5 font-semibold text-on-surface-variant">Field</th>
                 <th className="px-4 py-2.5 font-semibold text-on-surface-variant">Details</th>
-                <th className="px-4 py-2.5 font-semibold text-on-surface-variant">Status</th>
+                <th className="px-4 py-2.5 font-semibold text-on-surface-variant" />
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30">
-              {REQUIRED_DOCUMENTS.map((doc) => (
-                <tr key={doc.label}>
-                  <td className="px-4 py-2.5 font-medium text-on-surface align-top">{doc.label}</td>
-                  <td className="px-4 py-2.5 text-on-surface-variant align-top">{doc.description}</td>
+              {SIGNUP_FIELDS.map((field) => (
+                <tr key={field.label}>
+                  <td className="px-4 py-2.5 font-medium text-on-surface align-top">{field.label}</td>
+                  <td className="px-4 py-2.5 text-on-surface-variant align-top">{field.description}</td>
                   <td className="px-4 py-2.5 align-top whitespace-nowrap">
-                    <span
-                      className={
-                        doc.status === "Requested during review"
-                          ? "inline-flex items-center gap-1 bg-accent text-primary px-2.5 py-1 rounded-full text-xs font-semibold border border-primary/20"
-                          : "bg-surface-container-highest text-on-surface-variant px-2.5 py-1 rounded-full text-xs font-semibold"
-                      }
-                    >
-                      {doc.status}
-                    </span>
+                    {!field.required && (
+                      <span className="bg-surface-container-highest text-on-surface-variant px-2.5 py-1 rounded-full text-xs font-semibold">
+                        Optional
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -113,11 +85,8 @@ export default function OnboardingRequirementsPage() {
           </table>
         </div>
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
-          The onboarding submission itself only collects your business details and Terms/Privacy acceptance. Nothing in
-          the list above is uploaded through the onboarding form. Items marked <strong>&quot;Requested during
-          review&quot;</strong> are asked for directly by InfinityPay&apos;s compliance team if needed (see Document
-          Requests in the dashboard); everything marked &quot;Documentation only&quot; is either captured in the
-          submission form or requested the same way.
+          You also accept the Terms of Service and Privacy Policy, and confirm the details are accurate. That is the
+          whole form — there is no second step and no upload.
         </p>
       </section>
 

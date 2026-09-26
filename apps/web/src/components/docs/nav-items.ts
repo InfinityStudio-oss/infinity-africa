@@ -14,7 +14,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
     items: [
       { label: "REST API Overview", href: "/developers" },
       { label: "API Key Authentication", href: "/developers/authentication" },
-      { label: "Merchant Onboarding Requirements", href: "/developers/onboarding-requirements" },
+      { label: "Account creation requirements", href: "/developers/onboarding-requirements" },
     ],
   },
   {
