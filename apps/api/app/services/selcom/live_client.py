@@ -28,6 +28,7 @@ developer.selcom.business) with its own client — see
 app/services/selcom_business/. Nothing here handles payouts anymore.
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -37,6 +38,7 @@ from decimal import Decimal
 import httpx
 
 from app.core.errors import SelcomAPIError
+from app.services.selcom.outbound_guard import SelcomCircuitOpenError, selcom_outbound
 from app.services.selcom.parsing import extract_provider_reference, extract_status
 from app.services.selcom.schemas import (
     CollectionResult,
@@ -48,6 +50,9 @@ logger = logging.getLogger("infinity.selcom")
 
 _TIMEOUT_SECONDS = 15.0
 _MAX_CONNECT_RETRIES = 1
+# Waited before a connect retry. Without it the loop retries instantly,
+# which is exactly the burst a provider reads as abuse.
+_RETRY_BACKOFF_SECONDS = 1.0
 _CLIENT_NAME = "selcom"
 
 # Placeholder paths — see module docstring.
@@ -74,9 +79,15 @@ class SelcomHTTPClient:
         while True:
             started = time.monotonic()
             try:
-                async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as http:
+                async with selcom_outbound(), httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as http:
                     response = await http.post(url, content=payload, headers=headers)
                 break
+            except SelcomCircuitOpenError as exc:
+                # The breaker is open, so no request was made. Surfaced as
+                # the transport error every caller already handles, rather
+                # than a new exception type each of them would have to
+                # learn about.
+                raise SelcomAPIError(str(exc)) from exc
             except (httpx.ConnectError, httpx.TimeoutException) as exc:
                 latency_ms = int((time.monotonic() - started) * 1000)
                 if attempt >= _MAX_CONNECT_RETRIES:
@@ -86,6 +97,10 @@ class SelcomHTTPClient:
                     )
                     raise SelcomAPIError(f"Could not reach Selcom ({type(exc).__name__})") from exc
                 attempt += 1
+                # Back off before retrying. Retrying a refused connection
+                # instantly is the pattern that turns one bad moment into
+                # traffic that looks like an attack from our IP.
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS * attempt)
             except httpx.HTTPError as exc:
                 latency_ms = int((time.monotonic() - started) * 1000)
                 logger.warning(

@@ -25,6 +25,22 @@ class Settings(BaseSettings):
     # instead of the real client.
     trusted_proxy_hops: int = 1
 
+    # Outbound throttle for everything this backend sends to Selcom
+    # (app/services/selcom/outbound_guard.py). Every merchant reaches
+    # Selcom through us, from our own whitelisted IPs, so all of their
+    # traffic concentrates onto a few addresses -- one ISP partner running
+    # a billing cycle can look like abuse from a single source, and a
+    # blocked IP takes down the whole platform rather than one merchant.
+    #
+    # Concurrency and rate make callers WAIT for a slot, which smooths a
+    # burst instead of failing it. The breaker is the one that fails fast:
+    # retrying into a provider that is already down is how a temporary
+    # outage becomes a blocked IP.
+    selcom_outbound_max_per_minute: int = 60
+    selcom_outbound_max_concurrent: int = 5
+    selcom_circuit_breaker_failure_threshold: int = 10
+    selcom_circuit_breaker_cooldown_seconds: int = 60
+
     # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
     # When true, require_super_admin additionally demands a Supabase `aal2`
     # session — a Super Admin holding only a password is refused with

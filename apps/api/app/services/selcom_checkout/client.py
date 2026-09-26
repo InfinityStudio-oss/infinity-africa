@@ -46,6 +46,7 @@ import time
 import httpx
 
 from app.config import Settings, get_settings
+from app.services.selcom.outbound_guard import SelcomCircuitOpenError, selcom_outbound
 from app.services.selcom_checkout.errors import (
     SelcomCheckoutError,
     SelcomCheckoutMisconfiguredError,
@@ -164,7 +165,10 @@ class SelcomCheckoutHTTPClient:
         url = _join_url(credentials.base_url, path)
         started = time.monotonic()
         try:
-            async with httpx.AsyncClient(timeout=credentials.timeout_seconds) as http:
+            # The highest-volume path to Selcom: every checkout order and
+            # every reconciliation poll. Throttled so a billing cycle
+            # cannot look like abuse from our IP.
+            async with selcom_outbound(), httpx.AsyncClient(timeout=credentials.timeout_seconds) as http:
                 if method == "GET":
                     # GET /v1/checkout/order-status?order_id=... — the
                     # field(s) still get signed exactly like a POST body
@@ -173,6 +177,10 @@ class SelcomCheckoutHTTPClient:
                     response = await http.request(method, url, params=fields, headers=headers)
                 else:
                     response = await http.request(method, url, json=fields, headers=headers)
+        except SelcomCircuitOpenError as exc:
+            # Breaker open: no request was made. Raised as the same error
+            # a transport failure produces, so existing handling applies.
+            raise SelcomCheckoutError(str(exc)) from exc
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as exc:
             latency_ms = int((time.monotonic() - started) * 1000)
             logger.warning(
