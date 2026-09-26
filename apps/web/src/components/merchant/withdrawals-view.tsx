@@ -45,6 +45,11 @@ const SAFE_WITHDRAWAL_ERROR_CODES = new Set([
   "withdrawal_restricted",
   "insufficient_balance",
   "feature_disabled",
+  // The backend's 429 message is already generic and safe to show. Without
+  // this it fell into the "something went wrong" fallback, which tells a
+  // merchant nothing and invites them to retry immediately -- the opposite
+  // of what a rate limit is asking for.
+  "rate_limited",
 ]);
 
 function withdrawalErrorMessage(

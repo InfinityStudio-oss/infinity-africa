@@ -32,6 +32,7 @@ from app.auth.hashing import hash_api_key
 from app.auth.jwt import InvalidTokenError, decode_access_token
 from app.config import get_settings
 from app.core.errors import MfaRequiredError
+from app.core.rate_limit import enforce_rate_limit
 from app.core.request_ip import client_ip
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
@@ -259,6 +260,12 @@ def verify_api_key(
 
     if not data:
         _write_auth_audit_log(supabase, request=request, ip=ip, action="api_key.auth_failed")
+        # Wrong keys are cheap to generate, so failures are capped per
+        # IP. Applied only on the failure path: a working integration
+        # never reaches it, and a script guessing keys hits it fast.
+        enforce_rate_limit(
+            scope="api_key_auth_failed", key=ip or "unknown", limit=20, window_seconds=300
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
 
     merchant = execute_maybe_single(
@@ -325,6 +332,14 @@ def verify_api_key(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Request rejected: this IP address is not on the merchant's approved allowlist",
         )
+
+    # Per-key throughput, independent of the per-IP endpoint limits: one
+    # merchant's runaway integration must not consume the budget of
+    # every other caller sharing an egress address, and a key used from
+    # many IPs is still one key.
+    enforce_rate_limit(
+        scope="api_key_requests", key=str(data["id"]), limit=120, window_seconds=60
+    )
 
     try:
         supabase.table("api_keys").update({"last_used_at": utc_now_iso(), "last_used_ip": ip}).eq(

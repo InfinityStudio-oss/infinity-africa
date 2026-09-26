@@ -202,9 +202,17 @@ def _error_content(code: str, message: str, details=None) -> dict:
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(APIError)
     async def api_error_handler(request: Request, exc: APIError):
+        # Retry-After on a 429 so a client backs off for the right
+        # length of time rather than guessing -- and so a well-behaved
+        # integrator stops hammering, which is the point of the limit.
+        headers = None
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after:
+            headers = {"Retry-After": str(int(retry_after))}
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_content(exc.code, exc.message, exc.details),
+            headers=headers,
         )
 
     @app.exception_handler(RequestValidationError)

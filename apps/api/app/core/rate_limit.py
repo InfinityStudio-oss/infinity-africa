@@ -15,6 +15,7 @@ Redis-backed limiter (or a proxy/edge-level limiter — Railway/Cloudflare)
 before scaling horizontally.
 """
 
+import hashlib
 import time
 from collections import defaultdict, deque
 from threading import Lock
@@ -26,8 +27,20 @@ from app.core.request_ip import client_ip
 
 
 class RateLimitExceededError(APIError):
+    """429 with a deliberately generic message.
+
+    `retry_after` is rendered as the standard Retry-After header so a
+    well-behaved client backs off for the right length of time instead of
+    guessing — see register_exception_handlers. It says nothing about
+    which limit was hit or what the caller is, because a limiter that
+    explains itself tells an attacker how to pace around it."""
+
     status_code = 429
     code = "rate_limited"
+
+    def __init__(self, message: str, *, retry_after: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class _InMemoryRateLimiter:
@@ -48,7 +61,13 @@ class _InMemoryRateLimiter:
             while hits and now - hits[0] > window_seconds:
                 hits.popleft()
             if len(hits) >= limit:
-                raise RateLimitExceededError("Too many requests. Please try again in a few minutes.")
+                # Seconds until the oldest hit falls out of the window —
+                # the earliest moment the caller could succeed.
+                retry_after = max(1, int(window_seconds - (now - hits[0])) + 1)
+                raise RateLimitExceededError(
+                    "Too many requests. Please try again in a few minutes.",
+                    retry_after=retry_after,
+                )
             hits.append(now)
 
 
@@ -69,3 +88,30 @@ def rate_limit(*, scope: str, limit: int, window_seconds: float):
         _limiter.check(f"{scope}:{ip}", limit=limit, window_seconds=window_seconds)
 
     return _dependency
+
+def enforce_rate_limit(
+    *, scope: str, key: str, limit: int, window_seconds: float, request: Request | None = None
+) -> None:
+    """Apply a limit from inside a handler, keyed on something the
+    dependency layer cannot see.
+
+    The `rate_limit` dependency can only key on the IP, because it runs
+    before the body is parsed. Some limits need a second dimension that
+    lives in the request itself -- the email on a password reset, the API
+    key on a server-to-server call, the merchant on a withdrawal. Keying on
+    IP alone lets one attacker rotate addresses against a single account,
+    and keying on the account alone lets one address attack many accounts;
+    call this alongside the dependency to close both.
+
+    `key` is hashed before use so an email or an API key id never becomes
+    part of an in-memory bucket name that could surface in a traceback or a
+    heap dump.
+
+    When `request` is given, the caller IP is folded in too, so the bucket
+    is (scope, key, ip) rather than (scope, key).
+    """
+    digest = hashlib.sha256(key.strip().lower().encode("utf-8")).hexdigest()[:32]
+    bucket = f"{scope}:{digest}"
+    if request is not None:
+        bucket = f"{bucket}:{client_ip(request) or 'unknown'}"
+    _limiter.check(bucket, limit=limit, window_seconds=window_seconds)

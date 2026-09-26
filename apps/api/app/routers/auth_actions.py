@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.config import get_settings
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.database.session import get_supabase_admin
 from app.schemas.auth import ForgotPasswordRequest
 from app.schemas.common import APIResponse
@@ -33,6 +33,15 @@ def forgot_password(
     every failure internally (missing account, Supabase error, Resend
     error) and returns None either way; this endpoint doesn't even look at
     what it returned."""
+    # Per-IP is handled by the dependency above. This adds the second
+    # dimension: one address cannot be targeted from many IPs, which is
+    # what per-IP alone allows. Raised BEFORE any lookup, and the 429 is
+    # identical whether or not the address exists -- the whole endpoint
+    # is built so the response never distinguishes the two.
+    enforce_rate_limit(
+        scope="forgot_password_email", key=payload.email, limit=3, window_seconds=900
+    )
+
     client = get_supabase_admin()
     settings = get_settings()
     send_password_reset_email(client, email=payload.email, redirect_to=f"{settings.app_url}{payload.redirect_path}")

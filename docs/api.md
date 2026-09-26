@@ -313,6 +313,39 @@ endpoint you call is the method. When `payment_link_id` is given, it's
 cross-validated: it must belong to the same `merchant_id`, be currently
 `ACTIVE`, and accept the method you're calling (`409`/`422` otherwise).
 
+## Rate limits
+
+Every endpoint is limited. Exceeding one returns **429** with a
+`Retry-After` header giving the seconds to wait:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 43
+
+{"success": false, "error": {"code": "rate_limited",
+ "message": "Too many requests. Please try again in a few minutes."}}
+```
+
+Limits apply on more than one dimension at once. As well as per-IP limits
+per endpoint, an API key is limited to **120 requests per minute** on its
+own key id — so a key used from several servers still shares one budget.
+Repeated authentication failures from one address are capped separately.
+
+### Retrying safely
+
+- **Honour `Retry-After`.** Retrying sooner just extends the window.
+- **Use exponential backoff** for anything beyond that, with jitter so a
+  fleet of workers does not retry in lockstep.
+- **Send an `Idempotency-Key`** on every create. A retry carrying the same
+  key returns the original record instead of charging twice — without one,
+  a retry is a second payment.
+- **Pace bulk runs.** A billing cycle covering thousands of subscribers
+  should be queued, not fired in parallel. A 429 means slow down, not that
+  the request failed.
+
+Automated scraping of list endpoints is not permitted and is rate limited;
+use webhooks or targeted status reads instead of polling broadly.
+
 ## Integrating InfinityPay into another platform
 
 For a partner adding InfinityPay as a payment option inside their own
