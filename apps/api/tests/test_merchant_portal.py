@@ -1611,6 +1611,149 @@ def test_get_transaction_by_reference_found(fake_client):
     assert response.json()["data"]["reference"] == "TXN-FINDME"
 
 
+def test_transactions_list_shows_the_payer_phone_for_a_collection(fake_client):
+    """Same lookup the wallet ledger uses (app/services/payer_lookup.py) —
+    the transactions list must not answer differently about who paid."""
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    collection = fake_client.seed(
+        "collections",
+        {
+            "merchant_id": str(merchant_id),
+            "method": "STK_PUSH",
+            "amount": "2000",
+            "currency": "TZS",
+            "customer_phone": "+255712345678",
+            "status": "successful",
+        },
+    )
+    fake_client.seed(
+        "transactions",
+        {
+            "merchant_id": str(merchant_id),
+            "reference": "TXN-WITH-PAYER",
+            "type": "collection",
+            "method": "STK_PUSH",
+            "collection_id": collection["id"],
+            "gross_amount": "2000",
+            "fee_amount": "40",
+            "net_amount": "1960",
+            "currency": "TZS",
+            "status": "successful",
+            "metadata": {},
+        },
+    )
+
+    response = client.get("/v1/merchant/transactions", headers=auth_headers(user_id))
+
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json()["data"] if r["reference"] == "TXN-WITH-PAYER")
+    assert row["payer_phone"] == "+255712345678"
+
+
+def test_a_withdrawal_transaction_reports_no_payer_phone(fake_client):
+    """A payout has no customer on the other side. Null, not the
+    merchant's own number."""
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    fake_client.seed(
+        "transactions",
+        {
+            "merchant_id": str(merchant_id),
+            "reference": "TXN-PAYOUT",
+            "type": "disbursement",
+            "method": "SELCOM_PESA",
+            "gross_amount": "1000",
+            "fee_amount": "0",
+            "net_amount": "1000",
+            "currency": "TZS",
+            "status": "successful",
+            "metadata": {},
+        },
+    )
+
+    response = client.get("/v1/merchant/transactions", headers=auth_headers(user_id))
+
+    row = next(r for r in response.json()["data"] if r["reference"] == "TXN-PAYOUT")
+    assert row["payer_phone"] is None
+
+
+def test_the_payer_phone_lookup_does_not_leak_another_merchants_collection(fake_client):
+    """The batched lookup is by collection id. A transaction may only ever
+    reference its own merchant's collection, and the response must never
+    carry a phone belonging to someone else's customer."""
+    other_merchant_id, _other_user = _merchant_and_member(fake_client)
+    other_collection = fake_client.seed(
+        "collections",
+        {
+            "merchant_id": str(other_merchant_id),
+            "method": "STK_PUSH",
+            "amount": "5000",
+            "currency": "TZS",
+            "customer_phone": "+255799999999",
+            "status": "successful",
+        },
+    )
+    fake_client.seed(
+        "transactions",
+        {
+            "merchant_id": str(other_merchant_id),
+            "reference": "TXN-OTHER",
+            "type": "collection",
+            "method": "STK_PUSH",
+            "collection_id": other_collection["id"],
+            "gross_amount": "5000",
+            "fee_amount": "0",
+            "net_amount": "5000",
+            "currency": "TZS",
+            "status": "successful",
+            "metadata": {},
+        },
+    )
+    _mine, my_user_id = _merchant_and_member(fake_client)
+
+    response = client.get("/v1/merchant/transactions", headers=auth_headers(my_user_id))
+
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert "+255799999999" not in body
+    assert "TXN-OTHER" not in body
+
+
+def test_get_transaction_by_reference_includes_the_payer_phone(fake_client):
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    collection = fake_client.seed(
+        "collections",
+        {
+            "merchant_id": str(merchant_id),
+            "method": "STK_PUSH",
+            "amount": "2000",
+            "currency": "TZS",
+            "customer_phone": "+255700000123",
+            "status": "successful",
+        },
+    )
+    fake_client.seed(
+        "transactions",
+        {
+            "merchant_id": str(merchant_id),
+            "reference": "TXN-DETAIL",
+            "type": "collection",
+            "method": "STK_PUSH",
+            "collection_id": collection["id"],
+            "gross_amount": "2000",
+            "fee_amount": "0",
+            "net_amount": "2000",
+            "currency": "TZS",
+            "status": "successful",
+            "metadata": {},
+        },
+    )
+
+    response = client.get("/v1/merchant/transactions/TXN-DETAIL", headers=auth_headers(user_id))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["payer_phone"] == "+255700000123"
+
+
 def test_get_transaction_by_reference_not_found(fake_client):
     _merchant_id, user_id = _merchant_and_member(fake_client)
     response = client.get("/v1/merchant/transactions/TXN-NOPE", headers=auth_headers(user_id))

@@ -69,6 +69,16 @@ guessed, never substituted with the merchant's own number:
 - **Entries with no linked collection** — adjustments, refunds and
   reversals posted against a transaction that has no `collection_id`.
 
+### The same number appears on Transactions
+
+The Transactions page (`/portal/transactions`) and its detail drawer show
+the same **Payer Phone**, resolved the same way through
+`app/services/payer_lookup.py`, and it is a column in that page's CSV
+export and in the Transactions Summary report
+([`docs/REPORTS.md`](./REPORTS.md)). One helper behind all of them, so
+the ledger and the transactions list cannot answer differently about who
+paid.
+
 ### Who can see it
 
 Only the merchant the wallet belongs to, through the existing

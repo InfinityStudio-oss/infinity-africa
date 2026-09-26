@@ -41,6 +41,9 @@ import type {
   SupportTicket,
   Transaction,
   WalletLedgerEntry,
+  GeneratedReport,
+  ReportFormat,
+  ReportType,
   WebhookConfig,
   WebhookConfigWithSecret,
   WebhookEvent,
@@ -875,4 +878,20 @@ export async function verifyWithdrawalOtp(challengeId: string, code: string): Pr
  *  fixed at request time, so a resend cannot change what was asked for. */
 export async function resendWithdrawalOtp(challengeId: string): Promise<WithdrawalOtpChallenge> {
   return apiWrite<WithdrawalOtpChallenge>(`/v1/merchant/withdrawals/${challengeId}/resend`, "POST", {});
+}
+
+// --- Reports (LIVE) ---------------------------------------------------------
+
+/** Generates the report server-side and emails it, with the file
+ * attached, to the merchant's account email plus any extra recipients.
+ * The backend always includes the account email, so `recipients` here is
+ * strictly additional. */
+export async function generateReport(input: {
+  report_type: ReportType;
+  start_date: string;
+  end_date: string;
+  format: ReportFormat;
+  recipients: string[];
+}): Promise<GeneratedReport> {
+  return apiWrite<GeneratedReport>("/v1/merchant/reports", "POST", input);
 }

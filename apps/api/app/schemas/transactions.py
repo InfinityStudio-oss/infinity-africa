@@ -28,6 +28,10 @@ class TransactionResponse(BaseModel):
     balance_before: Decimal | None = None
     balance_after: Decimal | None = None
     direction: str | None = None
+    # The customer who paid, resolved through collection_id rather than
+    # stored here — see app/services/payer_lookup.py. Null for withdrawals
+    # (no payer) and QR scans (no phone captured), never guessed.
+    payer_phone: str | None = None
     metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime

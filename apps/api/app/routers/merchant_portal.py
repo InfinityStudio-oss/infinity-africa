@@ -43,7 +43,7 @@ from app.core.feature_flags import (
     require_withdrawals_enabled,
 )
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.core.references import generate_reference
 from app.core.request_ip import client_ip
 from app.core.time import utc_now_iso
@@ -100,6 +100,7 @@ from app.schemas.merchants import MerchantResponse
 from app.schemas.notifications import NotificationResponse
 from app.schemas.payment_links import PaymentLinkResponse
 from app.schemas.refunds import RefundResponse
+from app.schemas.reports import ReportRequest, ReportResponse
 from app.schemas.transactions import TransactionResponse
 from app.schemas.withdrawals import FeeBreakdown, WithdrawalQuoteRequest
 from app.services import disputes_service, document_requests_service
@@ -128,6 +129,7 @@ from app.services.disbursements import (
 from app.services.email import (
     send_invoice_email,
     send_payment_link_customer_email,
+    send_report_email,
     send_staff_invite_email,
     send_withdrawal_otp_email,
 )
@@ -141,6 +143,7 @@ from app.services.merchant_notifications import (
     validate_notification_emails,
 )
 from app.services.merchant_overview import get_merchant_overview
+from app.services.payer_lookup import payer_phones_for_collections
 from app.services.payment_links import (
     batch_collection_counts,
     build_public_url,
@@ -150,6 +153,8 @@ from app.services.payment_links import (
     validate_payment_link_for_collection,
     with_effective_status,
 )
+from app.services.report_rendering import render_report
+from app.services.reports import build_report
 from app.services.wallet_ledger_export import build_wallet_ledger_workbook
 from app.services.wallet_push import execute_wallet_push_collection
 from app.services.withdrawal_otp import (
@@ -1367,7 +1372,11 @@ def list_my_transactions(
 ):
     client = get_supabase_admin()
     rows, total = list_for_merchant(client, "transactions", merchant_id=membership.merchant_id, pagination=pagination)
-    data = [TransactionResponse(**row) for row in rows]
+    # One batched lookup for the whole page, not one per row.
+    phones = payer_phones_for_collections(client, {r.get("collection_id") for r in rows})
+    data = [
+        TransactionResponse(**row, payer_phone=phones.get(row.get("collection_id"))) for row in rows
+    ]
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
 
@@ -1389,7 +1398,89 @@ def get_my_transaction_by_reference(
     )
     if not row:
         raise NotFoundError("Transaction not found")
-    return APIResponse(data=TransactionResponse(**row))
+    phones = payer_phones_for_collections(client, {row.get("collection_id")})
+    return APIResponse(
+        data=TransactionResponse(**row, payer_phone=phones.get(row.get("collection_id")))
+    )
+
+
+# --- Reports ------------------------------------------------------------------
+
+
+@router.post("/reports", response_model=APIResponse[ReportResponse])
+def generate_and_email_report(
+    payload: ReportRequest,
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
+):
+    """Builds a report from the merchant's own data and emails it to them
+    with the file attached.
+
+    The merchant's account email (`contact_email`) is always a recipient
+    and cannot be removed — a report about an account's money must reach
+    the person who owns the account, not only an address someone typed
+    into the form.
+
+    Rate limited per merchant, not per user: generating a report reads
+    every transaction in the range and sends an email, so the cost is the
+    merchant's regardless of which of their staff clicked the button.
+
+    If the email fails the whole call fails. Reporting success for an
+    email that never went out would leave a merchant waiting for
+    something that is not coming.
+    """
+    enforce_rate_limit(
+        scope="merchant_report", key=str(membership.merchant_id), limit=10, window_seconds=3600
+    )
+
+    client = get_supabase_admin()
+    merchant = get_by_id(client, "merchants", membership.merchant_id)
+    if not merchant:
+        raise NotFoundError("Merchant not found")
+
+    account_email = merchant.get("contact_email")
+    if not account_email:
+        raise ValidationAPIError("No account email is set for this business, so the report cannot be sent.")
+
+    # Account email first, then any extras, with case-insensitive dedupe so
+    # the same person is not emailed twice.
+    recipients = [account_email]
+    for extra in payload.recipients:
+        if extra.lower() != account_email.lower():
+            recipients.append(str(extra))
+
+    report = build_report(
+        client,
+        merchant=merchant,
+        report_type=payload.report_type,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+    )
+    content, filename, _media_type = render_report(report, report_format=payload.format.value)
+
+    send_report_email(
+        client,
+        merchant=merchant,
+        recipients=recipients,
+        report_title=report.title,
+        period=f"{report.start_date.isoformat()} to {report.end_date.isoformat()}",
+        row_count=report.row_count,
+        totals=report.totals,
+        attachment=(filename, content),
+    )
+
+    return APIResponse(
+        data=ReportResponse(
+            report_type=payload.report_type,
+            title=report.title,
+            start_date=report.start_date,
+            end_date=report.end_date,
+            format=payload.format,
+            filename=filename,
+            row_count=report.row_count,
+            totals=dict(report.totals),
+            emailed_to=recipients,
+        )
+    )
 
 
 # --- API keys ---------------------------------------------------------------

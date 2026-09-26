@@ -18,6 +18,7 @@ from app.core.errors import InsufficientBalanceError
 from app.core.pagination import PaginationParams
 from app.core.time import dar_es_salaam_day_bounds_utc
 from app.services.crud import execute_maybe_single, get_by_id, insert_row
+from app.services.payer_lookup import payer_phones_for_collections
 
 
 def _get_or_create_ledger_account(
@@ -208,20 +209,9 @@ def _wallet_ledger_entries(
     # Second hop for the payer's phone. Batched the same way, and only for
     # the transactions that actually reference a collection — withdrawals
     # never will.
-    collection_ids = {
-        t["collection_id"] for t in transactions_by_id.values() if t.get("collection_id")
-    }
-    payer_phone_by_collection: dict[str, str | None] = {}
-    if collection_ids:
-        collection_rows = (
-            client.table("collections")
-            .select("id,customer_phone")
-            .in_("id", list(collection_ids))
-            .execute()
-            .data
-            or []
-        )
-        payer_phone_by_collection = {c["id"]: c.get("customer_phone") for c in collection_rows}
+    payer_phone_by_collection = payer_phones_for_collections(
+        client, {t["collection_id"] for t in transactions_by_id.values() if t.get("collection_id")}
+    )
 
     running = Decimal(0)
     enriched = []

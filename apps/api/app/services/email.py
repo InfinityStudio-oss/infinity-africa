@@ -13,6 +13,7 @@ operation it's attached to, and password reset specifically must never
 let a caller distinguish "no such account" from "email provider down").
 """
 
+import base64
 import logging
 import uuid
 from decimal import Decimal
@@ -31,14 +32,24 @@ logger = logging.getLogger("infinity.email")
 
 
 def send_email(
-    *, to: str | list[str], subject: str, html: str, sender: str, reply_to: str | None = None
+    *,
+    to: str | list[str],
+    subject: str,
+    html: str,
+    sender: str,
+    reply_to: str | None = None,
+    attachments: list[tuple[str, bytes]] | None = None,
 ) -> str:
     """Sends one email through Resend. Returns the provider's message id
     (empty string if Resend didn't return one). Raises EmailDeliveryError
     on any failure — a missing API key, a rejected send, or the request
     itself failing outright. Never logs the API key; the raw exception is
     logged server-side only (not included in the message raised, which is
-    safe to surface to a merchant)."""
+    safe to surface to a merchant).
+
+    `attachments` is a list of (filename, raw bytes); this base64-encodes
+    them for Resend. Resend caps a message at 40MB total, so callers that
+    can produce something large must bound it themselves."""
     settings = get_settings()
     if not settings.resend_api_key:
         raise EmailDeliveryError("Email delivery is not configured yet.")
@@ -50,6 +61,13 @@ def send_email(
     params: dict[str, Any] = {"from": sender, "to": recipients, "subject": subject, "html": html}
     if reply_to:
         params["reply_to"] = reply_to
+    if attachments:
+        # Resend takes attachment content base64-encoded. Passed as
+        # (filename, bytes) so callers never have to know that.
+        params["attachments"] = [
+            {"filename": filename, "content": base64.b64encode(content).decode("ascii")}
+            for filename, content in attachments
+        ]
 
     try:
         result = resend.Emails.send(params)
@@ -1517,3 +1535,97 @@ def send_withdrawal_otp_email(
         status="sent",
         provider_message_id=message_id,
     )
+
+
+# --- Reports ------------------------------------------------------------------
+
+
+def send_report_email(
+    client: Client,
+    *,
+    merchant: dict,
+    recipients: list[str],
+    report_title: str,
+    period: str,
+    row_count: int,
+    totals: list[tuple[str, str]],
+    attachment: tuple[str, bytes],
+) -> list[dict]:
+    """Emails a generated report to the merchant, with the file attached.
+
+    Raises EmailDeliveryError if the send fails. Deliberately not
+    swallowed: a merchant who clicked "Generate Report" and was told it
+    was sent must not be left waiting for an email that never went. The
+    endpoint surfaces the failure and the report can be downloaded
+    directly instead.
+
+    Logs one email_deliveries row per recipient, all sharing the
+    provider's message id — one message went out, but "did this person
+    receive their report" is the question support actually asks.
+    """
+    settings = get_settings()
+    business_name = merchant.get("business_name") or "Your business"
+    subject = f"{report_title} — {period}"
+    sender = settings.email_from
+    filename, content = attachment
+
+    summary_rows = "".join(
+        f'<tr><td style="padding:6px 16px 6px 0;color:#5f6b68;">{label}</td>'
+        f'<td style="padding:6px 0;font-weight:600;color:#04332a;">{value}</td></tr>'
+        for label, value in totals
+    )
+    body = f"""
+      <h2 style="color:#04332a;margin:0 0 12px;">{report_title}</h2>
+      <p style="margin:0 0 4px;">{business_name}</p>
+      <p style="margin:0 0 20px;color:#5f6b68;">Period: {period}</p>
+      <table style="border-collapse:collapse;margin-bottom:20px;">{summary_rows}</table>
+      <p style="margin:0 0 8px;">
+        The full report is attached as <strong>{filename}</strong> ({row_count} row{"" if row_count == 1 else "s"}).
+      </p>
+      <p style="margin:0;color:#5f6b68;font-size:13px;">
+        Generated from your InfinityPay account. If you didn't request this report,
+        please contact support.
+      </p>
+    """
+    html = _email_shell(body_html=body)
+
+    try:
+        message_id = send_email(
+            to=recipients,
+            subject=subject,
+            html=html,
+            sender=sender,
+            reply_to=settings.email_reply_to,
+            attachments=[(filename, content)],
+        )
+    except EmailDeliveryError as exc:
+        for recipient in recipients:
+            _log_delivery(
+                client,
+                merchant_id=merchant.get("id"),
+                email_type="report_delivery",
+                related_resource_type="report",
+                related_resource_id=None,
+                recipient_email=recipient,
+                sender_email=sender,
+                subject=subject,
+                status="failed",
+                error_message=str(exc),
+            )
+        raise
+
+    return [
+        _log_delivery(
+            client,
+            merchant_id=merchant.get("id"),
+            email_type="report_delivery",
+            related_resource_type="report",
+            related_resource_id=None,
+            recipient_email=recipient,
+            sender_email=sender,
+            subject=subject,
+            status="sent",
+            provider_message_id=message_id or None,
+        )
+        for recipient in recipients
+    ]

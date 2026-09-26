@@ -247,6 +247,9 @@ export interface Transaction {
   balance_before: string | null;
   balance_after: string | null;
   direction: "debit" | "credit" | null;
+  /** The customer who paid, resolved through collection_id. Null for
+   * withdrawals (no payer) and QR scans (no phone captured). */
+  payer_phone: string | null;
   created_at: string;
 }
 
@@ -582,4 +585,28 @@ export interface AppNotification {
   related_resource_id: string | null;
   is_read: boolean;
   created_at: string;
+}
+
+/** POST /v1/merchant/reports — the four reports offered at
+ * /portal/reports. Values match apps/api's ReportType enum. */
+export type ReportType =
+  | "TRANSACTIONS_SUMMARY"
+  | "WITHDRAWALS_SUMMARY"
+  | "FEES_SUMMARY"
+  | "CUSTOMER_STATEMENT";
+
+export type ReportFormat = "PDF" | "CSV";
+
+export interface GeneratedReport {
+  report_type: ReportType;
+  title: string;
+  start_date: string;
+  end_date: string;
+  format: ReportFormat;
+  filename: string;
+  row_count: number;
+  totals: Record<string, string>;
+  /** Exactly who the email went to — shown back to the merchant rather
+   * than asking them to trust that "sent" meant the right addresses. */
+  emailed_to: string[];
 }

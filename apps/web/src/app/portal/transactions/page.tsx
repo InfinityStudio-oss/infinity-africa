@@ -21,6 +21,7 @@ const CSV_HEADER = [
   "Reference",
   "Provider Reference",
   "Channel",
+  "Payer Phone",
   "Opening Balance",
   "Amount",
   "Charge",
@@ -48,6 +49,7 @@ function transactionsToCsv(transactions: Transaction[]): string {
       transaction.reference,
       transaction.provider_reference ?? "",
       transaction.method,
+      transaction.payer_phone ?? "",
       transaction.balance_before ?? "",
       amount,
       transaction.fee_amount,
@@ -162,7 +164,7 @@ export default function TransactionsPage() {
           <h3 className="text-2xl font-semibold text-on-background">All Transactions</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[1440px]">
+          <table className="w-full text-left min-w-[1590px]">
             <thead>
               <tr className="text-on-surface-variant text-xs font-semibold border-t border-surface-container-highest">
                 <th className={thClass}>Date</th>
@@ -171,6 +173,7 @@ export default function TransactionsPage() {
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Provider Reference</th>
                 <th className={thClass}>Method</th>
+                <th className={thClass}>Payer Phone</th>
                 <th className={thClass}>Opening Balance</th>
                 <th className={thClass}>Amount</th>
                 <th className={thClass}>Charge</th>
@@ -203,6 +206,9 @@ export default function TransactionsPage() {
                     </td>
                     <td className={`${tdClass} font-mono text-xs text-on-surface-variant`}>{transaction.provider_reference ?? "—"}</td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>{transaction.method}</td>
+                    <td className={`${tdClass} font-mono text-xs text-on-background whitespace-nowrap`}>
+                      {transaction.payer_phone ?? "—"}
+                    </td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>
                       {money(transaction.balance_before, transaction.currency)}
                     </td>

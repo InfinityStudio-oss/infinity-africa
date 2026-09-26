@@ -329,3 +329,21 @@ class NotificationType(StrEnum):
     PAYMENT_RECEIVED = "payment_received"
     COLLECTION_REVERSED = "collection_reversed"
     COLLECTION_PENDING_REVIEW = "collection_pending_review"
+
+
+class ReportType(StrEnum):
+    """The reports a merchant can generate at /portal/reports.
+
+    Values are the wire format; their human titles live in
+    app/services/reports.py, next to the code that builds each one.
+    """
+
+    TRANSACTIONS_SUMMARY = "TRANSACTIONS_SUMMARY"
+    WITHDRAWALS_SUMMARY = "WITHDRAWALS_SUMMARY"
+    FEES_SUMMARY = "FEES_SUMMARY"
+    CUSTOMER_STATEMENT = "CUSTOMER_STATEMENT"
+
+
+class ReportFormat(StrEnum):
+    PDF = "PDF"
+    CSV = "CSV"

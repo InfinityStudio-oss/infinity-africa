@@ -29,6 +29,7 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     balance_before: "500.00",
     balance_after: "2470.00",
     direction: "credit",
+    payer_phone: "+255712345678",
     created_at: "2026-08-23T01:37:00Z",
     ...overrides,
   };
@@ -75,7 +76,7 @@ describe("Merchant portal TransactionsPage", () => {
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
     const text = await blob.text();
     expect(text).toContain(
-      '"Date","Type","Transaction ID","Reference","Provider Reference","Channel","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status"',
+      '"Date","Type","Transaction ID","Reference","Provider Reference","Channel","Payer Phone","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status"',
     );
     expect(text).toContain("TXN-20260822-E7803AE4");
     expect(text).toContain("SELCOM-REF-1");
@@ -131,5 +132,41 @@ describe("Merchant portal TransactionsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Transaction detail" })).not.toBeInTheDocument());
+  });
+
+  // --- who paid ------------------------------------------------------------
+
+  it("shows the payer's phone on a collection row", async () => {
+    listTransactions.mockResolvedValue([transaction()]);
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    expect(await screen.findByText("Payer Phone")).toBeInTheDocument();
+    expect(screen.getAllByText("+255712345678").length).toBeGreaterThan(0);
+  });
+
+  it("shows a dash rather than a guess when there is no payer", async () => {
+    // A withdrawal has no customer on the other side.
+    listTransactions.mockResolvedValue([
+      transaction({ type: "disbursement", collection_id: null, payer_phone: null }),
+    ]);
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    const row = (await screen.findByText("TXN-20260822-E7803AE4")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("—")).toBeInTheDocument();
+    expect(within(row).queryByText(/\+255/)).not.toBeInTheDocument();
+  });
+
+  it("includes the payer phone in the detail drawer", async () => {
+    listTransactions.mockResolvedValue([transaction()]);
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    fireEvent.click(await screen.findByText("TXN-20260822-E7803AE4"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Transaction detail" });
+    expect(within(dialog).getByText("Payer Phone")).toBeInTheDocument();
+    expect(within(dialog).getByText("+255712345678")).toBeInTheDocument();
   });
 });

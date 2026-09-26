@@ -96,6 +96,7 @@ export function TransactionDetailDrawer({
           <div>
             <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Other</p>
             <Row label="Payment Method" value={transaction.method} />
+            <Row label="Payer Phone" value={transaction.payer_phone ?? "Not available"} mono />
             <Row label="Created" value={formatDateTime(transaction.created_at)} />
           </div>
 
