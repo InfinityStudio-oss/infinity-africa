@@ -91,15 +91,37 @@ anywhere else would reintroduce a spoofable identity.
 
 ## File uploads
 
-One endpoint remains: `POST /v1/onboarding/documents`, guarded by
+One endpoint: `POST /v1/onboarding/documents`, guarded by
 `get_own_merchant`. Onboarding no longer asks for documents up front —
-compliance requests them during review — so this is a low-traffic path.
-Filenames are generated server-side rather than taken from the upload, so
-`../../etc/passwd` as a filename has nothing to traverse.
+compliance requests them during review — so it is a low-traffic path.
 
-**Not implemented:** malware scanning, and a MIME allowlist enforced
-server-side rather than by the browser. Worth adding before document volume
-grows; recorded here rather than left implied.
+Three things were weak and are now fixed:
+
+**The declared type was trusted.** `content_type` is a header the uploader
+sets, so an executable claiming `image/png` passed the allowlist. The file's
+own leading bytes are now checked against the declared type, and those the
+uploader does not get to choose.
+
+**There was no size ceiling.** The handler reads the whole file into
+memory, so one large upload could exhaust the container for every merchant.
+Capped at 10 MB, with a bounded read of one byte past the limit so an
+oversized file is rejected without being loaded first.
+
+**The stored extension came from the filename.** `id.pdf.exe` would have
+been stored as `.exe`. The extension is now derived from the verified type.
+The storage path was already server-generated
+(`{merchant_id}/{document_type}{ext}`), so traversal was never possible —
+tested with `../../etc/passwd` and friends, which land in the same safe
+path as any other name. The original filename is still recorded as data for
+whoever reviews the document; it simply has no say in where the file goes.
+
+**Still not implemented: malware scanning.** A valid PDF can carry a
+malicious payload, and nothing here would notice. The mitigations that
+exist are that the bucket is private and served only through short-lived
+signed URLs, and that only approved-merchant staff can upload. Adding
+scanning means a third-party service (ClamAV in a sidecar, or a hosted
+API), which is a cost and operations decision rather than a code change —
+worth taking when document volume grows.
 
 ## Adding a new endpoint
 

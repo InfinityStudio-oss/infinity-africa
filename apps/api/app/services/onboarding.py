@@ -11,7 +11,6 @@ stays exactly as they were (still `pending`/`unverified`) while they fix and
 resubmit.
 """
 
-import mimetypes
 import uuid
 from typing import Any
 
@@ -53,6 +52,25 @@ from app.services.merchant_code import generate_merchant_code
 _REQUIRED_APPROVAL_DOCUMENTS: tuple[DocumentType, ...] = ()
 
 _ALLOWED_DOCUMENT_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+
+# Read whole into memory, so this is also the ceiling on what one request
+# can make the container allocate. Generous for a photographed ID or a
+# scanned certificate; small enough that a flood cannot exhaust the box.
+_MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
+# The first bytes of the file itself, which the uploader does not get to
+# choose -- unlike content_type, which is a header the client sets and can
+# simply lie about. Checked against the declared type so a renamed
+# executable claiming image/png is refused.
+_MAGIC_BYTES: dict[str, tuple[bytes, ...]] = {
+    "application/pdf": (b"%PDF-",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+}
+
+# Derived from the verified type, never from the uploaded filename: a file
+# called "id.pdf.exe" must not be stored with an .exe extension.
+_EXTENSION_FOR_MIME = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
 _BUCKET = "merchant-documents"
 
 _ONBOARDED_STATUSES = (AccountStatus.PENDING_VERIFICATION.value, AccountStatus.VERIFIED.value)
@@ -375,11 +393,6 @@ def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
     }
 
 
-def _extension_for(file: UploadFile) -> str:
-    if file.filename and "." in file.filename:
-        return "." + file.filename.rsplit(".", 1)[-1].lower()
-    guessed = mimetypes.guess_extension(file.content_type or "") or ""
-    return guessed
 
 
 async def register_onboarding_document(
@@ -390,14 +403,28 @@ async def register_onboarding_document(
     file: UploadFile,
     uploaded_by: uuid.UUID,
 ) -> dict:
-    if file.content_type not in _ALLOWED_DOCUMENT_MIME_TYPES:
+    declared = (file.content_type or "").lower()
+    if declared not in _ALLOWED_DOCUMENT_MIME_TYPES:
         raise ValidationAPIError(f"{document_type.value} must be a PDF, JPG, or PNG file")
 
-    content = await file.read()
+    # Bounded read: one byte past the limit is enough to know it is too
+    # large, without pulling the whole thing into memory first.
+    content = await file.read(_MAX_DOCUMENT_BYTES + 1)
     if not content:
         raise ValidationAPIError(f"{document_type.value} file is empty")
+    if len(content) > _MAX_DOCUMENT_BYTES:
+        raise ValidationAPIError(
+            f"{document_type.value} must be smaller than {_MAX_DOCUMENT_BYTES // (1024 * 1024)} MB"
+        )
 
-    path = f"{merchant_id}/{document_type.value}{_extension_for(file)}"
+    # content_type is a client-supplied header. The file's own leading
+    # bytes are not, so they decide.
+    if not content.startswith(_MAGIC_BYTES[declared]):
+        raise ValidationAPIError(
+            f"{document_type.value} does not look like a real {declared.split('/')[-1].upper()} file"
+        )
+
+    path = f"{merchant_id}/{document_type.value}{_EXTENSION_FOR_MIME[declared]}"
     client.storage.from_(_BUCKET).upload(
         path, content, {"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
     )
