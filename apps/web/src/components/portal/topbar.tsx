@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { LogOutButton } from "@/components/auth/log-out-button";
 import { merchantLogout } from "@/lib/supabase/logout";
 import { getMyMembership } from "@/lib/portal/api";
 import { MERCHANT_ROLES, USER_ROLE_LABELS } from "@/lib/portal/roles";
@@ -161,12 +162,7 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
                   Profile &amp; Settings
                 </Link>
                 <form action={merchantLogout}>
-                  <button
-                    type="submit"
-                    className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-low transition-colors"
-                  >
-                    Log out
-                  </button>
+                  <LogOutButton className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-low transition-colors disabled:cursor-not-allowed disabled:opacity-60" />
                 </form>
               </div>
             </>

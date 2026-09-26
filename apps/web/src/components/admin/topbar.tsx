@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Icon } from "@/components/portal/icon";
+import { LogOutButton } from "@/components/auth/log-out-button";
 import { adminLogout } from "@/lib/supabase/logout";
 
 function initials(name: string | null, email: string): string {
@@ -99,12 +100,7 @@ export function AdminTopbar({
                   Change Password
                 </Link>
                 <form action={adminLogout}>
-                  <button
-                    type="submit"
-                    className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-low transition-colors"
-                  >
-                    Log out
-                  </button>
+                  <LogOutButton className="w-full text-left px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-low transition-colors disabled:cursor-not-allowed disabled:opacity-60" />
                 </form>
               </div>
             </>
