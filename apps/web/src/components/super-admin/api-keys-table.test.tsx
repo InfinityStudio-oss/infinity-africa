@@ -15,6 +15,8 @@ function row(overrides: Partial<AdminApiKeyPlatformRow>): AdminApiKeyPlatformRow
     merchant_code: "27048391",
     name: "Production key",
     environment: "live",
+    // Deliberately the legacy `inf_` format: 11 such keys exist in
+    // production and must keep rendering. New keys are sk_/pk_ pairs.
     key_prefix: "inf_live_abc123",
     key_last4: "9zk1",
     scopes: ["collections:write"],

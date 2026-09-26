@@ -22,6 +22,8 @@ const key: ApiKey = {
   merchant_id: "merchant-1",
   name: "Sandbox key",
   environment: "sandbox",
+  // Deliberately the legacy `inf_` format: 11 such keys exist in
+  // production and must keep rendering. New keys are sk_/pk_ pairs.
   key_prefix: "inf_sandbox_abc123",
   public_key: "pk_test_examplepublickey",
   key_last4: "9zk1",

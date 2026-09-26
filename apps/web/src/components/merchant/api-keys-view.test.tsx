@@ -8,6 +8,8 @@ const key: ApiKey = {
   merchant_id: "merchant-1",
   name: "Website checkout",
   environment: "sandbox",
+  // Deliberately the legacy `inf_` format: 11 such keys exist in
+  // production and must keep rendering. New keys are sk_/pk_ pairs.
   key_prefix: "inf_sandbox_abc123",
   public_key: "pk_test_examplepublickey",
   key_last4: "9zk1",
@@ -79,7 +81,7 @@ describe("ApiKeysView", () => {
   it("rotating a key reveals the new plaintext key and marks the old one revoked", async () => {
     rotateApiKey.mockResolvedValue({
       key: { ...key, id: "key-2", status: "active" },
-      plaintext_key: "inf_sandbox_newkey123",
+      plaintext_key: "sk_test_newkey123",
     });
     const { ApiKeysView } = await import("./api-keys-view");
     render(<ApiKeysView />);
@@ -87,7 +89,7 @@ describe("ApiKeysView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
 
     await waitFor(() => expect(rotateApiKey).toHaveBeenCalledWith("key-1"));
-    expect(await screen.findByText("inf_sandbox_newkey123")).toBeInTheDocument();
+    expect(await screen.findByText("sk_test_newkey123")).toBeInTheDocument();
     expect(
       screen.getByText("Store the secret key now. For your security, it will not be shown again."),
     ).toBeInTheDocument();
@@ -174,7 +176,7 @@ describe("ApiKeysView", () => {
   }
 
   it("defaults to 'continue without IP whitelisting' and passes the merchant's choice through to createApiKey", async () => {
-    createApiKey.mockResolvedValue({ key: { ...key, id: "key-2" }, plaintext_key: "inf_sandbox_newkey123" });
+    createApiKey.mockResolvedValue({ key: { ...key, id: "key-2" }, plaintext_key: "sk_test_newkey123" });
     const { ApiKeysView } = await import("./api-keys-view");
     render(<ApiKeysView />);
 
@@ -203,7 +205,7 @@ describe("ApiKeysView", () => {
   });
 
   it("adds a valid IP inline, enabling submit, and passes allowed_ips to createApiKey", async () => {
-    createApiKey.mockResolvedValue({ key: { ...key, id: "key-2" }, plaintext_key: "inf_sandbox_newkey123" });
+    createApiKey.mockResolvedValue({ key: { ...key, id: "key-2" }, plaintext_key: "sk_test_newkey123" });
     const { ApiKeysView } = await import("./api-keys-view");
     render(<ApiKeysView />);
 
@@ -315,14 +317,14 @@ describe("ApiKeysView", () => {
   it("never writes the revealed secret to localStorage or sessionStorage", async () => {
     rotateApiKey.mockResolvedValue({
       key: { ...key, id: "key-2", status: "active" },
-      plaintext_key: "inf_sandbox_newkey123",
+      plaintext_key: "sk_test_newkey123",
     });
     const localSetItem = vi.spyOn(Storage.prototype, "setItem");
     const { ApiKeysView } = await import("./api-keys-view");
     render(<ApiKeysView />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
-    await screen.findByText("inf_sandbox_newkey123");
+    await screen.findByText("sk_test_newkey123");
 
     expect(localSetItem).not.toHaveBeenCalled();
     localSetItem.mockRestore();

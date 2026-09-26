@@ -82,13 +82,14 @@ Local dev    http://localhost:8000`}</CodeBlock>
           the dashboard, sent as an{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">Authorization: Bearer</code> header
           (or the equivalent <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-API-Key</code> header).
-          Full detail, including scopes, sandbox vs. live keys, and key rotation, is in{" "}
+          Use the <strong>secret</strong> half of the key pair — the public key identifies a key but cannot
+          authorize a request. Full detail, including scopes, sandbox vs. live keys, and key rotation, is in{" "}
           <Link href="/developers/authentication" className="text-primary font-semibold hover:underline">
             API Key Authentication
           </Link>
           .
         </p>
-        <CodeBlock language="http">{`Authorization: Bearer inf_live_51HbXxxxxxxxxxxxxxxxxxxxxxxx`}</CodeBlock>
+        <CodeBlock language="http">{`Authorization: Bearer sk_live_YOUR_SECRET_KEY`}</CodeBlock>
       </section>
 
       <section className="mb-12">

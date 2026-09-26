@@ -192,7 +192,7 @@ def test_no_token_or_secret_shape_reaches_the_body(fake_client, sent):
     )
 
     html = sent[0]["html"]
-    for forbidden in ("Bearer ", "eyJ", "inf_live_", "inf_sandbox_"):
+    for forbidden in ("Bearer ", "eyJ", "sk_live_", "sk_test_", "inf_live_", "inf_sandbox_"):
         assert forbidden not in html
 
 

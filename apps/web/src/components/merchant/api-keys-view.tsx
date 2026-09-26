@@ -893,7 +893,7 @@ export function ApiKeysView() {
         </div>
         <pre className="bg-on-surface text-primary-fixed text-xs sm:text-sm rounded-lg p-4 overflow-x-auto">
           <span className="text-white/40">curl</span> https://api.infinitypay.me/v1/payment-links \{"\n"}
-          {"  "}-H &quot;Authorization: Bearer inf_live_••••••••&quot; \{"\n"}
+          {"  "}-H &quot;Authorization: Bearer sk_live_••••••••&quot; \{"\n"}
           {"  "}-H &quot;Content-Type: application/json&quot;
         </pre>
       </Card>

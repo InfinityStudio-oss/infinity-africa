@@ -62,7 +62,7 @@ export default function ApiDocsPage() {
             <div className="bg-on-surface rounded-xl p-6 shadow-ambient-lg font-mono text-[11px] leading-relaxed text-primary-fixed overflow-x-auto">
               <span className="text-white/40">POST</span> /v1/payment-links
               <br />
-              <span className="text-white/40">Authorization:</span> Bearer inf_live_xxxxxxxxxxxxx
+              <span className="text-white/40">Authorization:</span> Bearer sk_live_xxxxxxxxxxxxx
               <br />
               {"{"}
               <br />
