@@ -73,8 +73,8 @@ export default function OnboardingRequirementsPage() {
       <div className="mb-10 max-w-2xl">
         <Callout title="Approval gates both API access and withdrawals">
           A account must be <code className="font-mono text-xs">active</code> and{" "}
-          <code className="font-mono text-xs">verified</code> before any withdrawal request is accepted — see the{" "}
-          <a href="/developers/disbursements" className="text-primary hover:underline">Disbursements API</a>&apos;s{" "}
+          <code className="font-mono text-xs">verified</code> before any withdrawal request is accepted; an
+          unapproved account is refused with a{" "}
           <code className="font-mono text-xs">withdrawal_restricted</code> error. Live API keys are only issued once
           onboarding review is complete.
         </Callout>

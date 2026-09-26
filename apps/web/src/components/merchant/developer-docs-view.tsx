@@ -12,7 +12,6 @@ const DOC_LINKS = [
   { label: "Payment Links API", href: "/developers/payment-links", icon: "link", description: "Create, fetch, and expire payment links." },
   { label: "Invoices API", href: "/developers/invoices", icon: "description", description: "Create invoices and track payment status." },
   { label: "Transaction Status API", href: "/developers/transaction-status", icon: "search", description: "Look up any transaction by reference." },
-  { label: "Withdrawals API", href: "/developers/disbursements", icon: "account_balance_wallet", description: "Withdraw to Selcom Pesa, mobile money, or bank." },
   { label: "Webhooks", href: "/developers/webhooks", icon: "webhook", description: "Event types, status lifecycle, payloads, and signature verification." },
   { label: "Error Codes", href: "/developers/errors", icon: "error", description: "Full reference of API error codes." },
   { label: "Go-Live Checklist", href: "/developers/go-live-checklist", icon: "checklist", description: "What to confirm before sending real customer traffic." },

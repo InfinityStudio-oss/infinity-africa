@@ -13,7 +13,6 @@ const RESOURCES = [
   { icon: "payments", title: "Collections API", description: "Push USSD, STK Push, Selcom Pesa Push, and Dynamic QR collections.", href: "/developers/collections" },
   { icon: "link", title: "Payment Links API", description: "Generate shareable checkout links for any amount.", href: "/developers/payment-links" },
   { icon: "receipt_long", title: "Invoices API", description: "Itemized invoices with a built-in Pay Now link.", href: "/developers/invoices" },
-  { icon: "send_money", title: "Disbursements API", description: "Payouts to Selcom Pesa, mobile wallets, or bank accounts.", href: "/developers/disbursements" },
   { icon: "webhook", title: "Webhooks", description: "Real-time event notifications delivered to your server.", href: "/developers/webhooks" },
   { icon: "error", title: "Error Codes", description: "Every error code the API returns, and what to do about it.", href: "/developers/errors" },
 ];

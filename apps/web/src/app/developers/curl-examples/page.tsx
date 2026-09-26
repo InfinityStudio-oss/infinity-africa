@@ -67,27 +67,6 @@ curl -X POST https://api.infinitypay.me/v1/invoices/INVOICE_ID/payment-link \\
   -H "X-API-Key: $INFINITY_API_KEY"`}</CodeBlock>
       </section>
 
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-on-surface mb-3">Request a withdrawal (disbursement)</h2>
-        <p className="text-sm text-on-surface-variant leading-relaxed mb-3">
-          Always comes back <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">PENDING_ADMIN_APPROVAL</code> —
-          see the <a href="/developers/disbursements" className="text-primary hover:underline">Disbursements API</a> page
-          for the full status lifecycle and the phone-number format requirement (no leading{" "}
-          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">+</code>).
-        </p>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/disbursements/selcom-pesa \\
-  -H "X-API-Key: $INFINITY_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -H "Idempotency-Key: $(uuidgen)" \\
-  -d '{
-    "merchant_id": "5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71",
-    "amount": "150000.00",
-    "destination_name": "Selcom Pesa Wallet",
-    "destination_identifier": "255712345678",
-    "destination_code": "SELCOM"
-  }'`}</CodeBlock>
-      </section>
-
       <section>
         <h2 className="text-xl font-semibold text-on-surface mb-3">List recent transactions</h2>
         <CodeBlock language="bash">{`curl "https://api.infinitypay.me/v1/merchants/5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71/transactions?page=1&page_size=20" \\

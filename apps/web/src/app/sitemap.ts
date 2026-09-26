@@ -23,7 +23,6 @@ const PUBLIC_PATHS = [
   "/developers/authentication",
   "/developers/collections",
   "/developers/curl-examples",
-  "/developers/disbursements",
   "/developers/dynamic-qr",
   "/developers/errors",
   "/developers/go-live-checklist",
