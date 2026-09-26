@@ -78,10 +78,13 @@ class _FakeRequest:
     TestClient elsewhere (tests/test_ip_allowlist.py), this is only for
     unit-testing verify_api_key's own logic in isolation."""
 
-    def __init__(self):
+    def __init__(self, path: str = "/v1/admin/test"):
         self.headers: dict = {}
         self.client = None
         self.state = SimpleNamespace()
+        # The denial paths in require_super_admin record request.url.path
+        # on the audit entry and the security alert.
+        self.url = SimpleNamespace(path=path)
 
 
 # --- decode_access_token / get_current_user -------------------------------

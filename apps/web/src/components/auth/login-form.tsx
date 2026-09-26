@@ -72,11 +72,9 @@ export function LoginForm({ variant }: { variant: "public" | "merchant" | "admin
         {pending ? "Signing in…" : "Log In"}
       </button>
 
-      {variant === "admin" ? (
-        <p className="text-center text-sm text-on-surface-variant">
-          Platform access is invite-only. Contact an existing admin if you need access.
-        </p>
-      ) : (
+      {/* The admin console shows no footer: it told a would-be attacker
+          how access is granted, and told a real admin nothing. */}
+      {variant === "admin" ? null : (
         <p className="text-center text-sm text-on-surface-variant">
           {"Don't have an account?"}{" "}
           <Link href="/create-account" className="font-semibold text-primary-container hover:underline">

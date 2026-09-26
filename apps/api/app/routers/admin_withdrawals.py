@@ -26,6 +26,7 @@ from app.schemas.withdrawals import (
     WithdrawalRequestInfoRequest,
 )
 from app.services.audit import write_audit_log
+from app.services.crud import get_by_id
 from app.services.disbursements import (
     approve_disbursement,
     reconcile_pending_disbursements,
@@ -33,8 +34,27 @@ from app.services.disbursements import (
     reject_disbursement,
     request_more_info,
 )
+from app.services.security_alerts import notify_security_event
 
 router = APIRouter(prefix="/admin/withdrawals", tags=["admin-withdrawals"])
+
+
+def _alert_withdrawal(client, *, admin, disbursement: dict, title: str, event: str, extra=None) -> None:
+    """Money moved, or was refused. Never deduplicated: each approval is a
+    separate decision about real funds, so every one gets its own email."""
+    merchant = get_by_id(client, "merchants", uuid.UUID(disbursement["merchant_id"]))
+    notify_security_event(
+        client,
+        event=event,
+        title=title,
+        actor_email=admin.email,
+        actor_id=admin.id,
+        merchant_name=(merchant or {}).get("business_name"),
+        amount=disbursement.get("amount"),
+        currency=disbursement.get("currency") or "TZS",
+        destination=disbursement.get("destination_identifier"),
+        extra=extra,
+    )
 
 
 @router.post("/{disbursement_id}/approve", response_model=APIResponse[DisbursementResponse])
@@ -53,6 +73,15 @@ async def approve_withdrawal(
         action="disbursement.approved",
         resource_type="disbursement",
         resource_id=disbursement_id,
+    )
+
+    _alert_withdrawal(
+        client,
+        admin=admin,
+        disbursement=disbursement,
+        title="Withdrawal approved",
+        event="super_admin.withdrawal.approved",
+        extra={"Status": disbursement.get("status")},
     )
 
     return APIResponse(data=DisbursementResponse(**disbursement))
@@ -81,6 +110,15 @@ def reject_withdrawal(
         resource_type="disbursement",
         resource_id=disbursement_id,
         metadata={"rejection_reason": payload.rejection_reason},
+    )
+
+    _alert_withdrawal(
+        client,
+        admin=admin,
+        disbursement=disbursement,
+        title="Withdrawal rejected",
+        event="super_admin.withdrawal.rejected",
+        extra={"Reason": payload.rejection_reason},
     )
 
     return APIResponse(data=DisbursementResponse(**disbursement))

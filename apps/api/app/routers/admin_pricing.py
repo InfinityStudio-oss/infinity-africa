@@ -26,7 +26,9 @@ from app.schemas.withdrawals import (
     PricingRuleResponse,
     PricingRuleUpdate,
 )
+from app.services.audit import write_audit_log
 from app.services.crud import get_by_id, insert_row, update_row
+from app.services.security_alerts import notify_security_event
 
 router = APIRouter(prefix="/admin", tags=["admin-pricing"])
 
@@ -48,6 +50,49 @@ def list_platform_pricing_rules(
     return APIResponse(data=[PricingRuleResponse(**row) for row in rows])
 
 
+def _record_pricing_change(client, *, admin, row: dict, action: str, title: str, event: str) -> None:
+    """Audit + alert for a pricing change.
+
+    These endpoints had neither. Pricing decides what every merchant is
+    charged on every transaction, so a change here moves real money over
+    time -- it belongs in the audit trail at least as much as a single
+    withdrawal does. Rule fields only; nothing here is sensitive."""
+    merchant_id = row.get("merchant_id")
+    merchant = get_by_id(client, "merchants", uuid.UUID(merchant_id)) if merchant_id else None
+    scope = (merchant or {}).get("business_name") or ("Platform default" if not merchant_id else str(merchant_id))
+
+    write_audit_log(
+        client,
+        actor_id=admin.id,
+        merchant_id=uuid.UUID(merchant_id) if merchant_id else None,
+        action=action,
+        resource_type="merchant_pricing_rule",
+        resource_id=uuid.UUID(row["id"]),
+        metadata={
+            "scope": scope,
+            "method": row.get("method"),
+            "percentage_fee": str(row.get("percentage_fee")),
+            "flat_fee": str(row.get("flat_fee")),
+            "is_active": row.get("is_active"),
+        },
+    )
+
+    notify_security_event(
+        client,
+        event=event,
+        title=title,
+        actor_email=admin.email,
+        actor_id=admin.id,
+        merchant_name=scope,
+        extra={
+            "Method": row.get("method") or "—",
+            "Percentage fee": str(row.get("percentage_fee")),
+            "Flat fee": str(row.get("flat_fee")),
+            "Active": str(row.get("is_active")),
+        },
+    )
+
+
 @router.post("/pricing-rules/platform-fallback", response_model=APIResponse[PricingRuleResponse])
 def create_platform_fallback_pricing_rule(
     payload: PricingRuleCreate,
@@ -59,6 +104,12 @@ def create_platform_fallback_pricing_rule(
         "merchant_pricing_rules",
         {"merchant_id": None, "created_by": str(admin.id), **_create_rule_fields(payload)},
     )
+
+    _record_pricing_change(
+        client, admin=admin, row=row, action="pricing_rule.created",
+        title="Platform pricing rule created", event="super_admin.pricing.created",
+    )
+
     return APIResponse(data=PricingRuleResponse(**row))
 
 
@@ -89,6 +140,12 @@ def create_merchant_pricing_rule(
         "merchant_pricing_rules",
         {"merchant_id": str(merchant_id), "created_by": str(admin.id), **_create_rule_fields(payload)},
     )
+
+    _record_pricing_change(
+        client, admin=admin, row=row, action="pricing_rule.created",
+        title="Merchant pricing rule created", event="super_admin.pricing.created",
+    )
+
     return APIResponse(data=PricingRuleResponse(**row))
 
 
@@ -96,7 +153,7 @@ def create_merchant_pricing_rule(
 def update_pricing_rule(
     pricing_rule_id: uuid.UUID,
     payload: PricingRuleUpdate,
-    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
 ):
     client = get_supabase_admin()
     if not get_by_id(client, "merchant_pricing_rules", pricing_rule_id):
@@ -107,19 +164,31 @@ def update_pricing_rule(
         row = update_row(client, "merchant_pricing_rules", pricing_rule_id, fields)
     else:
         row = get_by_id(client, "merchant_pricing_rules", pricing_rule_id)
+
+    _record_pricing_change(
+        client, admin=admin, row=row, action="pricing_rule.updated",
+        title="Pricing rule updated", event="super_admin.pricing.updated",
+    )
+
     return APIResponse(data=PricingRuleResponse(**row))
 
 
 @router.post("/pricing-rules/{pricing_rule_id}/deactivate", response_model=APIResponse[PricingRuleResponse])
 def deactivate_pricing_rule(
     pricing_rule_id: uuid.UUID,
-    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
 ):
     client = get_supabase_admin()
     if not get_by_id(client, "merchant_pricing_rules", pricing_rule_id):
         raise NotFoundError("Pricing rule not found")
 
     row = update_row(client, "merchant_pricing_rules", pricing_rule_id, {"is_active": False})
+
+    _record_pricing_change(
+        client, admin=admin, row=row, action="pricing_rule.deactivated",
+        title="Pricing rule deactivated", event="super_admin.pricing.deleted",
+    )
+
     return APIResponse(data=PricingRuleResponse(**row))
 
 

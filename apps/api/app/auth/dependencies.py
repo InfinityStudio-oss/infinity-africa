@@ -45,6 +45,7 @@ from app.schemas.auth import (
 from app.schemas.enums import UserRole
 from app.services.crud import execute_maybe_single
 from app.services.ip_allowlist import is_ip_allowed
+from app.services.security_alerts import notify_security_event
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -153,10 +154,37 @@ def require_super_admin(
     data, so it is worth a second factor even when nothing is being
     changed."""
     if not is_super_admin(user):
+        # Someone with a valid session pointing it at the platform
+        # surface. Usually harmless, but it is also exactly what a
+        # compromised merchant account probing for privilege looks
+        # like, so it is worth a record and a deduplicated alert.
+        _audit_admin_denial(request=request, user=user, action="super_admin.access_denied")
+        notify_security_event(
+            get_supabase_admin(),
+            event="super_admin.access_denied",
+            title="Non-admin attempted platform admin access",
+            actor_email=user.email,
+            actor_id=user.id,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            extra={"Path": request.url.path},
+            dedupe_key=str(user.id),
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
 
     if get_settings().require_super_admin_mfa and user.assurance_level != "aal2":
-        _write_mfa_block_audit_log(request=request, user=user)
+        _audit_admin_denial(request=request, user=user)
+        notify_security_event(
+            get_supabase_admin(),
+            event="super_admin.mfa.required_block",
+            title="Admin access blocked: second factor missing",
+            actor_email=user.email,
+            actor_id=user.id,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            extra={"Path": request.url.path, "Assurance level": user.assurance_level or "none"},
+            dedupe_key=str(user.id),
+        )
         raise MfaRequiredError(
             "Two-factor authentication is required for platform admin access. "
             "Complete the verification step and try again."
@@ -165,7 +193,9 @@ def require_super_admin(
     return user
 
 
-def _write_mfa_block_audit_log(*, request: Request, user: AuthenticatedUser) -> None:
+def _audit_admin_denial(
+    *, request: Request, user: AuthenticatedUser, action: str = "super_admin.mfa.required_block"
+) -> None:
     """A real admin turned away for want of a second factor is worth a
     record — it is both a legitimate-user-locked-out signal and what a
     stolen-password attempt looks like. Best-effort: never let the audit
@@ -175,7 +205,7 @@ def _write_mfa_block_audit_log(*, request: Request, user: AuthenticatedUser) -> 
             {
                 "actor_id": str(user.id),
                 "actor_type": "user",
-                "action": "super_admin.mfa.required_block",
+                "action": action,
                 "resource_type": "platform_admin",
                 "resource_id": str(user.id),
                 "ip_address": client_ip(request),
@@ -271,6 +301,15 @@ def verify_api_key(
             action="ip_allowlist.rejected",
             merchant_id=data["merchant_id"],
             api_key_id=data["id"],
+        )
+        notify_security_event(
+            supabase,
+            event="api_key.ip_allowlist_rejected",
+            title="Live API key used from an unapproved IP",
+            ip_address=ip,
+            user_agent=request.headers.get("user-agent"),
+            extra={"Path": request.url.path, "Environment": data["environment"]},
+            dedupe_key=f"{data['id']}:{ip}",
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

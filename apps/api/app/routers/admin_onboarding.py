@@ -26,6 +26,7 @@ from app.services.onboarding import (
     reject_onboarding_submission,
     request_more_info_onboarding_submission,
 )
+from app.services.security_alerts import notify_security_event
 
 router = APIRouter(prefix="/admin/onboarding", tags=["admin-onboarding"])
 
@@ -71,6 +72,25 @@ def get_submission(id: uuid.UUID, _admin: Annotated[AuthenticatedUser, Depends(r
     return APIResponse(data=OnboardingSubmissionResponse(**row))
 
 
+def _alert_onboarding(client, *, admin, row: dict, title: str, event: str, extra=None) -> None:
+    """Admitting a business to the platform, or refusing one. The audit
+    entry is written inside the onboarding service; this is the
+    notification. Applied to both the POST and PATCH forms of each action —
+    they are aliases of the same decision, and an alert that fired for only
+    one of them would be worse than none, because it would look complete."""
+    merchant_id = row.get("merchant_id")
+    merchant = get_by_id(client, "merchants", uuid.UUID(merchant_id)) if merchant_id else None
+    notify_security_event(
+        client,
+        event=event,
+        title=title,
+        actor_email=admin.email,
+        actor_id=admin.id,
+        merchant_name=(merchant or {}).get("business_name"),
+        extra=extra,
+    )
+
+
 @router.post("/{submission_id}/approve", response_model=APIResponse[OnboardingSubmissionResponse])
 def approve(
     submission_id: uuid.UUID,
@@ -79,6 +99,11 @@ def approve(
 ):
     client = get_supabase_admin()
     row = approve_onboarding_submission(client, submission_id=submission_id, reviewer_id=admin.id, pricing=pricing)
+
+    _alert_onboarding(
+        client, admin=admin, row=row, title="Business approved", event="super_admin.merchant.approved"
+    )
+
     return APIResponse(data=OnboardingSubmissionResponse(**row))
 
 
@@ -92,6 +117,16 @@ def reject(
     row = reject_onboarding_submission(
         client, submission_id=submission_id, reviewer_id=admin.id, note=payload.review_note
     )
+
+    _alert_onboarding(
+        client,
+        admin=admin,
+        row=row,
+        title="Business rejected",
+        event="super_admin.merchant.rejected",
+        extra={"Reason": payload.review_note} if payload.review_note else None,
+    )
+
     return APIResponse(data=OnboardingSubmissionResponse(**row))
 
 
@@ -122,6 +157,11 @@ def approve_by_id(
     client = get_supabase_admin()
     submission_id = _resolve_submission_id(client, id)
     row = approve_onboarding_submission(client, submission_id=submission_id, reviewer_id=admin.id, pricing=pricing)
+
+    _alert_onboarding(
+        client, admin=admin, row=row, title="Business approved", event="super_admin.merchant.approved"
+    )
+
     return APIResponse(data=OnboardingSubmissionResponse(**row))
 
 
@@ -136,6 +176,16 @@ def reject_by_id(
     row = reject_onboarding_submission(
         client, submission_id=submission_id, reviewer_id=admin.id, note=payload.review_note
     )
+
+    _alert_onboarding(
+        client,
+        admin=admin,
+        row=row,
+        title="Business rejected",
+        event="super_admin.merchant.rejected",
+        extra={"Reason": payload.review_note} if payload.review_note else None,
+    )
+
     return APIResponse(data=OnboardingSubmissionResponse(**row))
 
 

@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     # and setting it back to false is the whole rollback.
     require_super_admin_mfa: bool = False
 
+    # Security alerts (app/services/security_alerts.py) — the subset of
+    # audit events worth interrupting someone for: money approved, a
+    # merchant admitted, pricing changed, or signs of someone trying to get
+    # in. audit_logs remains the complete record either way; turning alerts
+    # off silences email only, never the audit trail.
+    security_alerts_enabled: bool = True
+    # Falls back to the first CEO_EMAIL recipient when unset, so enabling
+    # alerts does not require configuring a second address first.
+    security_alert_email: str = ""
+    # Applies only to events a single actor can trigger repeatedly (failed
+    # MFA, rejected IPs). Money decisions are never deduplicated — each one
+    # is a separate decision about real funds.
+    security_alert_dedupe_window_seconds: int = 600
+
     # Every logger in this app is named "infinity.X" (logging.getLogger(
     # "infinity.scheduler"), "infinity.webhooks", etc.) — see
     # app/main.py::_configure_logging, which sets this level on their

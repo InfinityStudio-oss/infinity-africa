@@ -187,6 +187,19 @@ def test_withdrawal_request_delivery_logged_as_failed_when_email_fails(fake_clie
 # --- Withdrawal success (to merchant) --------------------------------------------
 
 
+def _success_emails(fake_resend) -> list[dict]:
+    """Just the merchant-facing success email.
+
+    These tests used to count every Resend call, which silently assumed the
+    success email was the only thing the platform ever sent on this path.
+    Approving or rejecting a withdrawal now also raises a Super Admin
+    security alert, so counting everything conflated "no success email was
+    sent" with "no email of any kind was sent" — only the first is what
+    these tests mean."""
+    return [c for c in fake_resend.calls if c["subject"] == "Your InfinityPay withdrawal is successful"]
+
+
+
 def test_merchant_email_sent_once_withdrawal_succeeds(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@masanjatraders.co.tz")
     _fund_wallet(fake_client, merchant_id, "1000000.00")
@@ -199,9 +212,9 @@ def test_merchant_email_sent_once_withdrawal_succeeds(fake_client, fake_resend):
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["status"] == "SUCCESS"
-    assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["to"] == ["owner@masanjatraders.co.tz"]
-    assert fake_resend.calls[0]["subject"] == "Your InfinityPay withdrawal is successful"
+    success = _success_emails(fake_resend)
+    assert len(success) == 1
+    assert success[0]["to"] == ["owner@masanjatraders.co.tz"]
 
 
 def test_no_success_email_while_still_pending_approval(fake_client, fake_resend):
@@ -226,7 +239,7 @@ def test_no_success_email_for_a_rejected_withdrawal(fake_client, fake_resend):
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["status"] == "REJECTED"
-    assert len(fake_resend.calls) == 0
+    assert _success_emails(fake_resend) == []
 
 
 def test_no_success_email_when_the_provider_call_fails(fake_client, fake_resend, monkeypatch):
@@ -253,7 +266,7 @@ def test_no_success_email_when_the_provider_call_fails(fake_client, fake_resend,
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["status"] == "FAILED"
-    assert len(fake_resend.calls) == 0
+    assert _success_emails(fake_resend) == []
 
 
 def test_withdrawal_completes_even_when_success_email_delivery_fails(fake_client, fake_resend):
