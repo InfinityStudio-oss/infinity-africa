@@ -26,12 +26,18 @@ export default function DisbursementsApiPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">API Reference</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Disbursements API</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-6 max-w-2xl">
-        Send money out of your InfinityPay balance — to a Selcom Pesa wallet, a mobile money number, or a bank account.
-        Available balance is validated before anything is created, and every withdrawal is reviewed by an InfinityPay
-        Super Admin before it reaches Selcom.
+        Withdraw from your InfinityPay balance programmatically — to a Selcom Pesa wallet, a mobile money number,
+        or a bank account. Available balance is validated before anything is created, and every withdrawal is
+        reviewed by an InfinityPay Super Admin before it reaches Selcom.
       </p>
 
       <div className="mb-10 max-w-2xl space-y-4">
+        <Callout title="You don&apos;t need this to withdraw">
+          Withdrawing is built into the dashboard — open <strong>Withdrawals</strong>, enter an amount and a
+          destination, and confirm the emailed code. No API key, no integration, nothing to configure.
+          This page is only for businesses that want to <em>automate</em> withdrawals from their own system,
+          such as scheduled payouts. Most never need it.
+        </Callout>
         <Callout title="Withdrawals vs. Disbursements">
           In the InfinityPay dashboard, businesses see this feature as <strong>Withdrawals</strong>. In the API, the
           technical endpoint may use <code className="font-mono text-xs">disbursements</code> for
