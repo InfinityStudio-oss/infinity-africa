@@ -28,11 +28,6 @@ export default async function AdminMfaVerifyPage() {
         <MfaVerifyForm />
       </div>
 
-      <p className="mt-5 text-xs text-on-surface-variant">
-        Lost access to your authenticator? Ask the other platform admin to help you recover — see the Super
-        Admin MFA runbook.
-      </p>
-
       <div className="mt-6 border-t border-outline-variant pt-4">
         <SignOutLink />
       </div>
