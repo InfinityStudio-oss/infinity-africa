@@ -47,7 +47,14 @@ class CollectionCreateRequest(BaseModel):
     picks Mobile Money Push / Selcom Pesa / Scan QR on that page
     themselves."""
 
-    merchant_id: uuid.UUID
+    # Optional for API-key callers: the key already identifies the
+    # merchant, so requiring the UUID here meant an integrator had to
+    # discover their own merchant id before they could make a first call —
+    # and the portal does not display it anywhere. Still honoured when
+    # sent (and still checked against the key's own merchant), and still
+    # required for dashboard-session callers, who can belong to more than
+    # one merchant.
+    merchant_id: uuid.UUID | None = None
     amount: Decimal = Field(gt=0)
     currency: str = "TZS"
     customer_name: str | None = None
@@ -84,7 +91,14 @@ class CollectionPushCreateRequest(BaseModel):
     POST /v1/collections/selcom-pesa — a phone number is required, a
     push has nowhere to go without one."""
 
-    merchant_id: uuid.UUID
+    # Optional for API-key callers: the key already identifies the
+    # merchant, so requiring the UUID here meant an integrator had to
+    # discover their own merchant id before they could make a first call —
+    # and the portal does not display it anywhere. Still honoured when
+    # sent (and still checked against the key's own merchant), and still
+    # required for dashboard-session callers, who can belong to more than
+    # one merchant.
+    merchant_id: uuid.UUID | None = None
     amount: Decimal = Field(gt=0)
     currency: str = "TZS"
     phone: str
@@ -114,7 +128,14 @@ class CollectionQrCreateRequest(BaseModel):
     methods): a QR/token has nowhere to push to, the customer scans it
     themselves."""
 
-    merchant_id: uuid.UUID
+    # Optional for API-key callers: the key already identifies the
+    # merchant, so requiring the UUID here meant an integrator had to
+    # discover their own merchant id before they could make a first call —
+    # and the portal does not display it anywhere. Still honoured when
+    # sent (and still checked against the key's own merchant), and still
+    # required for dashboard-session callers, who can belong to more than
+    # one merchant.
+    merchant_id: uuid.UUID | None = None
     amount: Decimal = Field(gt=0)
     currency: str = "TZS"
     customer_name: str | None = None

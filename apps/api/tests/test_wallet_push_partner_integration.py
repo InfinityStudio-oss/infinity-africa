@@ -190,7 +190,7 @@ def test_an_unapproved_or_suspended_merchant_cannot_take_live_payments(status, k
 # --- validation -------------------------------------------------------------
 
 
-@pytest.mark.parametrize("missing", ["amount", "phone", "merchant_id"])
+@pytest.mark.parametrize("missing", ["amount", "phone"])
 def test_a_missing_required_field_is_a_clear_validation_error(missing, fake_client):
     merchant = _approved(fake_client)
     secret = _api_key(fake_client, merchant["id"])
@@ -402,3 +402,61 @@ def test_an_allowlist_rejection_reveals_nothing_about_the_allowlist(fake_client)
     body = response.text
     assert "41.222.10.5" not in body
     assert secret not in body
+
+
+# --- merchant_id is optional for an API key ---------------------------------
+#
+# The key already identifies the merchant. Requiring the UUID in the body
+# meant an integrator had to discover their own merchant id before they
+# could make a first call, and the portal does not display it anywhere.
+
+
+def test_a_push_works_with_no_merchant_id_at_all(fake_client):
+    merchant = _approved(fake_client)
+    secret = _api_key(fake_client, merchant["id"])
+    body = _body(merchant["id"])
+    del body["merchant_id"]
+
+    with patch(_PUSH, return_value=_fake_collection(merchant["id"])) as push:
+        response = _push(secret, body)
+
+    assert response.status_code == 202, response.text
+    assert str(push.call_args.kwargs["merchant_id"]) == merchant["id"]
+
+
+def test_an_omitted_merchant_id_resolves_to_the_keys_own_merchant(fake_client):
+    """Not just "it works" — it must resolve to the right merchant, not
+    whichever one happens to be first in the table."""
+    _other = _approved(fake_client)
+    mine = _approved(fake_client)
+    secret = _api_key(fake_client, mine["id"])
+    body = _body(mine["id"])
+    del body["merchant_id"]
+
+    with patch(_PUSH, return_value=_fake_collection(mine["id"])) as push:
+        _push(secret, body)
+
+    assert str(push.call_args.kwargs["merchant_id"]) == mine["id"]
+
+
+def test_sending_someone_elses_merchant_id_is_still_refused(fake_client):
+    """Making the field optional must not make it a way in. An explicit
+    value is still checked against the key's own merchant."""
+    theirs = _approved(fake_client)
+    mine = _approved(fake_client)
+    secret = _api_key(fake_client, mine["id"])
+
+    with patch(_PUSH) as push:
+        response = _push(secret, _body(theirs["id"]))
+
+    assert response.status_code in (403, 404)
+    push.assert_not_called()
+
+
+def test_sending_your_own_merchant_id_still_works(fake_client):
+    """Existing integrations that send it must not break."""
+    merchant = _approved(fake_client)
+    secret = _api_key(fake_client, merchant["id"])
+
+    with patch(_PUSH, return_value=_fake_collection(merchant["id"])):
+        assert _push(secret, _body(merchant["id"])).status_code == 202

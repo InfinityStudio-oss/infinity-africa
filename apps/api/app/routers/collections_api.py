@@ -74,6 +74,31 @@ def _reject_simulate_status_outside_sandbox(caller: AuthenticatedCaller, simulat
         raise ValidationAPIError("simulate_status is only accepted from a sandbox API key")
 
 
+def _resolve_merchant_id(caller: AuthenticatedCaller, requested: uuid.UUID | None) -> uuid.UUID:
+    """The merchant this request is for.
+
+    An API key already belongs to exactly one merchant, so `merchant_id`
+    in the body is redundant for the server-to-server callers these
+    endpoints exist for — and requiring it meant an integrator had to go
+    find their own UUID first, which the portal does not display. When
+    omitted it comes from the key.
+
+    Sending it is still supported and still checked: authorize_merchant_action
+    below rejects a value that is not the key's own merchant, so this
+    cannot be used to act for someone else. A dashboard-session caller
+    must still send it, because a user can belong to several merchants and
+    there is nothing to infer from.
+    """
+    if requested is not None:
+        return requested
+    if caller.merchant_id is not None:
+        return caller.merchant_id
+    raise ValidationAPIError(
+        "merchant_id is required when authenticating with a dashboard session. "
+        "API keys do not need it — the key identifies the merchant."
+    )
+
+
 def _push_message(collection: dict, *, pending_message: str) -> str:
     """A real (non-sandbox) push always acks "processing" here — never
     synchronously "successful"/"reversed"/"pending_review" — so those
@@ -130,7 +155,8 @@ async def create_collection(
     they choose Mobile Money Push / Selcom Pesa / Scan QR themselves;
     you never pick a channel here."""
     require_collections_enabled()
-    authorize_merchant_action(caller, payload.merchant_id, *_DASHBOARD_ROLES)
+    merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
+    authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
     client = get_supabase_admin()
 
@@ -139,7 +165,7 @@ async def create_collection(
             client,
             "payment_links",
             {
-                "merchant_id": str(payload.merchant_id),
+                "merchant_id": str(merchant_id),
                 "amount": str(payload.amount),
                 "currency": payload.currency,
                 "customer_name": payload.customer_name,
@@ -160,7 +186,7 @@ async def create_collection(
             client,
             actor_id=caller.actor_id,
             actor_type=caller.actor_type,
-            merchant_id=payload.merchant_id,
+            merchant_id=merchant_id,
             action="collection.created",
             resource_type="payment_link",
             resource_id=uuid.UUID(row["id"]),
@@ -175,7 +201,7 @@ async def create_collection(
 
     _status_code, body = await run_idempotent(
         client,
-        merchant_id=payload.merchant_id,
+        merchant_id=merchant_id,
         endpoint="POST /v1/collections",
         idempotency_key=idempotency_key,
         request_payload=payload.model_dump(mode="json"),
@@ -200,7 +226,8 @@ async def create_wallet_push_collection(
     response; poll GET /v1/collections/{collection_id} or wait for the
     `collection.successful` webhook."""
     require_collections_enabled()
-    authorize_merchant_action(caller, payload.merchant_id, *_DASHBOARD_ROLES)
+    merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
+    authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
@@ -209,7 +236,7 @@ async def create_wallet_push_collection(
         if _is_sandbox_key(caller):
             collection = execute_sandbox_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 external_method="wallet_push",
                 amount=payload.amount,
                 currency=payload.currency,
@@ -224,7 +251,7 @@ async def create_wallet_push_collection(
         else:
             collection = await execute_wallet_push_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 amount=payload.amount,
                 currency=payload.currency,
                 customer_phone=payload.phone,
@@ -245,7 +272,7 @@ async def create_wallet_push_collection(
 
     _status_code, body = await run_idempotent(
         client,
-        merchant_id=payload.merchant_id,
+        merchant_id=merchant_id,
         endpoint="POST /v1/collections/wallet-push",
         idempotency_key=idempotency_key,
         request_payload=payload.model_dump(mode="json"),
@@ -267,7 +294,8 @@ async def create_selcom_pesa_collection(
     wallet-push: `"processing"` means the prompt was sent, not that
     payment succeeded."""
     require_collections_enabled()
-    authorize_merchant_action(caller, payload.merchant_id, *_DASHBOARD_ROLES)
+    merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
+    authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
@@ -276,7 +304,7 @@ async def create_selcom_pesa_collection(
         if _is_sandbox_key(caller):
             collection = execute_sandbox_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 external_method="selcom_pesa",
                 amount=payload.amount,
                 currency=payload.currency,
@@ -291,7 +319,7 @@ async def create_selcom_pesa_collection(
         else:
             collection = await execute_selcompesa_push_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 amount=payload.amount,
                 currency=payload.currency,
                 customer_phone=payload.phone,
@@ -314,7 +342,7 @@ async def create_selcom_pesa_collection(
 
     _status_code, body = await run_idempotent(
         client,
-        merchant_id=payload.merchant_id,
+        merchant_id=merchant_id,
         endpoint="POST /v1/collections/selcom-pesa",
         idempotency_key=idempotency_key,
         request_payload=payload.model_dump(mode="json"),
@@ -336,7 +364,8 @@ async def create_qr_collection(
     means a QR/token now exists, **not** that anyone has paid — never
     mark an order paid from this response."""
     require_collections_enabled()
-    authorize_merchant_action(caller, payload.merchant_id, *_DASHBOARD_ROLES)
+    merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
+    authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
@@ -345,7 +374,7 @@ async def create_qr_collection(
         if _is_sandbox_key(caller):
             collection = execute_sandbox_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 external_method="qr",
                 amount=payload.amount,
                 currency=payload.currency,
@@ -360,7 +389,7 @@ async def create_qr_collection(
         else:
             collection = await execute_qr_collection(
                 client,
-                merchant_id=payload.merchant_id,
+                merchant_id=merchant_id,
                 amount=payload.amount,
                 currency=payload.currency,
                 customer_phone=payload.customer_phone,
@@ -382,7 +411,7 @@ async def create_qr_collection(
 
     _status_code, body = await run_idempotent(
         client,
-        merchant_id=payload.merchant_id,
+        merchant_id=merchant_id,
         endpoint="POST /v1/collections/qr",
         idempotency_key=idempotency_key,
         request_payload=payload.model_dump(mode="json"),

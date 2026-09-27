@@ -78,7 +78,6 @@ Content-Type: application/json
 
 ```json
 {
-  "merchant_id": "8c1f...",
   "amount": "5000.00",
   "currency": "TZS",
   "phone": "+255712345678",
@@ -90,13 +89,17 @@ Content-Type: application/json
 
 | Field | Required | Notes |
 |---|---|---|
-| `merchant_id` | yes | Must match the key's own merchant |
 | `amount` | yes | Decimal string |
-| `currency` | no | Defaults to `TZS` |
 | `phone` | yes | Customer's wallet number |
+| `currency` | no | Defaults to `TZS` |
 | `customer_name` | no | |
 | `reference` | no | Your order/invoice id, echoed back everywhere |
 | `description` | no | |
+| `merchant_id` | no | **You do not need this.** The API key already identifies the merchant. Accepted if sent, and rejected if it is not the key's own merchant. |
+
+**There is no account id to look up.** Your API key is the only thing that
+identifies the merchant — nothing else has to be fetched or configured
+before your first call.
 
 `Idempotency-Key` is a **required header**, not a body field.
 
