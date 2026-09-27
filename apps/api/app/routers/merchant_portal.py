@@ -102,7 +102,12 @@ from app.schemas.payment_links import PaymentLinkResponse
 from app.schemas.refunds import RefundResponse
 from app.schemas.reports import ReportRequest, ReportResponse
 from app.schemas.transactions import TransactionResponse
-from app.schemas.withdrawals import FeeBreakdown, WithdrawalQuoteRequest
+from app.schemas.withdrawals import (
+    FeeBreakdown,
+    RecipientLookupRequest,
+    RecipientLookupResponse,
+    WithdrawalQuoteRequest,
+)
 from app.services import disputes_service, document_requests_service
 from app.services.admin_directory import batch_user_profiles, best_effort_user_profile
 from app.services.api_access import (
@@ -165,6 +170,7 @@ from app.services.withdrawal_otp import (
     rotate_otp,
     verify_otp,
 )
+from app.services.withdrawals.recipient_lookup import resolve_recipient_name
 
 logger = logging.getLogger("infinity.merchant_portal")
 
@@ -1462,6 +1468,65 @@ def get_my_transaction_by_reference(
     return APIResponse(
         data=TransactionResponse(**row, customer_phone=phones.get(row.get("collection_id")))
     )
+
+
+@router.post(
+    "/withdrawals/resolve-recipient",
+    response_model=APIResponse[RecipientLookupResponse],
+)
+async def resolve_my_withdrawal_recipient(
+    payload: RecipientLookupRequest,
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+):
+    """Who owns this destination, for the withdrawal review step.
+
+    Read-only: no withdrawal, no reservation, no state of any kind. It
+    asks the provider and returns a name or nothing.
+
+    Merchant-admin only and rate limited per merchant, because this is an
+    account-name oracle: without a limit, anyone with a merchant login
+    could walk a range of phone numbers and harvest the name behind each
+    one. Ten a minute is far above what reviewing your own withdrawals
+    needs and far below what enumeration wants.
+
+    Never fails the caller. A provider that is down, an unsupported
+    channel or an account that does not exist all return
+    `recipient_name: null`, and the review step says "Name not available".
+    """
+    enforce_rate_limit(
+        scope="withdrawal_recipient_lookup",
+        key=str(membership.merchant_id),
+        limit=10,
+        window_seconds=60,
+    )
+
+    client = get_supabase_admin()
+    require_approved_merchant(client, membership.merchant_id)
+
+    name = await resolve_recipient_name(
+        destination_code=payload.destination_code.value,
+        destination_identifier=payload.destination_identifier,
+    )
+
+    # Logged so a merchant sweeping destinations is visible after the
+    # fact, not only rate limited during. Masked identifier, and the
+    # resolved name itself is never written to the audit trail.
+    write_audit_log_best_effort(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="withdrawal.recipient_lookup",
+        resource_type="withdrawal",
+        metadata={
+            "method": payload.method.value,
+            "destination_code": payload.destination_code.value,
+            "destination_masked": mask_destination(payload.destination_identifier),
+            "resolved": name is not None,
+        },
+    )
+
+    return APIResponse(data=RecipientLookupResponse(recipient_name=name))
 
 
 # --- Reports ------------------------------------------------------------------

@@ -29,11 +29,10 @@ merchant to type a name that nothing checked, then displayed it back to
 them as though it had been verified — which is worse than showing no name
 at all, because it reads like the destination was confirmed.
 
-The review step shows **"Name not available"** instead. There is no
-provider name-lookup anywhere in the codebase, so no real account-holder
-name exists to show. If Selcom ever exposes a name-enquiry endpoint, the
-review component already takes a `resolvedRecipientName` prop for exactly
-that — and it is documented as never accepting a merchant-typed value.
+The review step now shows the name **Selcom** resolves for the
+destination, via `GET /account/lookup` — see below. When the provider
+cannot answer, it shows "Name not available" rather than anything the
+merchant typed.
 
 ### What is stored instead
 
@@ -52,6 +51,64 @@ integrator still sending one are unaffected.
 
 Consequence for Super Admin: for phone-based withdrawals the `destination`
 column now mirrors `destination_identifier`. Both are still shown.
+
+## Where the recipient name comes from (2026-09-27)
+
+`POST /v1/merchant/withdrawals/resolve-recipient` asks Selcom who owns the
+destination, and the review step displays the answer. The lookup endpoint
+(`GET /account/lookup`) already existed on
+`SelcomBusinessClient` — implemented, documented as "available for a
+future pre-payout recipient-verification step", and never called. This
+wires it up.
+
+**It is honest about not knowing.** Selcom's docs show the request for
+`/account/lookup` but no example response, and no lookup has been
+round-tripped against a live account yet. `parse_account_name` tries the
+shapes Selcom uses elsewhere (`accountName`, `recipientName`, `name`, …,
+inside `data` first, since every verified Selcom response nests its
+payload there). If none match, the answer is `None` and the merchant sees
+"Name not available" — the same thing they saw before this existed. It
+never falls back to another field, because a wrong name on a payout
+confirmation reads as though the destination was verified.
+
+When a lookup *succeeds* but carries no recognised name field, the
+response's **keys** are logged — keys only, never values, so an account
+holder's name is never written to a log. That is how the real field name
+gets read off the first live call, the same way the Selcom Checkout
+webhook's real header casing was learned.
+
+### It cannot make a payout worse
+
+- **It never raises.** Provider down, parameters rejected, unsupported
+  channel, account does not exist — all of them are "Name not available".
+  A withdrawal is never blocked because a name could not be fetched.
+- **It never trips the payout circuit breaker.** This is the important
+  one. `selcom_outbound`'s breaker opens after consecutive failures and an
+  open breaker blocks real payouts. An endpoint that has never been
+  exercised live is exactly the kind that might fail consistently for its
+  own reasons, so failures are swallowed *inside* the guard and the guard
+  sees a clean exit. The concurrency and rate limits still apply, and an
+  already-open breaker still skips the call — both of those protect
+  Selcom rather than us. There is a test that fails if this is undone.
+- **It is rate limited and audited.** A name lookup is an account-name
+  oracle: without a limit, anyone with a merchant login could walk a range
+  of phone numbers and harvest the name behind each. Ten per merchant per
+  minute, merchant-admin only, and every lookup writes an audit row with a
+  **masked** destination. The resolved name is never written to the audit
+  trail.
+
+### What it costs
+
+One extra Selcom call per withdrawal review, against the same outbound
+budget documented in
+[`docs/PRODUCTION_TRAFFIC_MANAGEMENT.md`](./PRODUCTION_TRAFFIC_MANAGEMENT.md).
+Withdrawal reviews are low-frequency next to collections, so this is
+small — but it is not free, and it shares the ceiling.
+
+In `SELCOM_BUSINESS_MODE=mock` the mock client returns a deliberately
+obvious `MOCK ACCOUNT HOLDER (1234)`. Mock mode is never production, and
+a plausible invented name is precisely what must not be mistaken for a
+verified one.
 
 ## The merchant does not enter a bank name or a network either
 
@@ -165,6 +222,7 @@ the approve/reject controls. Approval wording stays in the internal UI.
 | Action | When |
 |---|---|
 | `withdrawal.reviewed` | the balance/quote call behind the review step |
+| `withdrawal.recipient_lookup` | a destination name was looked up (masked destination; never the resolved name) |
 | `withdrawal.validation_failed` | a gate refused the request before any code was sent |
 | `withdrawal.otp_requested` | a code was emailed |
 | `withdrawal.otp_verify_failed` | a wrong or expired code |

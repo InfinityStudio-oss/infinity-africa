@@ -142,3 +142,25 @@ class WithdrawalRequestInfoRequest(BaseModel):
     @classmethod
     def _no_blank_entries(cls, value: list[str]) -> list[str]:
         return [item for item in value if item.strip()]
+
+
+class RecipientLookupRequest(BaseModel):
+    """Asks who owns a withdrawal destination, for the review step."""
+
+    method: DisbursementMethod
+    destination_code: DestinationCode
+    destination_identifier: str
+
+    @model_validator(mode="after")
+    def _normalize_phone_destination(self) -> "RecipientLookupRequest":
+        if self.method != DisbursementMethod.BANK_ACCOUNT:
+            self.destination_identifier = validate_and_normalize_phone(self.destination_identifier)
+        return self
+
+
+class RecipientLookupResponse(BaseModel):
+    # None whenever the name could not be established — an unsupported
+    # channel, an account that does not exist, or a provider that did not
+    # answer. The merchant is shown "Name not available" for all of them,
+    # and a name is never invented to fill the gap.
+    recipient_name: str | None = None

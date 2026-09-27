@@ -35,9 +35,10 @@ export function WithdrawalReview({
   busy,
   onBack,
   onConfirm,
-  /** Present only if a real, provider-resolved account holder is ever
-   * available. Never a merchant-typed value. */
+  /** The provider-resolved account holder. Never a merchant-typed value:
+   * this comes from Selcom's account lookup or it is absent. */
   resolvedRecipientName = null,
+  resolvingRecipientName = false,
 }: {
   method: DisbursementMethod;
   destinationCode: string;
@@ -48,6 +49,7 @@ export function WithdrawalReview({
   onBack: () => void;
   onConfirm: () => void;
   resolvedRecipientName?: string | null;
+  resolvingRecipientName?: boolean;
 }) {
   const methodLabel = DISBURSEMENT_METHOD_LABELS[method];
   const destinationLabel =
@@ -70,7 +72,7 @@ export function WithdrawalReview({
           <Row
             label="Recipient name"
             value={resolvedRecipientName}
-            fallback="Name not available"
+            fallback={resolvingRecipientName ? "Checking…" : "Name not available"}
           />
           <Row label="Withdraw to" value={methodLabel} />
           {/* Only when it says something the method line did not. For

@@ -53,3 +53,30 @@ class MockSelcomBusinessClient:
     async def query_transaction(self, *, trans_id: str) -> SelcomBusinessResult:
         await asyncio.sleep(self.latency_seconds)
         return SelcomBusinessResult(provider=_PROVIDER_NAME, transaction_id=trans_id, status="successful")
+
+    async def account_lookup(
+        self,
+        *,
+        recipient_fi_code: str,
+        recipient_account: str,
+        trans_id: str,
+        amount: str | None = None,
+    ) -> dict:
+        """A deterministic stand-in shaped like a real Selcom envelope.
+
+        The name is deliberately obviously fake. This runs only when
+        SELCOM_BUSINESS_MODE=mock, which is never production, and a
+        plausible-looking invented name on a withdrawal confirmation is
+        exactly the thing that must not be mistaken for a verified one.
+        """
+        await asyncio.sleep(self.latency_seconds)
+        return {
+            "success": True,
+            "result": "SUCCESS",
+            "resultcode": "000",
+            "data": {
+                "accountName": f"MOCK ACCOUNT HOLDER ({recipient_account[-4:]})",
+                "account": recipient_account,
+                "bank": recipient_fi_code,
+            },
+        }

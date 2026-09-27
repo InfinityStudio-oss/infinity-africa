@@ -29,6 +29,7 @@ const createDisbursement = vi.fn();
 
 const verifyWithdrawalOtp = vi.fn();
 const resendWithdrawalOtp = vi.fn();
+const resolveWithdrawalRecipient = vi.fn();
 
 vi.mock("@/lib/portal/api", () => ({
   listDisbursements: vi.fn().mockResolvedValue([]),
@@ -37,6 +38,7 @@ vi.mock("@/lib/portal/api", () => ({
   createDisbursement,
   verifyWithdrawalOtp: (...args: unknown[]) => verifyWithdrawalOtp(...args),
   resendWithdrawalOtp: (...args: unknown[]) => resendWithdrawalOtp(...args),
+  resolveWithdrawalRecipient: (...args: unknown[]) => resolveWithdrawalRecipient(...args),
   InsufficientBalanceError: class InsufficientBalanceError extends Error {},
 }));
 
@@ -73,6 +75,7 @@ async function requestAndConfirmReview() {
 describe("WithdrawalsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveWithdrawalRecipient.mockResolvedValue(null);
   });
 
   it("shows a Check Balance button", async () => {
@@ -491,5 +494,77 @@ describe("WithdrawalsView", () => {
     // destination provider the merchant already chose.
     expect(within(dialog).getByText("CRDB Bank")).toBeInTheDocument();
     expect(within(dialog).getByText("Account number")).toBeInTheDocument();
+  });
+
+  // --- the recipient name comes from the provider --------------------------
+
+  it("shows the name the provider resolved for the destination", async () => {
+    resolveWithdrawalRecipient.mockResolvedValue("JOHN DOE");
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    await waitFor(() => expect(within(dialog).getByText("JOHN DOE")).toBeInTheDocument());
+    expect(within(dialog).queryByText("Name not available")).not.toBeInTheDocument();
+  });
+
+  it("asks the provider about the destination that is actually being reviewed", async () => {
+    resolveWithdrawalRecipient.mockResolvedValue("JOHN DOE");
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() => expect(resolveWithdrawalRecipient).toHaveBeenCalledTimes(1));
+    expect(resolveWithdrawalRecipient).toHaveBeenCalledWith({
+      method: "SELCOM_PESA",
+      destination_code: "SELCOM",
+      destination_identifier: "255657878545",
+    });
+  });
+
+  it("says the name is unavailable when the provider cannot resolve one", async () => {
+    resolveWithdrawalRecipient.mockResolvedValue(null);
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    await waitFor(() => expect(within(dialog).getByText("Name not available")).toBeInTheDocument());
+  });
+
+  it("still opens the review, and still submits, when the lookup fails", async () => {
+    // A courtesy lookup must never block a withdrawal.
+    resolveWithdrawalRecipient.mockRejectedValue(new Error("lookup exploded"));
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await screen.findByRole("dialog", { name: "Review withdrawal" });
+    fireEvent.click(screen.getByText("Send Verification Code"));
+
+    await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
+  });
+
+  it("does not hold the review step open waiting for the lookup", async () => {
+    // Never resolves: the review must still render immediately.
+    resolveWithdrawalRecipient.mockReturnValue(new Promise(() => {}));
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    expect(within(dialog).getByText("TZS 100,000.00")).toBeInTheDocument();
   });
 });

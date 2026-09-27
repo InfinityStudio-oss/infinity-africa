@@ -132,3 +132,77 @@ def parse_transaction_result(response: dict, *, trans_id: str) -> SelcomBusiness
         raw_status=str(response.get("result") or response.get("status") or ""),
         raw_response=response,
     )
+
+
+# Candidate keys for the account holder's name on GET /account/lookup.
+#
+# Unlike everything above, this one is NOT verified against a real
+# response: Selcom's docs show the request for /account/lookup but no
+# example response body, and no lookup has been round-tripped yet. The
+# ordering follows the shapes Selcom does use elsewhere — a real
+# /transaction/query response carries `senderName` inside `data`, so a
+# camelCase `...Name` under `data` is the most likely home for it.
+#
+# If none match, this returns None and the caller shows "Name not
+# available". It never falls back to something else in the payload: a
+# wrong name on a payout confirmation is worse than no name.
+_ACCOUNT_NAME_KEYS = (
+    "accountName",
+    "account_name",
+    "recipientName",
+    "recipient_name",
+    "customerName",
+    "customer_name",
+    "fullName",
+    "full_name",
+    "name",
+)
+
+
+def parse_account_name(response: dict) -> str | None:
+    """The account holder's name from a GET /account/lookup response, or
+    None if this response doesn't carry one in any shape we recognise.
+
+    Checks `data` first, then the top level, since every verified Selcom
+    response nests its payload under `data`.
+    """
+    if not isinstance(response, dict):
+        return None
+
+    for source in (_response_data(response), response):
+        for key in _ACCOUNT_NAME_KEYS:
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def account_lookup_succeeded(response: dict) -> bool:
+    """Whether the lookup itself reported success.
+
+    A lookup for an account that does not exist is a normal answer, not an
+    error — Selcom returns success=false with a message. Either way the
+    caller shows "Name not available"; this only exists so the two can be
+    told apart in a log.
+    """
+    if not isinstance(response, dict):
+        return False
+    if response.get("success") is True:
+        return True
+    return str(response.get("result") or "").strip().upper() in {"SUCCESS", "COMPLETED"}
+
+
+def unrecognised_lookup_shape(response: dict) -> list[str]:
+    """The keys a lookup response actually carried, for the log line that
+    fires when no name could be found.
+
+    Keys only — never values. The point is to learn the real field name
+    from the first live call (the same way the Selcom Checkout webhook's
+    real header casing was learned), without writing an account holder's
+    name into the logs to do it.
+    """
+    if not isinstance(response, dict):
+        return []
+    keys = sorted(str(k) for k in response)
+    data = _response_data(response)
+    return keys + sorted(f"data.{k}" for k in data)

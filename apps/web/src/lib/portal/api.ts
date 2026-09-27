@@ -890,3 +890,27 @@ export async function generateReport(input: {
 }): Promise<GeneratedReport> {
   return apiWrite<GeneratedReport>("/v1/merchant/reports", "POST", input);
 }
+
+/** Who owns a withdrawal destination, for the review step.
+ *
+ * Returns null whenever the name could not be established — an
+ * unsupported channel, an account that does not exist, or a provider that
+ * did not answer. Never throws: a withdrawal must not be blocked because
+ * a courtesy lookup failed, so a rejected request is also just "unknown".
+ */
+export async function resolveWithdrawalRecipient(input: {
+  method: Disbursement["method"];
+  destination_code: string;
+  destination_identifier: string;
+}): Promise<string | null> {
+  try {
+    const result = await apiWrite<{ recipient_name: string | null }>(
+      "/v1/merchant/withdrawals/resolve-recipient",
+      "POST",
+      input,
+    );
+    return result.recipient_name ?? null;
+  } catch {
+    return null;
+  }
+}

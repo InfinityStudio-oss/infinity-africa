@@ -23,6 +23,7 @@ import {
   getAvailableBalance,
   InsufficientBalanceError,
   listDisbursements,
+  resolveWithdrawalRecipient,
   type WithdrawalOtpChallenge,
 } from "@/lib/portal/api";
 import { disbursementBadge } from "@/lib/portal/status-tones";
@@ -90,6 +91,11 @@ export function WithdrawalsView() {
   // what is about to be submitted. Purely local: no request has been made
   // and nothing exists server-side yet, so backing out costs nothing.
   const [reviewing, setReviewing] = useState(false);
+  // The provider-resolved account holder, looked up when the review opens.
+  // null once the lookup has answered and found nothing — which is a real
+  // answer ("Name not available"), distinct from "still asking".
+  const [recipientName, setRecipientName] = useState<string | null>(null);
+  const [resolvingName, setResolvingName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -172,6 +178,19 @@ export function WithdrawalsView() {
     }
 
     setReviewing(true);
+
+    // Fire-and-forget: the review renders immediately and fills the name
+    // in when the provider answers. A slow or failed lookup must not hold
+    // up the merchant, so nothing here is awaited before showing the step.
+    setRecipientName(null);
+    setResolvingName(true);
+    void resolveWithdrawalRecipient({
+      method,
+      destination_code: destinationCode,
+      destination_identifier: recipientIdentifier,
+    })
+      .then(setRecipientName)
+      .finally(() => setResolvingName(false));
   }
 
   /** The merchant has read the review and asked for a code. This is the
@@ -448,6 +467,8 @@ export function WithdrawalsView() {
           method={method}
           destinationCode={destinationCode}
           destinationIdentifier={recipientIdentifier}
+          resolvedRecipientName={recipientName}
+          resolvingRecipientName={resolvingName}
           amount={amount}
           balance={balance}
           busy={submitting}

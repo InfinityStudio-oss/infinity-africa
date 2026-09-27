@@ -58,6 +58,15 @@ class SelcomBusinessProvider(Protocol):
 
     async def query_transaction(self, *, trans_id: str) -> SelcomBusinessResult: ...
 
+    async def account_lookup(
+        self,
+        *,
+        recipient_fi_code: str,
+        recipient_account: str,
+        trans_id: str,
+        amount: str | None = None,
+    ) -> dict: ...
+
 
 @lru_cache
 def get_selcom_business_client() -> SelcomBusinessProvider:
