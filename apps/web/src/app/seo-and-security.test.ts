@@ -22,6 +22,21 @@ import sitemap from "./sitemap";
 
 const appDir = dirname(fileURLToPath(import.meta.url));
 
+/** Source with comments stripped.
+ *
+ * Several of these assertions are "this must NOT appear", and the files
+ * legitimately discuss the very things being excluded — structured-data.tsx
+ * explains why it omits `sameAs`, for instance. Matching raw source would
+ * fail on the explanation rather than on the code.
+ */
+function code(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"))
+    .join("\n");
+}
+
 function source(relativePath: string): string {
   return readFileSync(join(appDir, relativePath), "utf8");
 }
@@ -119,7 +134,7 @@ describe("root layout.tsx metadata", () => {
   const layoutSource = source("layout.tsx");
 
   it("uses the versioned v1 Open Graph/Twitter image at the recommended absolute URL", () => {
-    expect(layoutSource).toContain("https://infinitypay.me/og/infinitypay-og-v1.png");
+    expect(layoutSource).toContain("https://infinitypay.me/og/infinitypay-og-v2.png");
   });
 
   it("never references the old logo file in social metadata", () => {
@@ -138,9 +153,111 @@ describe("root layout.tsx metadata", () => {
     expect(layoutSource).toMatch(/card:\s*"summary_large_image"/);
   });
 
-  it("declares a canonical URL", () => {
-    expect(layoutSource).toContain("https://infinitypay.me/");
-    expect(layoutSource).toMatch(/canonical:/);
+  it("declares metadataBase as the official domain", () => {
+    expect(layoutSource).toMatch(/metadataBase:\s*new URL\("https:\/\/infinitypay\.me"\)/);
+  });
+
+  it("does NOT declare a canonical of its own", () => {
+    // The bug this replaced: Next merges metadata down the tree, so a
+    // canonical on the root layout was inherited by every page that did not
+    // override it. /solutions, /contact and all 14 developer-docs pages
+    // shipped `<link rel="canonical" href="https://infinitypay.me">`,
+    // telling Google they were duplicates of the homepage. Each public page
+    // now declares its own; the homepage's lives in app/page.tsx.
+    expect(code(layoutSource)).not.toMatch(/canonical/);
+  });
+
+  it("suffixes child page titles with the country, not the bare brand", () => {
+    // "InfinityPay" alone is used by several unrelated companies, which is
+    // the whole reason this site is hard to find.
+    expect(layoutSource).toMatch(/template:\s*"%s \| InfinityPay Tanzania"/);
+  });
+
+  it("supports Google Search Console verification from the environment", () => {
+    expect(layoutSource).toContain("NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION");
+    // Never a committed token.
+    expect(layoutSource).not.toMatch(/google:\s*"[A-Za-z0-9_-]{20,}"/);
+  });
+
+  it("never points public metadata at localhost or a preview domain", () => {
+    expect(layoutSource).not.toMatch(/localhost/);
+    expect(layoutSource).not.toMatch(/vercel\.app/);
+  });
+});
+
+describe("per-page canonical URLs", () => {
+  // The guard against the inherited-canonical bug coming back: every page
+  // the sitemap offers Google must point at itself, not at anything else.
+  const entries = sitemap();
+
+  it("covers every sitemap entry with a self-referencing canonical", () => {
+    const wrong: string[] = [];
+    for (const entry of entries) {
+      const path = new URL(entry.url).pathname;
+      const file = path === "/" ? "page.tsx" : `${path.slice(1)}/page.tsx`;
+      let pageSource: string;
+      try {
+        pageSource = source(file);
+      } catch {
+        wrong.push(`${path}: no page file at ${file}`);
+        continue;
+      }
+      const expected = path === "/" ? 'canonical: "/"' : `canonical: "${path}"`;
+      if (!pageSource.includes(expected)) {
+        wrong.push(`${path}: expected ${expected}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it("never lets a non-homepage page canonicalise to the homepage", () => {
+    const offenders = entries
+      .map((entry) => new URL(entry.url).pathname)
+      .filter((path) => path !== "/")
+      .filter((path) => {
+        const pageSource = source(`${path.slice(1)}/page.tsx`);
+        return /canonical:\s*"(\/|https:\/\/infinitypay\.me\/?)"/.test(pageSource);
+      });
+    expect(offenders).toEqual([]);
+  });
+
+  it("does not offer a redirect-only page to Google", () => {
+    // /get-started only redirects to /create-account, and a redirect in a
+    // sitemap is reported as an error in Search Console.
+    const paths = entries.map((entry) => new URL(entry.url).pathname);
+    expect(paths).not.toContain("/get-started");
+  });
+});
+
+describe("homepage structured data", () => {
+  const structured = readFileSync(
+    join(appDir, "..", "components", "marketing", "structured-data.tsx"),
+    "utf8",
+  );
+
+  it("is rendered on the homepage", () => {
+    expect(source("page.tsx")).toContain("<StructuredData />");
+  });
+
+  it("claims the official domain and the Tanzania-qualified names", () => {
+    expect(structured).toContain("https://infinitypay.me");
+    expect(structured).toContain("InfinityPay Tanzania");
+    expect(structured).toContain("InfinityPay.me");
+  });
+
+  it("states the country, so the entity is distinguishable from the other InfinityPays", () => {
+    expect(structured).toMatch(/addressCountry:\s*"TZ"/);
+    expect(structured).toMatch(/name:\s*"Tanzania"/);
+  });
+
+  it("invents no social profiles", () => {
+    // The brief is explicit: no fake sameAs links. A dead profile link is
+    // worse for an entity claim than no link at all.
+    expect(code(structured)).not.toMatch(/sameAs/);
+  });
+
+  it("declares no site-search action, because there is no site search", () => {
+    expect(code(structured)).not.toMatch(/SearchAction/);
   });
 });
 

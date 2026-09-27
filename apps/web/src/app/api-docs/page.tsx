@@ -8,7 +8,8 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "API Docs | InfinityPay",
+  alternates: { canonical: "/api-docs" },
+  title: "API Docs",
   description: "Developer documentation for the InfinityPay REST API — authentication, Collections, Payment Links, Invoices, webhooks, transaction status, error codes, and code examples.",
 };
 

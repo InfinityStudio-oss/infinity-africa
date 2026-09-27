@@ -6,7 +6,8 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "Contact | InfinityPay",
+  alternates: { canonical: "/contact" },
+  title: "Contact",
   description: "Get in touch with the InfinityPay team for integration questions, pricing, or support — for merchants and developers.",
 };
 

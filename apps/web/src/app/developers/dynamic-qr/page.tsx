@@ -4,6 +4,7 @@ import { DocsPager } from "@/components/docs/docs-pager";
 import { EndpointRow } from "@/components/docs/endpoint-row";
 
 export const metadata = {
+  alternates: { canonical: "/developers/dynamic-qr" },
   title: "Dynamic QR API",
 };
 

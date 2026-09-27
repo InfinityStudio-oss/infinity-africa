@@ -9,7 +9,8 @@ import { SectionHeading } from "@/components/site/section-heading";
 import { SolutionCard } from "@/components/site/solution-card";
 
 export const metadata = {
-  title: "Solutions | InfinityPay",
+  alternates: { canonical: "/solutions" },
+  title: "Solutions",
   description: "Every way InfinityPay helps Tanzanian merchants collect and manage payments — from mobile money collections to secure API integration.",
 };
 

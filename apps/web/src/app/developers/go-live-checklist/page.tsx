@@ -2,6 +2,7 @@ import { Callout } from "@/components/docs/callout";
 import { DocsPager } from "@/components/docs/docs-pager";
 
 export const metadata = {
+  alternates: { canonical: "/developers/go-live-checklist" },
   title: "Go-Live Checklist",
 };
 

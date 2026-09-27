@@ -2,6 +2,7 @@ import { CodeBlock } from "@/components/docs/code-block";
 import { DocsPager } from "@/components/docs/docs-pager";
 
 export const metadata = {
+  alternates: { canonical: "/developers/errors" },
   title: "Error Codes",
 };
 

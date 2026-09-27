@@ -25,6 +25,11 @@ export default function robots(): MetadataRoute.Robots {
         "/admin",
         "/admin/",
         "/admin-login",
+        // Super Admin MFA challenge and the Supabase auth callback — both
+        // reached only mid-authentication, both carrying tokens in the URL.
+        "/admin-mfa",
+        "/auth",
+        "/auth/",
         "/login",
         "/onboarding",
         "/pay",

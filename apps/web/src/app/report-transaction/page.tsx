@@ -4,7 +4,8 @@ import { Header } from "@/components/site/header";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata = {
-  title: "Report a Transaction | InfinityPay",
+  alternates: { canonical: "/report-transaction" },
+  title: "Report a Transaction",
   description:
     "Report a chargeback or an issue with a product or service purchased through InfinityPay — InfinityPay will review the transaction and contact the merchant where necessary.",
 };

@@ -3,7 +3,8 @@ import { Header } from "@/components/site/header";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
-  title: "Privacy Policy | InfinityPay",
+  alternates: { canonical: "/privacy" },
+  title: "Privacy Policy",
   description: "Privacy Policy for the InfinityPay payment platform.",
 };
 

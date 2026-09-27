@@ -6,6 +6,7 @@ import { DocsPager } from "@/components/docs/docs-pager";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
+  alternates: { canonical: "/developers" },
   title: "REST API Overview",
 };
 

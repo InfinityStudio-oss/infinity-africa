@@ -3,6 +3,7 @@ import { Footer } from "@/components/site/footer";
 import { Header } from "@/components/site/header";
 
 export const metadata = {
+  alternates: { canonical: "/create-account" },
   title: "Create your InfinityPay account",
   description: "Create your InfinityPay account and submit your business details for review.",
 };

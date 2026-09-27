@@ -3,7 +3,8 @@ import { Header } from "@/components/site/header";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
-  title: "Terms of Service | InfinityPay",
+  alternates: { canonical: "/terms" },
+  title: "Terms of Service",
   description: "Terms of Service for the InfinityPay payment platform.",
 };
 

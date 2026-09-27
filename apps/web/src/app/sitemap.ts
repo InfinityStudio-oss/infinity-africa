@@ -9,10 +9,12 @@ const BASE_URL = "https://infinitypay.me";
 // `robots: { index: false }` metadata. Static list, not derived from the
 // filesystem: a new private route added under app/ should never end up
 // here just because someone forgot to also touch this file.
+// Every entry must be a real, indexable, self-canonical page. /get-started
+// is deliberately absent: it only redirects to /create-account, and a
+// redirect in a sitemap is reported as an error in Search Console.
 const PUBLIC_PATHS = [
   "/",
   "/solutions",
-  "/get-started",
   "/create-account",
   "/contact",
   "/report-transaction",

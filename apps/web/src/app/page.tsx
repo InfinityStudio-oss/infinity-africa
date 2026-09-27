@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AuthFragmentRedirect } from "@/components/auth/auth-fragment-redirect";
+import { StructuredData } from "@/components/marketing/structured-data";
 import { CTASection } from "@/components/site/cta-section";
 import { ContactCard } from "@/components/site/contact-card";
 import { FeatureGrid } from "@/components/site/feature-grid";
@@ -11,9 +12,14 @@ import { SolutionCard } from "@/components/site/solution-card";
 import { Icon } from "@/components/portal/icon";
 
 export const metadata = {
-  title: "InfinityPay — Collect Payments, Create Links, and Get Paid Faster in Tanzania",
+  // `absolute` so the homepage is not suffixed by the root layout's
+  // "| InfinityPay Tanzania" template — the brand is already in this title.
+  title: {
+    absolute: "InfinityPay Tanzania | Payment Gateway for Merchants, Apps & WiFi Billing",
+  },
   description:
-    "InfinityPay helps business and services providers accept mobile money payments, create secure Pay by Links, generate invoices, and integrate payment collection into websites, mobile apps, ecommerce platforms, and web apps.",
+    "InfinityPay is a Tanzanian payment gateway platform for merchants, ecommerce websites, apps, and WiFi/ISP billing systems. Accept mobile money payments, create payment links, issue invoices, manage your wallet ledger, and integrate with our APIs.",
+  alternates: { canonical: "/" },
 };
 
 const NETWORKS = [
@@ -67,6 +73,7 @@ export default function Home() {
   return (
     <div className="bg-surface text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container">
       <AuthFragmentRedirect />
+      <StructuredData />
       <Header />
 
       <main>
