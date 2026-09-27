@@ -205,6 +205,25 @@ A test delivery also carries all-zero UUIDs for `collection_id` and
 `transaction_id`, and the reference `TXN-TEST0000`, so any of those is a
 reliable tell. Real events never set `test`.
 
+### Testing your handler without spending money
+
+A sandbox push (`sk_test_…`) queues the **same events a live one would** —
+`collection.success`, `collection.failed`, `collection.pending_review` —
+so you can exercise your real handler end to end before any money is
+involved. Use `simulate_status` on the create call to choose the outcome.
+
+Every sandbox event carries `"sandbox": true`. Treat it exactly like
+`"test": true`: acknowledge it, never fulfil on it.
+
+That gives you three distinct things to handle, and you should handle all
+three before going live:
+
+| Source | Marker | Fulfil? |
+|---|---|---|
+| Send Test Webhook | `"test": true` | No |
+| Sandbox push | `"sandbox": true` | No |
+| Live push | neither field present | **Yes** |
+
 ### Retries
 
 Any `2xx` is success. Anything else retries up to **5 attempts** —

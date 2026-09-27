@@ -13,7 +13,9 @@ and nothing here can take the queue — or a payment — down with it.
 """
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from unittest.mock import patch
 
 import httpx
@@ -453,3 +455,110 @@ def test_a_real_delivery_never_claims_to_be_a_test(fake_client):
 
     body = json.loads(post.call_args.kwargs["content"])
     assert "test" not in body
+
+
+# --- sandbox collections emit events too ------------------------------------
+
+
+def test_a_sandbox_collection_queues_the_same_event_a_real_one_would(fake_client):
+    """Without this a partner cannot test their webhook handler at all:
+    Send Test Webhook only ever sends one fixed payload, and a live push
+    costs real money."""
+    from app.services.sandbox_collections import execute_sandbox_collection
+
+    merchant = _merchant(fake_client)
+
+    execute_sandbox_collection(
+        fake_client,
+        merchant_id=uuid.UUID(merchant["id"]),
+        external_method="wallet_push",
+        amount=Decimal("1000.00"),
+        currency="TZS",
+        customer_phone="+255712345678",
+        customer_name=None,
+        merchant_reference="TEST-001",
+        description=None,
+        source="API_WALLET_PUSH",
+        api_key_id=uuid.uuid4(),
+        simulate_status="successful",
+    )
+
+    events = fake_client.table("webhook_events")._table.rows
+    assert len(events) == 1
+    assert events[0]["event_name"] == "collection.success"
+
+
+def test_a_sandbox_event_says_it_is_sandbox(fake_client):
+    """A simulated event must be distinguishable from money actually
+    arriving — the same hazard the `test` flag guards on Send Test
+    Webhook."""
+    from app.services.sandbox_collections import execute_sandbox_collection
+
+    merchant = _merchant(fake_client)
+    execute_sandbox_collection(
+        fake_client,
+        merchant_id=uuid.UUID(merchant["id"]),
+        external_method="wallet_push",
+        amount=Decimal("1000.00"),
+        currency="TZS",
+        customer_phone="+255712345678",
+        customer_name=None,
+        merchant_reference="TEST-001",
+        description=None,
+        source="API_WALLET_PUSH",
+        api_key_id=uuid.uuid4(),
+        simulate_status="successful",
+    )
+
+    payload = fake_client.table("webhook_events")._table.rows[0]["payload"]
+    assert payload["sandbox"] is True
+    assert payload["status"] == "successful"
+
+
+def test_a_simulated_failure_carries_a_normalized_reason(fake_client):
+    from app.services.sandbox_collections import execute_sandbox_collection
+
+    merchant = _merchant(fake_client)
+    execute_sandbox_collection(
+        fake_client,
+        merchant_id=uuid.UUID(merchant["id"]),
+        external_method="wallet_push",
+        amount=Decimal("1000.00"),
+        currency="TZS",
+        customer_phone="+255712345678",
+        customer_name=None,
+        merchant_reference="TEST-002",
+        description=None,
+        source="API_WALLET_PUSH",
+        api_key_id=uuid.uuid4(),
+        simulate_status="failed",
+    )
+
+    event = fake_client.table("webhook_events")._table.rows[0]
+    assert event["event_name"] == "collection.failed"
+    assert event["payload"]["failure_reason_code"] == "unknown_provider_error"
+
+
+def test_a_merchant_with_no_webhook_url_gets_no_sandbox_event(fake_client):
+    """enqueue_webhook_event no-ops without a configured URL, and a
+    sandbox run must not change that."""
+    from app.services.sandbox_collections import execute_sandbox_collection
+
+    merchant = create_merchant(fake_client)  # no webhook_url
+
+    execute_sandbox_collection(
+        fake_client,
+        merchant_id=uuid.UUID(merchant["id"]),
+        external_method="wallet_push",
+        amount=Decimal("1000.00"),
+        currency="TZS",
+        customer_phone="+255712345678",
+        customer_name=None,
+        merchant_reference="TEST-003",
+        description=None,
+        source="API_WALLET_PUSH",
+        api_key_id=uuid.uuid4(),
+        simulate_status="successful",
+    )
+
+    assert fake_client.table("webhook_events")._table.rows == []

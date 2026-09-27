@@ -20,6 +20,7 @@ unauthenticated pay endpoint to know a payment link's origin
 environment. Out of scope for this pass.
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -28,6 +29,18 @@ from supabase import Client
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.services.crud import insert_row
+from app.services.webhooks import enqueue_webhook_event
+
+logger = logging.getLogger("infinity.sandbox_collections")
+
+# The external status vocabulary the public API reports, mirroring
+# app/services/collections_api.py::to_external_status.
+_INTERNAL_TO_EXTERNAL_STATUS: dict[str, str] = {
+    "successful": "successful",
+    "failed": "failed",
+    "pending_review": "pending_clearance",
+    "reversed": "reversed",
+}
 
 _SIMULATE_TO_INTERNAL_STATUS: dict[str, str] = {
     "successful": "successful",
@@ -43,6 +56,18 @@ _EXTERNAL_METHOD_TO_INTERNAL: dict[str, str] = {
 }
 
 _TERMINAL_STATUSES = {"successful", "failed", "reversed"}
+
+# The event a real collection of this status would emit (see
+# app/services/collections.py::resolve_collection). A sandbox collection
+# emits the same ones so a partner can exercise their real webhook handler
+# without spending money — which was otherwise impossible: Send Test
+# Webhook only ever sends the one fixed test payload, and a live push costs
+# real TZS.
+_STATUS_TO_EVENT: dict[str, str] = {
+    "successful": "collection.success",
+    "failed": "collection.failed",
+    "pending_review": "collection.pending_review",
+}
 
 
 def execute_sandbox_collection(
@@ -92,6 +117,8 @@ def execute_sandbox_collection(
         },
     )
 
+    _emit_sandbox_webhook(client, merchant_id=merchant_id, collection=row, internal_status=internal_status)
+
     if external_method == "qr":
         row = {
             **row,
@@ -99,3 +126,42 @@ def execute_sandbox_collection(
             "qr": f"00020101021226SANDBOXQR{sandbox_reference}",
         }
     return row
+
+
+def _emit_sandbox_webhook(
+    client: Client, *, merchant_id: uuid.UUID, collection: dict, internal_status: str
+) -> None:
+    """Queues the same event a real collection of this status would.
+
+    Deliberately marked `"sandbox": true` in the payload. A partner must
+    be able to tell a simulated event from a real one — the alternative is
+    a sandbox test that looks identical to money actually arriving, which
+    is the same footgun the `test` flag guards on Send Test Webhook.
+
+    Best-effort: a sandbox collection is a simulation, and failing to queue
+    its notification must not turn a successful 202 into a 500.
+    """
+    event_name = _STATUS_TO_EVENT.get(internal_status)
+    if not event_name:
+        return
+
+    payload = {
+        "collection_id": collection["id"],
+        "reference": collection.get("merchant_reference"),
+        "merchant_reference": collection.get("merchant_reference"),
+        "amount": collection["amount"],
+        "currency": collection["currency"],
+        "status": _INTERNAL_TO_EXTERNAL_STATUS.get(internal_status, internal_status),
+        "sandbox": True,
+        "timestamp": utc_now_iso(),
+    }
+    if internal_status == "failed":
+        payload["failure_reason_code"] = "unknown_provider_error"
+        payload["failure_reason_message"] = "Simulated failure (sandbox)."
+
+    try:
+        enqueue_webhook_event(
+            client, merchant_id=merchant_id, event_name=event_name, payload=payload
+        )
+    except Exception:
+        logger.exception("sandbox webhook could not be queued collection_id=%s", collection.get("id"))
