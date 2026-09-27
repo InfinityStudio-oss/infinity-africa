@@ -168,6 +168,42 @@ export default function DirectWalletPushPage() {
           business — nothing else has to be fetched or configured before your first call.
         </p>
 
+        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Phone number formats</h3>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Send the number however you already store it. All of these are accepted and normalised to the same
+          number, so you do not need to reformat anything before calling:
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-outline-variant/40">
+                <th className="py-2 pr-4 font-semibold text-on-surface">You send</th>
+                <th className="py-2 font-semibold text-on-surface">Treated as</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                "+255712345678",
+                "255712345678",
+                "0712345678",
+                "712345678",
+                "0712 345 678",
+                "+255-712-345-678",
+              ].map((input) => (
+                <tr key={input} className="border-b border-outline-variant/20">
+                  <td className="py-2 pr-4"><Code>{input}</Code></td>
+                  <td className="py-2"><Code>255712345678</Code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
+          Spaces, dashes, brackets and a leading <Code>+</Code> are all stripped. Anything that is not a
+          recognisable Tanzanian mobile number is rejected with a <Code>422</Code> before any payment is attempted,
+          so a mistyped number fails immediately rather than becoming a failed transaction.
+        </p>
+
         <div className="mt-6">
           <CodeBlock language="json">{`{
   "success": true,
