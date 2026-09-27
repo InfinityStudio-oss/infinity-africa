@@ -24,9 +24,9 @@ export default function DocsOverviewPage() {
       <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Getting Started</p>
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">REST API Overview</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
-        The InfinityPay API lets you accept mobile money collections, generate payment links and invoices, and send
-        disbursements — from a website, a mobile app, an ecommerce platform, or your own backend. It&apos;s a
-        predictable, versioned REST API: JSON in, JSON out, one response shape everywhere.
+        The InfinityPay API lets you accept mobile money collections and generate payment links and invoices —
+        from a website, a mobile app, an ecommerce platform, or your own backend. It&apos;s a predictable,
+        versioned REST API: JSON in, JSON out, one response shape everywhere.
       </p>
 
       <section className="mb-12">
@@ -95,8 +95,8 @@ Local dev    http://localhost:8000`}</CodeBlock>
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Idempotency</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-3">
-          Every endpoint that moves money — creating a payment link, initiating a collection, requesting a
-          disbursement, or a customer completing a checkout — requires an{" "}
+          Every endpoint that moves money — creating a payment link, initiating a collection, or a customer
+          completing a checkout — requires an{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">Idempotency-Key</code>{" "}
           header (any unique string, e.g. a UUID you generate per attempt). Retrying the same key with the same
           request body replays the original response instead of double-processing; reusing the key with a{" "}

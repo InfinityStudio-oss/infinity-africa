@@ -18,24 +18,14 @@ const REQUEST_FIELDS: Array<{ field: string; required: string; notes: React.Reac
   { field: "amount", required: "Yes", notes: "Decimal string, e.g. \"5000.00\"." },
   { field: "phone", required: "Yes", notes: "The customer's mobile money number." },
   { field: "currency", required: "No", notes: <>Defaults to <Code>TZS</Code>.</> },
-  { field: "customer_name", required: "No", notes: "Shown on the merchant's records." },
+  { field: "customer_name", required: "No", notes: "Shown on the business's records." },
   { field: "reference", required: "No", notes: "Your order or invoice id. Echoed back on every response and webhook." },
   { field: "description", required: "No", notes: "Free text." },
-  {
-    field: "merchant_id",
-    required: "No",
-    notes: (
-      <>
-        <strong>You do not need this.</strong> Your API key already identifies the merchant. Accepted if sent, and
-        rejected if it is not the key&apos;s own merchant.
-      </>
-    ),
-  },
 ];
 
 const STATUSES: Array<{ status: string; meaning: string; action: string }> = [
   { status: "processing", meaning: "Prompt sent, customer has not acted yet.", action: "Wait for the webhook." },
-  { status: "successful", meaning: "Paid, and the merchant wallet is credited.", action: "Fulfil the order." },
+  { status: "successful", meaning: "Paid, and the business wallet is credited.", action: "Fulfil the order." },
   { status: "failed", meaning: "Terminal failure.", action: "Read failure_reason_code." },
   { status: "pending_clearance", meaning: "Held for review.", action: "Wait. Do not fulfil." },
   { status: "reversed", meaning: "Reversed after completing.", action: "Reverse your fulfilment." },
@@ -60,7 +50,7 @@ export default function DirectWalletPushPage() {
       <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight mb-4">Direct Wallet Push</h1>
       <p className="text-lg text-on-surface-variant leading-relaxed mb-10 max-w-2xl">
         A complete integration guide for a billing platform, ecommerce site, or app collecting payments on behalf of
-        InfinityPay merchants — from the first API call through to handling a failed payment.
+        InfinityPay businesses and service providers — from the first API call through to handling a failed payment.
       </p>
 
       <section className="mb-12">
@@ -73,13 +63,13 @@ export default function DirectWalletPushPage() {
           them from its own approved infrastructure. You never hold, see, or configure provider credentials.
         </p>
         <p className="text-sm text-on-surface-variant leading-relaxed mt-3">
-          A merchant&apos;s IP allowlist governs access <em>to the InfinityPay API</em>. It is unrelated to any
+          A business&apos;s IP allowlist governs access <em>to the InfinityPay API</em>. It is unrelated to any
           provider-side allowlist, which covers InfinityPay&apos;s own servers and is not your concern.
         </p>
       </section>
 
       <section className="mb-12">
-        <h2 className="text-xl font-semibold text-on-surface mb-3">What the merchant sets up first</h2>
+        <h2 className="text-xl font-semibold text-on-surface mb-3">What the business sets up first</h2>
         <ol className="text-sm text-on-surface-variant leading-relaxed space-y-2 list-decimal pl-5">
           <li>Creates an InfinityPay account and completes verification.</li>
           <li>
@@ -95,7 +85,7 @@ export default function DirectWalletPushPage() {
         </ol>
         <Callout title="The webhook URL is not optional in practice">
           With no webhook URL configured, no events are sent at all — silently, with no error. If you plan to react
-          to payment outcomes rather than poll for them, confirm the merchant has set one before going live.
+          to payment outcomes rather than poll for them, confirm the business has set one before going live.
         </Callout>
       </section>
 
@@ -172,6 +162,10 @@ export default function DirectWalletPushPage() {
 
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
           <Code>Idempotency-Key</Code> is a required <em>header</em>, not a body field.
+        </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed mt-3">
+          There is no account identifier to look up or send. Your API key is the only thing that identifies the
+          business — nothing else has to be fetched or configured before your first call.
         </p>
 
         <div className="mt-6">
@@ -426,7 +420,7 @@ def handle_webhook(request):
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Go-live checklist</h2>
         <ol className="text-sm text-on-surface-variant leading-relaxed space-y-2 list-decimal pl-5">
-          <li>Merchant account created, approved and verified.</li>
+          <li>Business account created, approved and verified.</li>
           <li>Live API key generated. Secret stored server-side only.</li>
           <li>Webhook URL set and signing secret generated.</li>
           <li><strong>Send Test Webhook</strong> from the portal. Confirm your verifier accepts the signature.</li>
@@ -435,7 +429,7 @@ def handle_webhook(request):
           <li>One live push at the smallest workable amount, to a phone you control.</li>
           <li>
             Confirm the whole chain: <Code>202</Code> → webhook delivered → collection <Code>successful</Code> →
-            merchant wallet credited.
+            business wallet credited.
           </li>
           <li>
             Confirm a deliberate failure — decline the prompt — arrives as <Code>collection.failed</Code> with{" "}
