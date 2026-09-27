@@ -50,8 +50,27 @@ export function invoiceBadge(status: InvoiceStatus): BadgeProps {
   }
 }
 
+/** Merchant-facing names for the withdrawal statuses whose shared label
+ * describes an internal step rather than anything the merchant can act on.
+ *
+ * The backend statuses are unchanged and DISBURSEMENT_STATUS_LABELS is
+ * untouched — Super Admin still reads "Pending Approval", because that is
+ * exactly what it is waiting for and who is waiting on it. A merchant has
+ * no approval to give and no admin to chase, so for them the honest
+ * description is that the request is being processed.
+ *
+ * Only statuses that leak an internal actor are remapped. "Failed",
+ * "Rejected" and "Reversed" are the merchant's business and stay as they
+ * are. */
+const MERCHANT_DISBURSEMENT_STATUS_LABELS: Partial<Record<DisbursementStatus, string>> = {
+  [DisbursementStatus.PENDING_ADMIN_APPROVAL]: "Processing",
+  [DisbursementStatus.NEEDS_ADMIN_ATTENTION]: "Processing",
+  [DisbursementStatus.NEEDS_RECONCILIATION]: "Processing",
+  [DisbursementStatus.BLOCKED_IP_WHITELIST]: "Processing",
+};
+
 export function disbursementBadge(status: DisbursementStatus): BadgeProps {
-  const label = DISBURSEMENT_STATUS_LABELS[status];
+  const label = MERCHANT_DISBURSEMENT_STATUS_LABELS[status] ?? DISBURSEMENT_STATUS_LABELS[status];
   switch (status) {
     case DisbursementStatus.PENDING_ADMIN_APPROVAL:
       return { label, tone: "pending" };

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { WithdrawalOtpModal } from "@/components/merchant/withdrawal-otp-modal";
+import { WithdrawalReview } from "@/components/merchant/withdrawal-review";
 import {
   DESTINATION_CODE_LABELS,
   DESTINATION_CODES_BY_METHOD,
@@ -78,7 +79,6 @@ export function WithdrawalsView() {
   const [destinationCode, setDestinationCode] = useState<string>(
     DESTINATION_CODES_BY_METHOD[DisbursementMethod.SELCOM_PESA][0],
   );
-  const [recipientName, setRecipientName] = useState("");
   const [recipientIdentifier, setRecipientIdentifier] = useState("");
   const [bankName, setBankName] = useState("");
   const [network, setNetwork] = useState("");
@@ -88,6 +88,10 @@ export function WithdrawalsView() {
   // Non-null while the merchant is verifying an emailed code. Nothing exists
   // server-side in this state, so cancelling simply drops it.
   const [challenge, setChallenge] = useState<WithdrawalOtpChallenge | null>(null);
+  // True once the merchant has asked to withdraw and is being shown exactly
+  // what is about to be submitted. Purely local: no request has been made
+  // and nothing exists server-side yet, so backing out costs nothing.
+  const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -130,7 +134,9 @@ export function WithdrawalsView() {
         method,
         destination_code: destinationCode,
         destination_identifier: recipientIdentifier,
-        recipient_name: recipientName || null,
+        // No name is sent: the merchant no longer types one, and there is
+        // no provider name lookup to resolve a real one from.
+        recipient_name: null,
       });
       setQuote(breakdown);
       setQuotedFor({ method, destinationCode, amount });
@@ -141,11 +147,14 @@ export function WithdrawalsView() {
     }
   }
 
-  async function handleSubmit(event: React.FormEvent) {
+  /** Validates locally and opens the review step. Deliberately makes no
+   * request: the merchant should see exactly what they are about to submit
+   * before anything is sent, and before a code lands in their inbox. */
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    if (!recipientName || !recipientIdentifier || !amount) return;
+    if (!recipientIdentifier || !amount) return;
     // Send a plain decimal to the API, never a formatted "TZS 1,000" string.
     // The <input type="number"> already keeps this numeric; this is a
     // defensive guard so a bad value fails with a clear message rather than
@@ -168,14 +177,23 @@ export function WithdrawalsView() {
       return;
     }
 
+    setReviewing(true);
+  }
+
+  /** The merchant has read the review and asked for a code. This is the
+   * first request that leaves the browser. It still creates no withdrawal —
+   * the backend validates, emails a code and returns a challenge. */
+  async function handleSendVerificationCode() {
+    setError(null);
     setSubmitting(true);
     try {
-      // Creates nothing yet — the backend emails a code and returns a
-      // challenge. The form is deliberately left filled in: if the merchant
-      // cancels or the code expires they should not have to retype it.
+      // The form is deliberately left filled in: if the merchant cancels or
+      // the code expires they should not have to retype it.
       const challenge = await createDisbursement({
         method,
-        destination_name: recipientName,
+        // No destination_name. The merchant no longer types a recipient
+        // name and nothing resolves one, so sending a value here would be
+        // inventing it. The backend derives its own display label.
         destination_identifier: recipientIdentifier,
         destination_code: destinationCode,
         bank_name: method === DisbursementMethod.BANK_ACCOUNT ? bankName : null,
@@ -183,6 +201,7 @@ export function WithdrawalsView() {
         amount,
         description: notes || null,
       });
+      setReviewing(false);
       setChallenge(challenge);
     } catch (err) {
       // InsufficientBalanceError already carries the backend's safe message;
@@ -190,6 +209,7 @@ export function WithdrawalsView() {
       // error (fraud-review hold, amount limits, withdrawals paused, …) and
       // falls back to a generic line only for truly unexpected failures.
       setError(err instanceof InsufficientBalanceError ? err.message : withdrawalErrorMessage(err));
+      setReviewing(false);
     } finally {
       setSubmitting(false);
     }
@@ -291,17 +311,11 @@ export function WithdrawalsView() {
               />
             </div>
           </div>
+          {/* Only rendered when the chosen method actually has a field to
+              put here — Selcom Pesa has neither, and an empty grid row
+              leaves a visible gap. */}
+          {(method === DisbursementMethod.BANK_ACCOUNT || method === DisbursementMethod.MOBILE_MONEY) && (
           <div className="grid sm:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Destination Name</label>
-              <input
-                className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
-                placeholder="e.g. Selcom Pesa Merchant Wallet"
-                type="text"
-                value={recipientName}
-                onChange={(event) => setRecipientName(event.target.value)}
-              />
-            </div>
             {method === DisbursementMethod.BANK_ACCOUNT && (
               <div>
                 <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Bank Name</label>
@@ -326,6 +340,7 @@ export function WithdrawalsView() {
               </div>
             )}
           </div>
+          )}
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Amount (TZS)</label>
@@ -382,7 +397,7 @@ export function WithdrawalsView() {
                 </div>
                 <p className="text-xs text-on-surface-variant flex items-center gap-1">
                   <Icon name="check_circle" className="text-[14px] text-primary" />
-                  No merchant withdrawal fee — you receive the full amount.
+                  You receive the full amount.
                 </p>
                 {exceedsBalance && (
                   <p className="text-xs text-error flex items-center gap-1 border-t border-surface-container-highest pt-2">
@@ -413,10 +428,10 @@ export function WithdrawalsView() {
           <button
             className="w-full sm:w-auto bg-primary-container text-on-primary text-sm font-medium py-3 px-8 rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
             type="submit"
-            disabled={submitting || !quote || quoteIsStale || exceedsBalance}
+            disabled={submitting || reviewing || !quote || quoteIsStale || exceedsBalance}
           >
             <Icon name="send" className="text-[20px]" />
-            {submitting ? "Submitting…" : "Request Withdrawal"}
+            Request Withdrawal
           </button>
         </form>
       </Card>
@@ -464,6 +479,19 @@ export function WithdrawalsView() {
           </table>
         </div>
       </Card>
+      {reviewing && (
+        <WithdrawalReview
+          method={method}
+          destinationCode={destinationCode}
+          destinationIdentifier={recipientIdentifier}
+          bankName={bankName}
+          amount={amount}
+          balance={balance}
+          busy={submitting}
+          onBack={() => setReviewing(false)}
+          onConfirm={handleSendVerificationCode}
+        />
+      )}
       {challenge && (
         <WithdrawalOtpModal
           challenge={challenge}
@@ -472,7 +500,6 @@ export function WithdrawalsView() {
             setChallenge(null);
             setDisbursements((prev) => [disbursement, ...prev]);
             // Cleared only now, once the withdrawal actually exists.
-            setRecipientName("");
             setRecipientIdentifier("");
             setBankName("");
             setNetwork("");
@@ -480,14 +507,13 @@ export function WithdrawalsView() {
             setNotes("");
             setQuote(null);
             setQuotedFor(null);
-            // Reports what the backend actually did rather than assuming.
-            // Hardcoding "pending approval" would misreport a withdrawal
-            // that automation had already sent to the provider, which is
-            // precisely the case a merchant most needs told accurately.
+            // Reported the same way either way. The merchant-facing
+            // difference between an automated and a reviewed payout is
+            // only how long it takes, and the backend status drives the
+            // history row — inventing two messages here would leak an
+            // internal distinction the merchant cannot act on.
             setSuccess(
-              disbursement.auto_approved
-                ? "Withdrawal submitted and sent for processing."
-                : "Withdrawal request submitted. It is pending approval.",
+              "Your withdrawal request has been submitted for processing. We'll notify you when processing is complete.",
             );
           }}
         />

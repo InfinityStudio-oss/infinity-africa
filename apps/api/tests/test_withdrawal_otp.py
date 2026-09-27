@@ -445,3 +445,205 @@ def test_insufficient_balance_gets_no_code(fake_client, fake_resend):
 
     assert response.status_code == 409, response.text
     assert _otp_emails(fake_resend) == []
+
+
+# --- the merchant no longer supplies a recipient name ----------------------
+
+
+def test_a_withdrawal_can_be_requested_with_no_destination_name(fake_client):
+    """The portal stopped asking for one. A request that omits it entirely
+    must be accepted, not 422'd."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    body = _body()
+    del body["destination_name"]
+
+    response = _request(user_id, body)
+
+    assert response.status_code == 202, response.text
+
+
+def test_the_stored_challenge_falls_back_to_the_destination_rather_than_a_blank_name(fake_client):
+    """execute_disbursement and the Selcom payload both want a non-empty
+    recipient name. With no name typed and no provider lookup to resolve
+    one, the destination itself is the only honest label available — it
+    must never end up empty."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    body = _body()
+    del body["destination_name"]
+    response = _request(user_id, body)
+
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["destination_name"]
+    # Normalised on the way in, so no leading "+".
+    assert stored["destination_name"] == "255700000000"
+
+
+def test_a_withdrawal_submitted_without_a_name_still_creates_a_normal_withdrawal(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    body = _body()
+    del body["destination_name"]
+    challenge_id = _request(user_id, body).json()["data"]["challenge_id"]
+
+    verified = _verify(user_id, challenge_id, _code_for(fake_client, challenge_id))
+
+    assert verified.status_code == 202, verified.text
+    assert verified.json()["data"]["status"] == "PENDING_ADMIN_APPROVAL"
+    assert verified.json()["data"]["destination_name"]
+
+
+def test_an_older_client_still_sending_a_name_is_not_broken(fake_client):
+    """The field stayed optional rather than being removed, so the
+    /v1/disbursements routes and any integrator still posting one keep
+    working."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(user_id, _body(destination_name="Jane Doe"))
+
+    assert response.status_code == 202, response.text
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["destination_name"] == "Jane Doe"
+
+
+# --- audit trail ------------------------------------------------------------
+
+
+def _audit_actions(fake_client) -> list[str]:
+    return [r.get("action") for r in fake_client.table("audit_logs")._table.rows]
+
+
+def _audit_row(fake_client, action: str) -> dict:
+    return next(r for r in fake_client.table("audit_logs")._table.rows if r.get("action") == action)
+
+
+def test_requesting_a_code_is_audited_without_the_code_or_the_full_destination(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(user_id)
+    code = _code_for(fake_client, response.json()["data"]["challenge_id"])
+
+    row = _audit_row(fake_client, "withdrawal.otp_requested")
+    serialised = str(row)
+    assert code not in serialised
+    assert "255700000000" not in serialised
+
+
+def test_a_failed_validation_is_audited(fake_client):
+    """A merchant repeatedly hitting a limit or a hold should be visible
+    without them having to report it."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id, amount="1.00")
+
+    response = _request(user_id, _body(amount="999999"))
+
+    assert response.status_code >= 400
+    assert "withdrawal.validation_failed" in _audit_actions(fake_client)
+    # Masked, never the full number (stored normalised, without the "+").
+    assert "255700000000" not in str(_audit_row(fake_client, "withdrawal.validation_failed"))
+
+
+def test_reviewing_a_withdrawal_is_audited_with_a_masked_destination(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = client.post(
+        "/v1/merchant/withdrawals/quote",
+        headers=auth_headers(user_id),
+        json={
+            "amount": "10000",
+            "method": "SELCOM_PESA",
+            "destination_code": "SELCOM",
+            "destination_identifier": "+255700000000",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    row = _audit_row(fake_client, "withdrawal.reviewed")
+    assert "255700000000" not in str(row)
+    assert row["metadata"]["destination_masked"]
+
+
+def test_a_second_verify_of_a_used_challenge_is_audited_as_a_duplicate(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    challenge_id = _request(user_id).json()["data"]["challenge_id"]
+    code = _code_for(fake_client, challenge_id)
+    assert _verify(user_id, challenge_id, code).status_code == 202
+
+    second = _verify(user_id, challenge_id, code)
+
+    assert second.status_code >= 400
+    assert "withdrawal.duplicate_submission_blocked" in _audit_actions(fake_client)
+
+
+def test_no_audit_log_anywhere_in_the_flow_contains_the_code(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    challenge_id = _request(user_id).json()["data"]["challenge_id"]
+    code = _code_for(fake_client, challenge_id)
+    _verify(user_id, challenge_id, "000000")
+    _verify(user_id, challenge_id, code)
+
+    everything = str(fake_client.table("audit_logs")._table.rows)
+    assert code not in everything
+
+
+def _break_audit_writes(monkeypatch) -> None:
+    """Make every audit write raise, by whichever name it is reached.
+
+    `merchant_portal` does `from app.services.audit import write_audit_log`,
+    so it holds its own reference; `write_audit_log_best_effort` resolves
+    the one inside `app.services.audit`. Patching only one of them leaves
+    the other working and the test passes no matter what the code does.
+    """
+    import app.services.audit as audit_module
+    from app.routers import merchant_portal
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("audit_logs unavailable")
+
+    monkeypatch.setattr(audit_module, "write_audit_log", _boom)
+    monkeypatch.setattr(merchant_portal, "write_audit_log", _boom)
+
+
+def test_a_failing_audit_write_cannot_block_a_balance_check(fake_client, monkeypatch):
+    """The review log sits on a read-only endpoint, and the portal gates
+    Request Withdrawal on a fresh quote — so if an audit insert could fail
+    the quote, it could stop withdrawals entirely."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+    _break_audit_writes(monkeypatch)
+
+    response = client.post(
+        "/v1/merchant/withdrawals/quote",
+        headers=auth_headers(user_id),
+        json={
+            "amount": "10000",
+            "method": "SELCOM_PESA",
+            "destination_code": "SELCOM",
+            "destination_identifier": "+255700000000",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_a_failing_audit_write_does_not_mask_the_real_validation_error(fake_client, monkeypatch):
+    """A merchant who is over their balance must still be told that, not
+    handed a 500 from the audit insert behind it."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id, amount="1.00")
+    _break_audit_writes(monkeypatch)
+
+    response = _request(user_id, _body(amount="999999"))
+
+    assert response.status_code < 500, response.text

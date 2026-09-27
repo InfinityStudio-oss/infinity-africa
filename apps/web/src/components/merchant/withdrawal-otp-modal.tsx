@@ -6,8 +6,8 @@ import { resendWithdrawalOtp, verifyWithdrawalOtp, type WithdrawalOtpChallenge }
 import type { Disbursement } from "@/lib/portal/types";
 
 /**
- * The verification step between filling in a withdrawal and it being
- * submitted for approval.
+ * The verification step between reviewing a withdrawal and it being
+ * submitted for processing.
  *
  * Nothing exists server-side until this succeeds — no withdrawal row, no
  * reservation, no provider call. Cancelling is therefore genuinely free,
@@ -153,8 +153,8 @@ export function WithdrawalOtpModal({
         </div>
 
         <p className="mt-5 text-xs text-on-surface-variant">
-          Entering this code submits the request for approval. It does not release any funds — every withdrawal is
-          reviewed by InfinityPay before payment.
+          Entering this code submits your withdrawal request for processing. It does not release any funds
+          immediately — we&apos;ll notify you when processing is complete.
         </p>
       </div>
     </div>

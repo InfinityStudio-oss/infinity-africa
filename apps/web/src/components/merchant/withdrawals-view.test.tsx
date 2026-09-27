@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FeeBreakdown } from "@/lib/portal/types";
@@ -51,19 +51,23 @@ const CHALLENGE = {
 };
 
 /** Fill the form and get past the mandatory "Check Balance" gate so the
- * "Request Withdrawal" button is enabled. */
+ * "Request Withdrawal" button is enabled. No recipient name is entered —
+ * the field no longer exists. */
 async function fillFormAndCheckBalance() {
   fireEvent.change(screen.getByPlaceholderText("+255 7XX XXX XXX or account no."), {
     target: { value: "255657878545" },
   });
-  fireEvent.change(screen.getByPlaceholderText("e.g. Selcom Pesa Merchant Wallet"), {
-    target: { value: "Masanja" },
-  });
   fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
   fireEvent.click(screen.getByText("Check Balance"));
-  await waitFor(() =>
-    expect(screen.getByText("No merchant withdrawal fee — you receive the full amount.")).toBeInTheDocument(),
-  );
+  await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
+}
+
+/** Request Withdrawal now opens a review step; the code is only sent once
+ * the merchant confirms there. */
+async function requestAndConfirmReview() {
+  fireEvent.click(screen.getByText("Request Withdrawal"));
+  await waitFor(() => expect(screen.getByText("Review your withdrawal details")).toBeInTheDocument());
+  fireEvent.click(screen.getByText("Send Verification Code"));
 }
 
 describe("WithdrawalsView", () => {
@@ -78,7 +82,7 @@ describe("WithdrawalsView", () => {
     await waitFor(() => expect(screen.getByText("Check Balance")).toBeInTheDocument());
   });
 
-  it("shows the withdrawal amount and a no-fee notice, never a fee/charge breakdown", async () => {
+  it("shows the withdrawal amount but never a fee or charge breakdown", async () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
@@ -89,9 +93,7 @@ describe("WithdrawalsView", () => {
     fireEvent.click(screen.getByText("Check Balance"));
 
     await waitFor(() => expect(calculateWithdrawalCharges).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.getByText("No merchant withdrawal fee — you receive the full amount.")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
 
     // The old fee-breakdown rows must be gone entirely — this is the
     // point of the MVP pricing change, not just an added message.
@@ -114,7 +116,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
 
     await waitFor(() =>
       expect(
@@ -133,7 +135,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
 
     await waitFor(() =>
       expect(
@@ -150,15 +152,18 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
 
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
     // The masked address tells the merchant which inbox to open without
     // disclosing an address they might not already know.
     expect(screen.getByText("o***r@shop.co.tz")).toBeInTheDocument();
     expect(createDisbursement).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: "100000", method: "SELCOM_PESA", destination_name: "Masanja" }),
+      expect.objectContaining({ amount: "100000", method: "SELCOM_PESA" }),
     );
+    // The recipient name is gone from the payload entirely — not sent as
+    // an empty string, which would still be a claim about the recipient.
+    expect(createDisbursement.mock.calls[0][0]).not.toHaveProperty("destination_name");
     // Nothing is submitted yet.
     expect(verifyWithdrawalOtp).not.toHaveBeenCalled();
   });
@@ -179,14 +184,18 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "123456" } });
     fireEvent.click(screen.getByText("Verify and submit"));
 
     await waitFor(() =>
-      expect(screen.getByText("Withdrawal request submitted. It is pending approval.")).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          "Your withdrawal request has been submitted for processing. We'll notify you when processing is complete.",
+        ),
+      ).toBeInTheDocument(),
     );
     expect(verifyWithdrawalOtp).toHaveBeenCalledWith("c1", "123456");
   });
@@ -200,7 +209,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "000000" } });
@@ -219,7 +228,7 @@ describe("WithdrawalsView", () => {
     render(<WithdrawalsView />);
 
     await fillFormAndCheckBalance();
-    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
     const resend = screen.getByText(/Resend code in \d+s/);
@@ -243,5 +252,161 @@ describe("WithdrawalsView", () => {
 
     await waitFor(() => expect(screen.getByText("Withdrawals")).toBeInTheDocument());
     expect(container.textContent).not.toMatch(/Disbursement/i);
+  });
+
+  // --- the recipient name field is gone -----------------------------------
+
+  it("does not ask the merchant to type a recipient name", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request a Withdrawal")).toBeInTheDocument());
+    expect(screen.queryByText("Destination Name")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("e.g. Selcom Pesa Merchant Wallet")).not.toBeInTheDocument();
+  });
+
+  it("can reach the review step with no name entered anywhere", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() => expect(screen.getByText("Review your withdrawal details")).toBeInTheDocument());
+  });
+
+  // --- the review step ------------------------------------------------------
+
+  it("reviews the destination, number and amount before sending any code", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    expect(within(dialog).getByText("Selcom Pesa")).toBeInTheDocument();
+    expect(within(dialog).getByText("255657878545")).toBeInTheDocument();
+    expect(within(dialog).getByText("TZS 100,000.00")).toBeInTheDocument();
+    // Still nothing sent — the code goes out only on confirm.
+    expect(createDisbursement).not.toHaveBeenCalled();
+  });
+
+  it("says the name is unavailable rather than echoing something unverified", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    expect(within(dialog).getByText("Name not available")).toBeInTheDocument();
+  });
+
+  it("shows no charges and no approval wording on the review step", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    const text = dialog.textContent ?? "";
+    expect(text).not.toMatch(/approval/i);
+    expect(text).not.toMatch(/charge/i);
+    expect(text).not.toMatch(/fee/i);
+  });
+
+  it("goes back from review without sending a code", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await screen.findByRole("dialog", { name: "Review withdrawal" });
+
+    fireEvent.click(screen.getByText("Back"));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Review withdrawal" })).not.toBeInTheDocument(),
+    );
+    expect(createDisbursement).not.toHaveBeenCalled();
+    // The typed details survive, so nothing has to be re-entered.
+    expect(screen.getByDisplayValue("255657878545")).toBeInTheDocument();
+  });
+
+  it("only sends the verification code once the review is confirmed", async () => {
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+    await screen.findByRole("dialog", { name: "Review withdrawal" });
+    expect(createDisbursement).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Send Verification Code"));
+
+    await waitFor(() => expect(createDisbursement).toHaveBeenCalledTimes(1));
+  });
+
+  // --- merchant-facing wording ---------------------------------------------
+
+  it("never shows approval wording anywhere on the withdrawals page", async () => {
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    verifyWithdrawalOtp.mockResolvedValueOnce({
+      id: "d1",
+      method: "SELCOM_PESA",
+      amount: "100000.00",
+      currency: "TZS",
+      destination_name: "255657878545",
+      status: "PENDING_ADMIN_APPROVAL",
+      auto_approved: false,
+      initiated_at: new Date().toISOString(),
+    });
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    const { container } = render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    await requestAndConfirmReview();
+    await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Verify and submit"));
+
+    await waitFor(() => expect(screen.getByText(/submitted for processing/)).toBeInTheDocument());
+    expect(container.textContent ?? "").not.toMatch(/approval/i);
+  });
+
+  it("reports a submitted withdrawal the same way whether or not it was automated", async () => {
+    // The merchant-visible difference is only how long it takes, and the
+    // history row carries the real status. Two different messages here
+    // would leak an internal distinction they cannot act on.
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    verifyWithdrawalOtp.mockResolvedValueOnce({
+      id: "d2",
+      method: "SELCOM_PESA",
+      amount: "100000.00",
+      currency: "TZS",
+      destination_name: "255657878545",
+      status: "PROCESSING",
+      auto_approved: true,
+      initiated_at: new Date().toISOString(),
+    });
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    await requestAndConfirmReview();
+    await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Verify and submit"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Your withdrawal request has been submitted for processing. We'll notify you when processing is complete.",
+        ),
+      ).toBeInTheDocument(),
+    );
   });
 });

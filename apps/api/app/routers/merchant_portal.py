@@ -109,7 +109,7 @@ from app.services.api_access import (
     check_production_api_access,
     check_sandbox_api_access,
 )
-from app.services.audit import write_audit_log
+from app.services.audit import write_audit_log, write_audit_log_best_effort
 from app.services.checkout_orders import create_checkout_order_minimal
 from app.services.checkout_reconciliation import refresh_checkout_collection_status
 from app.services.collections import initiate_collection, initiate_dynamic_qr_collection
@@ -160,6 +160,7 @@ from app.services.wallet_push import execute_wallet_push_collection
 from app.services.withdrawal_otp import (
     create_challenge,
     get_own_challenge,
+    mask_destination,
     mask_email,
     rotate_otp,
     verify_otp,
@@ -1063,6 +1064,26 @@ def quote_my_withdrawal(
         method=payload.method,
         destination_code=payload.destination_code,
     )
+    # This call backs the merchant's "check balance"/review step, so it is
+    # the point at which a withdrawal was looked at but not yet requested.
+    # Logged with a masked destination only — never the full number.
+    # Best-effort: this endpoint changes nothing, and the Request
+    # Withdrawal button is gated on a fresh quote, so letting an audit
+    # insert fail here would block withdrawals outright.
+    write_audit_log_best_effort(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="withdrawal.reviewed",
+        resource_type="withdrawal",
+        metadata={
+            "method": payload.method.value,
+            "amount": str(payload.amount),
+            "destination_code": payload.destination_code,
+            "destination_masked": mask_destination(payload.destination_identifier or ""),
+        },
+    )
     return APIResponse(data=breakdown)
 
 
@@ -1126,14 +1147,37 @@ async def create_my_withdrawal(
     # NOT trusted to still hold at verify time — execute_disbursement runs
     # every one of them again, and a Super Admin's approval re-runs them a
     # third time before any money moves.
-    preflight_withdrawal(
-        client,
-        merchant_id=membership.merchant_id,
-        amount=payload.amount,
-        currency=payload.currency,
-        method=payload.method,
-        destination_code=payload.destination_code,
-    )
+    try:
+        preflight_withdrawal(
+            client,
+            merchant_id=membership.merchant_id,
+            amount=payload.amount,
+            currency=payload.currency,
+            method=payload.method,
+            destination_code=payload.destination_code,
+        )
+    except APIError as exc:
+        # Recorded so a merchant repeatedly hitting a limit, a hold or an
+        # insufficient balance is visible to Super Admin without them
+        # having to report it. The reason is the merchant-safe message the
+        # gate already produced; no balance figures are added here.
+        # Best-effort so a failed insert cannot turn a clear "insufficient
+        # balance" into an opaque 500.
+        write_audit_log_best_effort(
+            client,
+            actor_id=membership.user_id,
+            actor_type="user",
+            merchant_id=membership.merchant_id,
+            action="withdrawal.validation_failed",
+            resource_type="withdrawal",
+            metadata={
+                "method": payload.method.value,
+                "amount": str(payload.amount),
+                "destination_masked": mask_destination(payload.destination_identifier),
+                "reason": type(exc).__name__,
+            },
+        )
+        raise
 
     stored_payload = {
         "method": payload.method.value,
@@ -1224,6 +1268,20 @@ async def verify_my_withdrawal_otp(
     # else's withdrawal using a code sent to the shared mailbox.
     if str(challenge.get("requested_by")) != str(membership.user_id):
         raise NotFoundError("Verification request not found")
+
+    # A challenge that already produced a withdrawal. verify_otp refuses it
+    # either way; logging it separately distinguishes "someone clicked twice"
+    # from "someone is guessing codes", which look identical to the caller.
+    if challenge.get("used_at"):
+        write_audit_log_best_effort(
+            client,
+            actor_id=membership.user_id,
+            actor_type="user",
+            merchant_id=membership.merchant_id,
+            action="withdrawal.duplicate_submission_blocked",
+            resource_type="withdrawal_otp_challenge",
+            resource_id=challenge_id,
+        )
 
     try:
         verified = verify_otp(client, challenge=challenge, submitted_code=payload.code)

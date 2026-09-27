@@ -2,10 +2,13 @@
 fact, writing to the append-only public.audit_logs table.
 """
 
+import logging
 import uuid
 from typing import Any, Literal
 
 from supabase import Client
+
+logger = logging.getLogger("infinity.audit")
 
 
 def write_audit_log(
@@ -34,3 +37,22 @@ def write_audit_log(
             "user_agent": user_agent,
         }
     ).execute()
+
+
+def write_audit_log_best_effort(client: Client, **kwargs: Any) -> None:
+    """write_audit_log, but never propagates a failure.
+
+    For records that describe something informational rather than a state
+    change — a merchant looking at a withdrawal, or a request that was
+    already being refused for its own reasons. Those calls sit on read-only
+    or already-failing paths, where letting an audit insert raise would
+    either break an endpoint that changes nothing or replace a clear,
+    merchant-safe error with a 500.
+
+    Deliberately NOT the default. An audit row that accompanies real money
+    movement should fail loudly if it cannot be written.
+    """
+    try:
+        write_audit_log(client, **kwargs)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("audit log write failed (action=%s)", kwargs.get("action"))

@@ -377,7 +377,9 @@ export async function getAvailableBalance(): Promise<string> {
 
 export interface CreateDisbursementInput {
   method: Disbursement["method"];
-  destination_name: string;
+  /** No recipient name. The merchant does not type one and no provider
+   * lookup resolves one, so the backend derives its own display label
+   * from the destination rather than being handed an unverified name. */
   destination_identifier: string;
   destination_code: string;
   bank_name: string | null;
@@ -395,12 +397,10 @@ export async function createDisbursement(input: CreateDisbursementInput): Promis
     method: input.method,
     amount: input.amount,
     currency: "TZS",
-    destination_name: input.destination_name,
     destination_code: input.destination_code,
     destination_phone: isBank ? null : input.destination_identifier,
     bank_name: isBank ? input.bank_name : null,
     bank_account_number: isBank ? input.destination_identifier : null,
-    bank_account_name: isBank ? input.destination_name : null,
     network: isMobileMoney ? (input.network ?? null) : null,
     description: input.description ?? null,
   };
