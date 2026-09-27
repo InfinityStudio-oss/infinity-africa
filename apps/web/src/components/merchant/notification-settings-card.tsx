@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Card } from "@/components/portal/card";
-import { getMyNotificationSettings, updateMyNotificationSettings } from "@/lib/portal/api";
+import { getMyMerchant, getMyNotificationSettings, updateMyNotificationSettings } from "@/lib/portal/api";
 import type { NotificationSettings } from "@/lib/portal/types";
 
 const inputClass =
@@ -17,12 +17,18 @@ export function NotificationSettingsCard() {
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  // The account email. Shown as the effective recipient when no address
+  // has been entered, because the backend falls back to it rather than
+  // sending nothing — the toggle says notifications are on, so the page
+  // has to say where they actually go.
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
 
   useEffect(() => {
     getMyNotificationSettings().then((settings) => {
       applySettings(settings);
       setLoading(false);
     });
+    getMyMerchant().then((merchant) => setAccountEmail(merchant?.contact_email ?? null));
   }, []);
 
   function applySettings(settings: NotificationSettings | null) {
@@ -113,6 +119,14 @@ export function NotificationSettingsCard() {
           />
           <p className="mt-1.5 text-xs text-on-surface-variant">You can add up to 2 notification emails.</p>
         </div>
+
+        {enabled && !primary.trim() && !secondary.trim() && accountEmail && (
+          <p className="rounded-lg bg-primary-container/10 px-4 py-3 text-sm text-on-surface">
+            No address set, so confirmations go to your account email,{" "}
+            <span className="font-medium">{accountEmail}</span>. Add an address above to send them
+            somewhere else.
+          </p>
+        )}
 
         <button
           type="submit"

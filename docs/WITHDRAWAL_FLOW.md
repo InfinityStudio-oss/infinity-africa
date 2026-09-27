@@ -61,15 +61,28 @@ destination, and the review step displays the answer. The lookup endpoint
 future pre-payout recipient-verification step", and never called. This
 wires it up.
 
-**It is honest about not knowing.** Selcom's docs show the request for
-`/account/lookup` but no example response, and no lookup has been
-round-tripped against a live account yet. `parse_account_name` tries the
-shapes Selcom uses elsewhere (`accountName`, `recipientName`, `name`, …,
-inside `data` first, since every verified Selcom response nests its
-payload there). If none match, the answer is `None` and the merchant sees
-"Name not available" — the same thing they saw before this existed. It
-never falls back to another field, because a wrong name on a payout
-confirmation reads as though the destination was verified.
+**Confirmed working against live Selcom, 2026-09-27.** Real resolved
+names came back on the first production attempt, for both channels
+tested:
+
+| Destination | Resolved |
+|---|---|
+| Selcom Pesa (`SELCOM`) | `MASANJA MAZURI` |
+| Mobile Money / M-Pesa (`MPESA`) | `MASANJA PAUL MAZURI` |
+
+Two things that were open questions before that call, now answered:
+`parse_account_name`'s candidate keys matched on the first try, and the
+lookup is **not** bank-only — despite taking a `bank` parameter it
+resolves mobile-money destinations too. Bank destinations are the one
+channel still unconfirmed by a live call.
+
+Selcom's docs still show no example response body, so the parser keeps
+trying the shapes Selcom uses elsewhere (`accountName`, `recipientName`,
+`name`, …, inside `data` first, since every verified Selcom response
+nests its payload there). If none match, the answer is `None` and the
+merchant sees "Name not available". It never falls back to another field,
+because a wrong name on a payout confirmation reads as though the
+destination was verified.
 
 When a lookup *succeeds* but carries no recognised name field, the
 response's **keys** are logged — keys only, never values, so an account

@@ -5,10 +5,12 @@ import type { NotificationSettings } from "@/lib/portal/types";
 
 const getMyNotificationSettings = vi.fn();
 const updateMyNotificationSettings = vi.fn();
+const getMyMerchant = vi.fn();
 
 vi.mock("@/lib/portal/api", () => ({
   getMyNotificationSettings: (...args: unknown[]) => getMyNotificationSettings(...args),
   updateMyNotificationSettings: (...args: unknown[]) => updateMyNotificationSettings(...args),
+  getMyMerchant: (...args: unknown[]) => getMyMerchant(...args),
 }));
 
 const settings: NotificationSettings = {
@@ -25,6 +27,7 @@ const settings: NotificationSettings = {
 describe("NotificationSettingsCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getMyMerchant.mockResolvedValue({ contact_email: "owner@shop.co.tz" });
   });
 
   it("shows the required helper text and the configured primary email", async () => {
@@ -83,5 +86,59 @@ describe("NotificationSettingsCard", () => {
     await waitFor(() =>
       expect(screen.getByText("Duplicate notification emails are not allowed.")).toBeInTheDocument(),
     );
+  });
+
+  // --- the page must say where notifications actually go ------------------
+
+  it("names the account email as the recipient when no address is set", async () => {
+    // The toggle defaults on with both fields empty, and the backend falls
+    // back to the account email — so the page has to say so rather than
+    // showing an enabled switch that looks like it sends nowhere.
+    getMyNotificationSettings.mockResolvedValue({
+      ...settings,
+      primary_notification_email: null,
+      secondary_notification_email: null,
+    });
+    const { NotificationSettingsCard } = await import("./notification-settings-card");
+    render(<NotificationSettingsCard />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/confirmations go to your account email/)).toBeInTheDocument(),
+    );
+    expect(screen.getByText("owner@shop.co.tz")).toBeInTheDocument();
+  });
+
+  it("drops that note once an address is entered", async () => {
+    getMyNotificationSettings.mockResolvedValue({
+      ...settings,
+      primary_notification_email: null,
+      secondary_notification_email: null,
+    });
+    const { NotificationSettingsCard } = await import("./notification-settings-card");
+    render(<NotificationSettingsCard />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/confirmations go to your account email/)).toBeInTheDocument(),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. owner@yourbusiness.com"), {
+      target: { value: "finance@shop.co.tz" },
+    });
+
+    expect(screen.queryByText(/confirmations go to your account email/)).not.toBeInTheDocument();
+  });
+
+  it("does not claim a fallback when notifications are switched off", async () => {
+    getMyNotificationSettings.mockResolvedValue({
+      ...settings,
+      primary_notification_email: null,
+      secondary_notification_email: null,
+      collection_notifications_enabled: false,
+    });
+    const { NotificationSettingsCard } = await import("./notification-settings-card");
+    render(<NotificationSettingsCard />);
+
+    await waitFor(() => expect(getMyNotificationSettings).toHaveBeenCalled());
+    expect(screen.queryByText(/confirmations go to your account email/)).not.toBeInTheDocument();
   });
 });

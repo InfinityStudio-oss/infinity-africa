@@ -1325,26 +1325,49 @@ def send_merchant_collection_notification_email(
         return []
 
     notification_settings = get_notification_settings(client, uuid.UUID(merchant_id))
-    if not notification_settings or not notification_settings.get("collection_notifications_enabled"):
+    # No row means the merchant has never opened the settings page, which
+    # is the same thing get_or_create_notification_settings returns there:
+    # enabled, no addresses. Treated identically here so "never visited"
+    # and "visited and saved nothing" behave the same — previously the
+    # former silently sent nothing.
+    if notification_settings is not None and not notification_settings.get(
+        "collection_notifications_enabled"
+    ):
+        # Explicitly switched off. Respected exactly.
         return []
 
+    settings_row = notification_settings or {}
     recipients = [
         email
         for email in (
-            notification_settings.get("primary_notification_email"),
-            notification_settings.get("secondary_notification_email"),
+            settings_row.get("primary_notification_email"),
+            settings_row.get("secondary_notification_email"),
         )
         if email
     ]
     if not recipients:
-        # Notifications are enabled but no email has ever been configured —
-        # nothing to send, and (same convention as send_merchant_welcome_email
-        # above) no email_deliveries row: recipient_email is NOT NULL and
-        # nothing was actually attempted. The logger line is the record.
-        logger.warning(
-            "Merchant collection notification not sent: no notification email configured. merchant_id=%s", merchant_id
+        # Enabled but no address configured. That is the state every
+        # merchant starts in — the toggle defaults on and both fields
+        # default null — so treating it as "send nothing" meant a business
+        # could see notifications switched on and never receive one, with
+        # only a log line to say so.
+        #
+        # Falling back to the account's own contact_email honours what the
+        # toggle already claims. It is the address they registered, it is
+        # where their withdrawal emails already go, and it is shown on the
+        # settings page as the effective recipient, so nothing is sent
+        # anywhere the merchant cannot see.
+        fallback = (merchant.get("contact_email") or "").strip()
+        if not fallback:
+            logger.warning(
+                "Merchant collection notification not sent: no notification email and no contact_email. merchant_id=%s",
+                merchant_id,
+            )
+            return []
+        logger.info(
+            "Merchant collection notification falling back to contact_email. merchant_id=%s", merchant_id
         )
-        return []
+        recipients = [fallback]
 
     settings = get_settings()
     business_name = merchant.get("business_name") or "Merchant"

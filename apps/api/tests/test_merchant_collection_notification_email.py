@@ -194,9 +194,37 @@ def test_no_more_than_two_notification_emails_are_sent(fake_client, fake_resend)
     assert len(fake_resend.calls) == 2
 
 
-def test_no_notification_email_sent_when_none_configured(fake_client, fake_resend):
-    merchant_id, admin_id = _merchant_and_admin(fake_client)
+def test_an_unconfigured_merchant_is_notified_at_their_account_email(fake_client, fake_resend):
+    """Every merchant starts here: the toggle defaults on and both address
+    fields default null. Sending nothing meant a business could see
+    notifications switched on and never receive one, so this falls back to
+    the address they registered with."""
+    merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
     # Notification settings never touched at all — no row exists yet.
+
+    _stk_push_and_resolve(admin_id, merchant_id)
+
+    assert [c["to"] for c in fake_resend.calls if c["to"] == ["owner@shop.co.tz"]], (
+        f"no notification reached the account email; sent: {[c['to'] for c in fake_resend.calls]}"
+    )
+
+
+def test_a_configured_address_is_used_instead_of_the_account_email(fake_client, fake_resend):
+    """The fallback must not also fire once a real address exists."""
+    merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _configure_notifications(admin_id, primary="finance@shop.co.tz")
+
+    _stk_push_and_resolve(admin_id, merchant_id)
+
+    recipients = [addr for c in fake_resend.calls for addr in c["to"]]
+    assert "finance@shop.co.tz" in recipients
+    assert "owner@shop.co.tz" not in recipients
+
+
+def test_no_notification_when_there_is_no_address_to_fall_back_to(fake_client, fake_resend):
+    """contact_email is NOT NULL in the schema, so this is defensive — but
+    an empty one must mean "send nothing", never a crash mid-collection."""
+    merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 

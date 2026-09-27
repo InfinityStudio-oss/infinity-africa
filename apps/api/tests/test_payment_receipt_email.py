@@ -83,6 +83,23 @@ def _collect(slug: str, **body) -> dict:
     return response.json()["data"]
 
 
+_RECEIPT_SUBJECT = "Your payment receipt from InfinityPay"
+
+
+def _receipts(fake_resend) -> list[dict]:
+    """Only the customer receipt.
+
+    A successful collection also emails the MERCHANT a confirmation
+    (send_merchant_collection_notification_email), which since 2026-09-27
+    falls back to their account email when they have configured no
+    notification address — so every merchant now gets one. Counting all
+    Resend calls would make these tests fail whenever an unrelated email
+    is added, and would quietly pass if the receipt were replaced by
+    something else entirely.
+    """
+    return [c for c in fake_resend.calls if c.get("subject") == _RECEIPT_SUBJECT]
+
+
 def test_receipt_email_sent_after_a_successful_payment(fake_client, fake_resend):
     merchant = create_merchant(fake_client, business_name="Masanja Traders", merchant_code="27048391")
     merchant_id = uuid.UUID(merchant["id"])
@@ -92,10 +109,10 @@ def test_receipt_email_sent_after_a_successful_payment(fake_client, fake_resend)
 
     _collect(link["public_slug"])
 
-    assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["to"] == ["jane@example.com"]
-    assert fake_resend.calls[0]["subject"] == "Your payment receipt from InfinityPay"
-    html = fake_resend.calls[0]["html"]
+    receipts = _receipts(fake_resend)
+    assert len(receipts) == 1
+    assert receipts[0]["to"] == ["jane@example.com"]
+    html = receipts[0]["html"]
     assert "Masanja Traders" in html
     assert "27048391" in html
     assert "Successful" in html
@@ -115,7 +132,7 @@ def test_receipt_email_not_sent_when_disabled_by_flag(fake_client, fake_resend, 
     # The payment itself, and the wallet credit behind it, are entirely
     # unaffected by this flag — only the email is gated.
     assert result["status"] == "successful"
-    assert len(fake_resend.calls) == 0
+    assert _receipts(fake_resend) == []
 
 
 def test_receipt_email_includes_a_working_receipt_link(fake_client, fake_resend):
@@ -127,7 +144,7 @@ def test_receipt_email_includes_a_working_receipt_link(fake_client, fake_resend)
 
     _collect(link["public_slug"])
 
-    html = fake_resend.calls[0]["html"]
+    html = _receipts(fake_resend)[0]["html"]
     assert f"/pay/{link['public_slug']}/receipt/" in html
 
 
@@ -140,7 +157,7 @@ def test_no_receipt_email_when_customer_email_is_missing(fake_client, fake_resen
 
     _collect(link["public_slug"])
 
-    assert len(fake_resend.calls) == 0
+    assert _receipts(fake_resend) == []
 
 
 def test_no_receipt_email_for_a_failed_collection(fake_client, fake_resend, monkeypatch):
@@ -159,7 +176,7 @@ def test_no_receipt_email_for_a_failed_collection(fake_client, fake_resend, monk
     )
     assert response.json()["data"]["status"] == "failed"
 
-    assert len(fake_resend.calls) == 0
+    assert _receipts(fake_resend) == []
 
 
 def test_payment_completes_even_when_receipt_email_delivery_fails(fake_client, fake_resend):
@@ -219,8 +236,9 @@ def test_receipt_email_sent_for_a_request_collection_with_email_in_metadata(fake
 
     _apply_collection_success(fake_client, collection, {"id": "txn-1", "gross_amount": "1000.00"})
 
-    assert len(fake_resend.calls) == 1
-    assert fake_resend.calls[0]["to"] == ["jane@example.com"]
+    receipts = _receipts(fake_resend)
+    assert len(receipts) == 1
+    assert receipts[0]["to"] == ["jane@example.com"]
 
 
 def test_receipt_email_uses_info_as_the_help_contact(fake_client, fake_resend):
@@ -232,6 +250,6 @@ def test_receipt_email_uses_info_as_the_help_contact(fake_client, fake_resend):
 
     _collect(link["public_slug"])
 
-    html = fake_resend.calls[0]["html"]
+    html = _receipts(fake_resend)[0]["html"]
     assert "info@infinitypay.me" in html
     assert "support@infinitypay.me" not in html
