@@ -12,6 +12,8 @@ a test would reject live traffic), failures back off and eventually stop,
 and nothing here can take the queue — or a payment — down with it.
 """
 
+import hashlib
+import hmac
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -562,3 +564,34 @@ def test_a_merchant_with_no_webhook_url_gets_no_sandbox_event(fake_client):
     )
 
     assert fake_client.table("webhook_events")._table.rows == []
+
+
+# --- the published example must match what we actually send -----------------
+
+
+def test_the_documented_verification_example_matches_our_signing():
+    """The partner docs publish a verification snippet. If our signing ever
+    changed without that snippet changing, every integrator's verifier
+    would start rejecting real deliveries — and we would hear about it
+    from them, not from a test.
+    """
+    secret = "whsec_example_value"
+    raw = b'{"event":"collection.success","collection_id":"abc"}'
+
+    ours = sign_outbound_payload(raw_body=raw, secret=secret)
+    # Exactly the expression published at /developers/direct-wallet-push.
+    theirs = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+
+    assert hmac.compare_digest(ours, theirs)
+
+
+def test_the_signature_covers_the_body_alone_not_the_timestamp():
+    """The docs tell integrators to verify over the body only. If the
+    timestamp were ever folded into the signed material, every receiver
+    that followed those docs would break."""
+    secret = "whsec_example_value"
+    raw = b'{"event":"collection.success"}'
+
+    body_only = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+
+    assert sign_outbound_payload(raw_body=raw, secret=secret) == body_only

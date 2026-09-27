@@ -230,10 +230,84 @@ export default function DirectWalletPushPage() {
   "failed_at": "2026-09-27T09:14:22Z",
   "timestamp": "2026-09-27T09:14:22Z"
 }`}</CodeBlock>
+        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Headers on every delivery</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-outline-variant/40">
+                <th className="py-2 pr-4 font-semibold text-on-surface">Header</th>
+                <th className="py-2 font-semibold text-on-surface">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-outline-variant/20 align-top">
+                <td className="py-2 pr-4"><Code>X-Infinity-Signature</Code></td>
+                <td className="py-2 text-on-surface-variant">
+                  HMAC-SHA256 hex digest of the exact raw body, keyed with the webhook secret.
+                </td>
+              </tr>
+              <tr className="border-b border-outline-variant/20 align-top">
+                <td className="py-2 pr-4"><Code>X-Infinity-Event</Code></td>
+                <td className="py-2 text-on-surface-variant">
+                  The event name, e.g. <Code>collection.success</Code>.
+                </td>
+              </tr>
+              <tr className="border-b border-outline-variant/20 align-top">
+                <td className="py-2 pr-4"><Code>X-Infinity-Delivery</Code></td>
+                <td className="py-2 text-on-surface-variant">
+                  Unique per event. Deduplicate on this — deliveries are at-least-once.
+                </td>
+              </tr>
+              <tr className="border-b border-outline-variant/20 align-top">
+                <td className="py-2 pr-4"><Code>X-Infinity-Timestamp</Code></td>
+                <td className="py-2 text-on-surface-variant">
+                  Unix seconds at send time, for rejecting very old replays. <strong>Not</strong> part of the signed
+                  material — verify the signature over the body alone.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Verifying the signature</h3>
+        <CodeBlock language="python">{`import hashlib
+import hmac
+import json
+
+def handle_webhook(request):
+    raw = request.get_data()                      # raw BYTES, before any JSON parse
+    sent = request.headers.get("X-Infinity-Signature", "")
+    expected = hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(expected, sent):   # constant-time
+        return "", 401
+
+    payload = json.loads(raw)
+    if payload.get("test") or payload.get("sandbox"):
+        return "", 200                            # acknowledge, do not fulfil
+
+    # Store it, return 200, then process. Do not process before responding.
+    enqueue_for_processing(payload)
+    return "", 200`}</CodeBlock>
         <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
-          Verify <Code>X-Infinity-Signature</Code> — an HMAC-SHA256 hex digest of the exact raw body, keyed with the
-          merchant&apos;s webhook secret. Deduplicate on <Code>X-Infinity-Delivery</Code>; deliveries are
-          at-least-once.
+          Sign the <strong>raw bytes</strong> you received. Parsing the JSON and re-serialising it changes the bytes
+          and the digest will not match — this is the single most common integration mistake.
+        </p>
+
+        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Retries</h3>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Any <Code>2xx</Code> counts as delivered. Anything else — a non-2xx, a timeout, or an unreachable host — is
+          retried up to <strong>5 attempts</strong>, spaced <strong>immediately, then after 1, 5, 15 and 30
+          minutes</strong>. After the fifth the event is marked failed and is not retried again.
+        </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed">
+          The timeout is <strong>8 seconds</strong>, so return <Code>200</Code> as soon as you have stored the event
+          and do your processing afterwards — a slow handler burns a retry. If your endpoint was down long enough to
+          exhaust them, poll{" "}
+          <a href="/developers/transaction-status" className="text-primary font-semibold hover:underline">
+            Transaction Status
+          </a>{" "}
+          to catch up.
         </p>
 
         <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Three kinds of delivery — only one to act on</h3>
