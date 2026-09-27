@@ -413,12 +413,6 @@ def handle_webhook(request):
             </tbody>
           </table>
         </div>
-        <Callout title="Three codes are published but not yet sent">
-          The provider does not currently distinguish insufficient balance, a wrong PIN, or a timeout from a general
-          decline — those arrive as <Code>provider_declined</Code> or <Code>unknown_provider_error</Code>. The codes
-          are published so you can write the handler now; they will start arriving when the provider&apos;s responses
-          allow it, with no change needed on your side.
-        </Callout>
       </section>
 
       <section className="mb-12">
