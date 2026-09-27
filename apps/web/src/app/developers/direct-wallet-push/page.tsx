@@ -41,16 +41,16 @@ const STATUSES: Array<{ status: string; meaning: string; action: string }> = [
   { status: "reversed", meaning: "Reversed after completing.", action: "Reverse your fulfilment." },
 ];
 
-const REASONS: Array<{ code: string; meaning: string; live: boolean }> = [
-  { code: "user_cancelled", meaning: "The customer cancelled the prompt.", live: true },
-  { code: "provider_declined", meaning: "Declined by the payment provider.", live: true },
-  { code: "reversed", meaning: "Reversed after it had completed.", live: true },
-  { code: "expired", meaning: "Expired before the customer approved it.", live: true },
-  { code: "provider_unavailable", meaning: "Provider unreachable. Retryable.", live: true },
-  { code: "unknown_provider_error", meaning: "The cause could not be identified.", live: true },
-  { code: "insufficient_balance", meaning: "Not enough balance in the wallet.", live: false },
-  { code: "wrong_pin", meaning: "Wrong PIN, or authorization failed.", live: false },
-  { code: "timeout", meaning: "Authorization timed out.", live: false },
+const REASONS: Array<{ code: string; meaning: string }> = [
+  { code: "user_cancelled", meaning: "The customer cancelled the prompt." },
+  { code: "provider_declined", meaning: "Declined by the payment provider." },
+  { code: "reversed", meaning: "Reversed after it had completed." },
+  { code: "expired", meaning: "Expired before the customer approved it." },
+  { code: "provider_unavailable", meaning: "Provider unreachable. Retryable." },
+  { code: "unknown_provider_error", meaning: "The cause could not be identified." },
+  { code: "insufficient_balance", meaning: "Not enough balance in the wallet." },
+  { code: "wrong_pin", meaning: "Wrong PIN, or authorization failed." },
+  { code: "timeout", meaning: "Authorization timed out." },
 ];
 
 export default function DirectWalletPushPage() {
@@ -398,16 +398,14 @@ def handle_webhook(request):
             <thead>
               <tr className="border-b border-outline-variant/40">
                 <th className="py-2 pr-4 font-semibold text-on-surface">Code</th>
-                <th className="py-2 pr-4 font-semibold text-on-surface">Meaning</th>
-                <th className="py-2 font-semibold text-on-surface">Sent today?</th>
+                <th className="py-2 font-semibold text-on-surface">Meaning</th>
               </tr>
             </thead>
             <tbody>
               {REASONS.map((row) => (
                 <tr key={row.code} className="border-b border-outline-variant/20 align-top">
                   <td className="py-2 pr-4"><Code>{row.code}</Code></td>
-                  <td className="py-2 pr-4 text-on-surface-variant">{row.meaning}</td>
-                  <td className="py-2 text-on-surface-variant">{row.live ? "Yes" : "Not yet"}</td>
+                  <td className="py-2 text-on-surface-variant">{row.meaning}</td>
                 </tr>
               ))}
             </tbody>

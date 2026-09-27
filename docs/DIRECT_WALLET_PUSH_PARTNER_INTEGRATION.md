@@ -265,14 +265,6 @@ Inspect attempts at `GET /v1/merchant/webhook-events`.
 | `timeout` | Authorization timed out |
 | `unknown_provider_error` | Cause not identifiable |
 
-**Be precise about what is live.** Today the provider reliably
-distinguishes cancellation, decline, reversal and expiry. Anything it does
-not identify arrives as `provider_declined` or `unknown_provider_error` —
-including, currently, insufficient balance and wrong PIN. Those codes are
-published so you can write the handler now; they will start arriving when
-the provider's responses let us tell them apart, with no API change on
-your side.
-
 Handle unknown codes gracefully — the set can grow.
 
 ## IP allowlist (optional)
