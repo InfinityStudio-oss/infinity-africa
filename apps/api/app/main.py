@@ -40,6 +40,7 @@ from app.routers import (
 )
 from app.services.checkout_reconciliation import reconcile_pending_checkout_collections
 from app.services.disbursements import reconcile_pending_disbursements
+from app.services.webhook_delivery import deliver_pending_webhooks
 
 settings = get_settings()
 
@@ -180,10 +181,45 @@ def _start_disbursement_reconciliation_task() -> asyncio.Task | None:
 
 
 @contextlib.asynccontextmanager
+async def _webhook_delivery_loop(interval_seconds: float) -> None:
+    """Drains the outbound merchant webhook queue on a timer.
+
+    enqueue_webhook_event has always written webhook_events rows that
+    nothing read — so a partner told to wait for `collection.success`
+    never received one. This is the delivery side of that queue."""
+    logger.info("webhook_delivery_loop_running interval_seconds=%s", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            summary = deliver_pending_webhooks(get_supabase_admin())
+            # Only worth a line when it actually did something; an idle
+            # queue every 30s would drown the log.
+            if summary["due"]:
+                logger.info("scheduled_webhook_delivery %s", summary)
+        except Exception:
+            logger.exception("scheduled_webhook_delivery_failed")
+
+
+def _start_webhook_delivery_task() -> asyncio.Task | None:
+    """Same opt-in shape as the two reconciliation schedulers above: 0 (the
+    default) disables it, so local dev and tests never deliver webhooks in
+    the background unless explicitly asked to."""
+    interval = settings.webhook_delivery_interval_seconds
+    if interval <= 0:
+        logger.info("webhook_delivery_scheduler_disabled interval_seconds=%s", interval)
+        return None
+    logger.info("webhook_delivery_scheduler_started interval_seconds=%s", interval)
+    return asyncio.create_task(_webhook_delivery_loop(interval))
+
+
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     tasks = [
         task
-        for task in (_start_checkout_reconciliation_task(), _start_disbursement_reconciliation_task())
+        for task in (
+            _start_checkout_reconciliation_task(),
+            _start_disbursement_reconciliation_task(),
+            _start_webhook_delivery_task(),
+        )
         if task is not None
     ]
     try:

@@ -24,6 +24,7 @@ maps from "pending_review" specifically.
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -153,6 +154,13 @@ class CollectionStatusResponse(BaseModel):
     currency: str
     method: ExternalCollectionMethod | None = None
     provider_payment_status: str | None = None
+    # Free text, historically sometimes the provider's own message. Kept
+    # for existing integrations; new ones should branch on
+    # failure_reason_code, which is a closed, documented set.
     failure_reason: str | None = None
+    failure_reason_code: str | None = None
+    failure_reason_message: str | None = None
+    failed_at: datetime | None = None
+    cancelled_at: datetime | None = None
     created_at: str
     updated_at: str

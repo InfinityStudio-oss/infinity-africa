@@ -81,7 +81,13 @@ def _push_message(collection: dict, *, pending_message: str) -> str:
     final status."""
     status_value = collection["status"]
     if status_value == "failed":
-        return collection.get("failure_reason") or "This payment attempt failed."
+        # The normalized sentence first — `failure_reason` is free text and
+        # sometimes carries the provider's own wording.
+        return (
+            collection.get("failure_reason_message")
+            or collection.get("failure_reason")
+            or "This payment attempt failed."
+        )
     if status_value == "successful":
         return "Payment completed (sandbox simulation)."
     if status_value == "reversed":
@@ -101,6 +107,10 @@ def _status_response(row: dict) -> CollectionStatusResponse:
         method=to_external_method(row.get("method")),
         provider_payment_status=row.get("provider_payment_status"),
         failure_reason=row.get("failure_reason"),
+        failure_reason_code=row.get("failure_reason_code"),
+        failure_reason_message=row.get("failure_reason_message"),
+        failed_at=row.get("failed_at"),
+        cancelled_at=row.get("cancelled_at"),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

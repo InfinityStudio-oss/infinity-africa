@@ -236,6 +236,10 @@ async def complete_checkout_collection_once(
         provider_reference=reference or collection.get("provider_reference") or "",
         status=status,
         failure_reason=failure_reason,
+        # Passed through so the failure can be normalized into a stable
+        # code rather than stored as the provider's own text.
+        provider_payment_status=payment_status,
+        provider_resultcode=resultcode,
     )
     resolved = resolve_collection(client, collection_id=collection_id, result=collection_result)
 

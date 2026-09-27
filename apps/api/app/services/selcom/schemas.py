@@ -21,6 +21,13 @@ class CollectionResult(BaseModel):
     provider_reference: str
     status: ProviderStatus
     failure_reason: str | None = None
+    # Provider detail carried through so resolve_collection can normalize a
+    # failure into a stable reason code (app/services/failure_reasons.py)
+    # instead of storing the provider's own prose. Optional: the older
+    # app/services/selcom/ paths never had these, and a missing value just
+    # resolves to unknown_provider_error.
+    provider_payment_status: str | None = None
+    provider_resultcode: str | None = None
 
 
 class DynamicQrResult(BaseModel):

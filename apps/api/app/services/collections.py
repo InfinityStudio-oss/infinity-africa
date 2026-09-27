@@ -35,6 +35,7 @@ from app.services.email import (
     send_merchant_collection_notification_email,
     send_payment_receipt_email,
 )
+from app.services.failure_reasons import USER_CANCELLED, normalize_failure_reason
 from app.services.fraud_monitoring_service import (
     check_self_payment_risk,
     evaluate_collection,
@@ -215,6 +216,20 @@ def _collection_webhook_payload(
         payload["net_amount"] = transaction.get("net_amount")
     if reason:
         payload["reason"] = reason
+
+    # Stable code + merchant-safe sentence on any failed delivery, so a
+    # partner can branch on `failure_reason_code` instead of parsing
+    # `reason`, which is free text and sometimes the provider's own words.
+    # provider_status_code is deliberately NOT included: it is internal
+    # support detail, not something to hand to a merchant's server.
+    reason_code = collection.get("failure_reason_code")
+    if reason_code:
+        payload["failure_reason_code"] = reason_code
+        payload["failure_reason_message"] = collection.get("failure_reason_message")
+    if collection.get("failed_at"):
+        payload["failed_at"] = collection.get("failed_at")
+    if collection.get("cancelled_at"):
+        payload["cancelled_at"] = collection.get("cancelled_at")
     return payload
 
 
@@ -365,7 +380,23 @@ def resolve_collection(client: Client, *, collection_id: uuid.UUID, result: Coll
 
     collection_update = {"status": final_status, "completed_at": utc_now_iso()}
     if final_status == "failed":
+        # failure_reason stays exactly as before — existing readers and
+        # every historical row are untouched. Alongside it, a stable code
+        # a partner can switch on plus a sentence written for a merchant,
+        # because the free-text value is sometimes the provider's own
+        # message and neither stable nor ours to forward.
+        reason_code, reason_message = normalize_failure_reason(
+            payment_status=result.provider_payment_status,
+            resultcode=result.provider_resultcode,
+            internal_reason=result.failure_reason,
+        )
         collection_update["failure_reason"] = result.failure_reason
+        collection_update["failure_reason_code"] = reason_code
+        collection_update["failure_reason_message"] = reason_message
+        collection_update["provider_status_code"] = result.provider_resultcode
+        collection_update["failed_at"] = utc_now_iso()
+        if reason_code == USER_CANCELLED:
+            collection_update["cancelled_at"] = utc_now_iso()
     collection = update_row(client, "collections", collection_id, collection_update)
 
     if final_status == "successful":

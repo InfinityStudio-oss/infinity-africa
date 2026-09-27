@@ -171,11 +171,32 @@ export default function WebhooksPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Verifying a delivery</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Every delivery is signed with your&apos;s webhook secret, sent as{" "}
+          Every delivery is signed with your webhook secret, sent as{" "}
           <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-Infinity-Signature</code>: an
           HMAC-SHA256 hex digest of the exact raw request body. Recompute it and compare — don&apos;t trust a
           delivery that doesn&apos;t match, and use a constant-time comparison to avoid leaking timing information.
+          Sign the <em>raw bytes</em> you received, before any JSON parse-and-re-serialise, or the digest will differ.
         </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Three other headers come with every delivery, including the one{" "}
+          <strong>Send Test Webhook</strong> produces — so a verifier you prove against a test delivery behaves
+          identically on live traffic:
+        </p>
+        <ul className="text-sm text-on-surface-variant leading-relaxed mb-4 space-y-1.5 list-disc pl-5">
+          <li>
+            <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-Infinity-Event</code>{" "}
+            — the event name, e.g. <code className="font-mono text-xs">collection.success</code>.
+          </li>
+          <li>
+            <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-Infinity-Delivery</code>{" "}
+            — a unique id for this delivery attempt&apos;s event. Use it to deduplicate retries.
+          </li>
+          <li>
+            <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">X-Infinity-Timestamp</code>{" "}
+            — Unix seconds at send time, for rejecting very old replays. It is{" "}
+            <strong>not</strong> part of the signed material, so verify the signature over the body alone.
+          </li>
+        </ul>
         <div className="space-y-4">
           <CodeBlock language="python">{`import hashlib
 import hmac
@@ -213,22 +234,30 @@ app.post(
       <section>
         <h2 className="text-xl font-semibold text-on-surface mb-3">Retries</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
-          Every event is recorded to your delivery queue the moment it happens. Automatic retry-with-backoff delivery
-          is on the roadmap but not live yet — for now, use{" "}
-          <strong>Send Test Webhook</strong> on the Portal&apos;s Webhooks page to confirm your endpoint responds
-          correctly, and{" "}
+          Every event is recorded to your delivery queue the moment it happens, then delivered automatically. A
+          delivery counts as successful on any <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">2xx</code>{" "}
+          response. Anything else — a non-2xx, a timeout, or an unreachable host — is retried up to{" "}
+          <strong>5 attempts</strong>, spaced <strong>immediately, then after 1, 5, 15 and 30 minutes</strong>. After
+          the fifth attempt the event is marked <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">failed</code>{" "}
+          and is not retried again.
+        </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Return <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">200</code> as soon
+          as you have stored the event and do your processing afterwards — we time out after 8 seconds, and a slow
+          handler burns a retry. You can see every attempt, its HTTP status and its attempt count on{" "}
+          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">GET /v1/merchant/webhook-events</code>{" "}
+          or the Portal&apos;s Webhooks page. If your endpoint was down long enough to exhaust the retries,{" "}
           <a href="/developers/transaction-status" className="text-primary font-semibold hover:underline">
             Transaction Status
           </a>{" "}
-          to poll as a fallback. Respond quickly to real deliveries once retries ship — do your processing
-          asynchronously after returning <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">200</code>,
-          rather than making InfinityPay wait on it.
+          is the way to catch up.
         </p>
         <Callout title="Design for at-least-once delivery">
-          Once automatic retries are live, treat every delivery as at-least-once, not exactly-once. Key your own
-          processing off the resource ID inside <code className="font-mono text-xs">payload</code> (e.g.{" "}
-          <code className="font-mono text-xs">collection_id</code>) and make handling that ID idempotent now, so a
-          duplicate delivery is a safe no-op later.
+          Treat every delivery as at-least-once, not exactly-once — a retry can arrive after your handler already
+          succeeded but failed to respond in time. Key your processing off the resource ID inside the payload (e.g.{" "}
+          <code className="font-mono text-xs">collection_id</code>), or off the{" "}
+          <code className="font-mono text-xs">X-Infinity-Delivery</code> header, and make handling it idempotent so a
+          duplicate is a safe no-op.
         </Callout>
       </section>
 

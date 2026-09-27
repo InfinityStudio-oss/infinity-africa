@@ -139,7 +139,14 @@ def send_test_webhook(
         raise ValidationAPIError("Configure a webhook URL before sending a test delivery")
 
     raw_body = json.dumps(_sample_test_payload(merchant)).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
+    # Header set kept identical to a real delivery
+    # (app/services/webhook_delivery.py) — a receiver whose verification
+    # passes against this test must not then fail against live traffic.
+    headers = {
+        "Content-Type": "application/json",
+        "X-Infinity-Event": "webhook.test",
+        "X-Infinity-Timestamp": str(int(time.time())),
+    }
     if webhook_secret:
         headers["X-Infinity-Signature"] = sign_outbound_payload(raw_body=raw_body, secret=webhook_secret)
 

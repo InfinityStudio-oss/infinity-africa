@@ -257,6 +257,18 @@ class Settings(BaseSettings):
     # Railway to actually enable it.
     selcom_disbursement_reconcile_interval_seconds: int = 0
 
+    # Outbound merchant webhook delivery sweep — see
+    # app/services/webhook_delivery.py and app/main.py's lifespan task.
+    # enqueue_webhook_event has always written webhook_events rows;
+    # nothing delivered them until that worker existed, so a partner
+    # waiting on `collection.success` received nothing and had to poll.
+    # 0 (the default) disables it, so local dev and tests never POST to a
+    # merchant's URL in the background. Set a real interval (e.g. 30) in
+    # Railway to actually enable it. Deliberately NOT gated by
+    # enable_auto_reconciliation: that flag is a kill switch for provider
+    # polling, and webhook delivery is outbound to merchants, not Selcom.
+    webhook_delivery_interval_seconds: int = 0
+
     # Hosted checkout (payment_gateway_url from create-order-minimal) —
     # confirmed broken on Selcom's own side as of 2026-08-23 (returns
     # "Page Not Found" for every order tested — see
