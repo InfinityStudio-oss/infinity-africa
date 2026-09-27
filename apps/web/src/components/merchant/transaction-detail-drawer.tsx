@@ -59,7 +59,13 @@ export function TransactionDetailDrawer({
               Identifiers
             </p>
             <Row label="Transaction ID" value={transaction.id} mono />
-            <Row label="Merchant Reference" value={transaction.reference} mono />
+            {/* NOT "Merchant Reference": that name belongs to the API and
+                webhook field carrying the INTEGRATOR's own reference
+                (collections.merchant_reference, e.g. an invoice or
+                subscriber id). This is InfinityPay's own TXN-... handle.
+                Sharing one label between the two sent support looking for
+                the wrong value when a partner quoted theirs. */}
+            <Row label="Transaction Reference" value={transaction.reference} mono />
             <Row label="Provider Reference" value={transaction.provider_reference ?? "Not available"} mono />
           </div>
 
