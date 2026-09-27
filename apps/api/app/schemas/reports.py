@@ -3,7 +3,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.schemas.enums import ReportFormat, ReportType
+from app.schemas.enums import ReportType
 
 # Same pattern as app/schemas/auth.py and app/schemas/pay_by_link.py —
 # deliberately not pydantic's EmailStr, which needs the email-validator
@@ -25,7 +25,6 @@ class ReportRequest(BaseModel):
     report_type: ReportType
     start_date: date
     end_date: date
-    format: ReportFormat = ReportFormat.PDF
     # Who to send it to in addition to the merchant's account email. The
     # account email is always included by the endpoint and cannot be
     # removed, so a report can never be delivered only to an address the
@@ -58,7 +57,6 @@ class ReportResponse(BaseModel):
     title: str
     start_date: date
     end_date: date
-    format: ReportFormat
     filename: str
     row_count: int
     totals: dict[str, str]

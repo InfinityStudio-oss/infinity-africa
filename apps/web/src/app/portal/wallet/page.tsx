@@ -272,7 +272,7 @@ export default function WalletPage() {
                 <th className={thClass}>Type</th>
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Payment Method</th>
-                <th className={thClass}>Payer Phone</th>
+                <th className={thClass}>Customer Phone</th>
                 <th className={thClass}>Opening Balance</th>
                 <th className={thClass}>Amount</th>
                 <th className={thClass}>Charge / Fee</th>
@@ -308,7 +308,7 @@ export default function WalletPage() {
                     <td className={`${tdClass} font-mono text-sm text-on-background`}>{entry.reference ?? "—"}</td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>{entry.method ?? "—"}</td>
                     <td className={`${tdClass} font-mono text-xs text-on-background whitespace-nowrap`}>
-                      {entry.payer_phone ?? "—"}
+                      {entry.customer_phone ?? "—"}
                     </td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>
                       {formatCurrency(entry.balance_before, "TZS")}

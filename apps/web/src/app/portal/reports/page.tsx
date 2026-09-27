@@ -6,9 +6,8 @@ import { Card } from "@/components/portal/card";
 import { EmptyState } from "@/components/portal/empty-state";
 import { Icon } from "@/components/portal/icon";
 import { PageHeader } from "@/components/portal/page-header";
-import { SegmentedControl } from "@/components/portal/segmented-control";
 import { generateReport } from "@/lib/portal/api";
-import type { GeneratedReport, ReportFormat, ReportType } from "@/lib/portal/types";
+import type { GeneratedReport, ReportType } from "@/lib/portal/types";
 
 const REPORT_TYPES: { value: ReportType; label: string }[] = [
   { value: "TRANSACTIONS_SUMMARY", label: "Transactions Summary" },
@@ -34,7 +33,6 @@ export default function ReportsPage() {
   const [reportType, setReportType] = useState<ReportType>("TRANSACTIONS_SUMMARY");
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
-  const [format, setFormat] = useState<ReportFormat>("PDF");
   const [extraRecipients, setExtraRecipients] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +47,6 @@ export default function ReportsPage() {
         report_type: reportType,
         start_date: from,
         end_date: to,
-        format,
         // Split on commas/whitespace so a merchant can paste a short list.
         // The backend validates each address and always adds the account
         // email itself, so an empty box is the normal case.
@@ -70,7 +67,7 @@ export default function ReportsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Reports"
-        description="Generate reports for accounting, reconciliation, and tax filing. Each report is emailed to you with the file attached."
+        description="Generate reports for accounting, reconciliation, and tax filing. Each report is emailed to you as a PDF attachment."
       />
 
       <Card>
@@ -122,17 +119,6 @@ export default function ReportsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-on-surface-variant mb-2">Format</label>
-            <SegmentedControl
-              options={[
-                { value: "PDF" as const, label: "PDF" },
-                { value: "CSV" as const, label: "CSV" },
-              ]}
-              value={format}
-              onChange={setFormat}
-            />
-          </div>
-          <div>
             <label htmlFor="report-recipients" className="block text-sm font-medium text-on-surface-variant mb-1.5">
               Also email to (optional)
             </label>
@@ -171,7 +157,7 @@ export default function ReportsPage() {
           <EmptyState
             icon="description"
             heading="No reports generated yet"
-            body="Reports you generate are emailed to you with the file attached, as PDF or CSV."
+            body="Reports you generate are emailed to you as a PDF attachment."
             actionLabel="Generate Your First Report"
             onAction={() => document.querySelector("form")?.requestSubmit()}
           />
@@ -186,7 +172,7 @@ export default function ReportsPage() {
                       {report.title} — {report.start_date} to {report.end_date}
                     </p>
                     <p className="text-sm text-on-surface-variant">
-                      {report.row_count} row{report.row_count === 1 ? "" : "s"}, sent as {report.format} to{" "}
+                      {report.row_count} row{report.row_count === 1 ? "" : "s"}, sent as PDF to{" "}
                       {report.emailed_to.join(", ")}
                     </p>
                   </div>

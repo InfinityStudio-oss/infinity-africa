@@ -249,7 +249,7 @@ export interface Transaction {
   direction: "debit" | "credit" | null;
   /** The customer who paid, resolved through collection_id. Null for
    * withdrawals (no payer) and QR scans (no phone captured). */
-  payer_phone: string | null;
+  customer_phone: string | null;
   created_at: string;
 }
 
@@ -354,7 +354,7 @@ export interface WalletLedgerEntry {
   status: string | null;
   /** The customer who paid, resolved through the entry's collection.
    * Null for withdrawals (no payer) and QR scans (no phone captured). */
-  payer_phone: string | null;
+  customer_phone: string | null;
 }
 
 /** apps/api's MerchantUserResponse (merchant_users row + the invited
@@ -595,14 +595,11 @@ export type ReportType =
   | "FEES_SUMMARY"
   | "CUSTOMER_STATEMENT";
 
-export type ReportFormat = "PDF" | "CSV";
-
 export interface GeneratedReport {
   report_type: ReportType;
   title: string;
   start_date: string;
   end_date: string;
-  format: ReportFormat;
   filename: string;
   row_count: number;
   totals: Record<string, string>;

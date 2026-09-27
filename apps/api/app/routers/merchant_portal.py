@@ -121,6 +121,7 @@ from app.services.crud import (
     list_for_merchant,
     update_row,
 )
+from app.services.customer_lookup import customer_phones_for_collections
 from app.services.disbursements import (
     execute_disbursement,
     preflight_withdrawal,
@@ -143,7 +144,6 @@ from app.services.merchant_notifications import (
     validate_notification_emails,
 )
 from app.services.merchant_overview import get_merchant_overview
-from app.services.payer_lookup import payer_phones_for_collections
 from app.services.payment_links import (
     batch_collection_counts,
     build_public_url,
@@ -1433,9 +1433,9 @@ def list_my_transactions(
     client = get_supabase_admin()
     rows, total = list_for_merchant(client, "transactions", merchant_id=membership.merchant_id, pagination=pagination)
     # One batched lookup for the whole page, not one per row.
-    phones = payer_phones_for_collections(client, {r.get("collection_id") for r in rows})
+    phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})
     data = [
-        TransactionResponse(**row, payer_phone=phones.get(row.get("collection_id"))) for row in rows
+        TransactionResponse(**row, customer_phone=phones.get(row.get("collection_id"))) for row in rows
     ]
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
@@ -1458,9 +1458,9 @@ def get_my_transaction_by_reference(
     )
     if not row:
         raise NotFoundError("Transaction not found")
-    phones = payer_phones_for_collections(client, {row.get("collection_id")})
+    phones = customer_phones_for_collections(client, {row.get("collection_id")})
     return APIResponse(
-        data=TransactionResponse(**row, payer_phone=phones.get(row.get("collection_id")))
+        data=TransactionResponse(**row, customer_phone=phones.get(row.get("collection_id")))
     )
 
 
@@ -1515,7 +1515,7 @@ def generate_and_email_report(
         start_date=payload.start_date,
         end_date=payload.end_date,
     )
-    content, filename, _media_type = render_report(report, report_format=payload.format.value)
+    content, filename, _media_type = render_report(report)
 
     send_report_email(
         client,
@@ -1534,7 +1534,6 @@ def generate_and_email_report(
             title=report.title,
             start_date=report.start_date,
             end_date=report.end_date,
-            format=payload.format,
             filename=filename,
             row_count=report.row_count,
             totals=dict(report.totals),

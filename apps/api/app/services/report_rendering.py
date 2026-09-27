@@ -1,16 +1,12 @@
-"""Renders an `app/services/reports.py::Report` to a downloadable file.
+"""Renders an `app/services/reports.py::Report` to a downloadable PDF.
 
-Two formats, one shape in. Nothing here queries anything — a renderer
-that had to know where a number came from would have to change every
-time a report type did.
+Nothing here queries anything — a renderer that had to know where a
+number came from would have to change every time a report type did.
 
 PDF uses fpdf2: pure Python, no system libraries. That matters because
 the API runs in a slim container, and the usual alternative (WeasyPrint)
 needs cairo and pango installed at the OS level.
 """
-
-import csv
-import io
 
 from fpdf import FPDF
 
@@ -23,32 +19,6 @@ _LIGHT_ROW = (245, 245, 245)
 
 def _period(report: Report) -> str:
     return f"{report.start_date.isoformat()} to {report.end_date.isoformat()}"
-
-
-def render_csv(report: Report) -> bytes:
-    """A header block, then the table.
-
-    `csv` does the quoting, so a business name or destination containing a
-    comma or a quote cannot break the column alignment. Excel reads
-    UTF-8 with a BOM correctly; without it, a Tanzanian name with an
-    accent renders as mojibake.
-    """
-    buffer = io.StringIO()
-    writer = csv.writer(buffer, lineterminator="\r\n")
-
-    writer.writerow([report.title])
-    writer.writerow(["Business", report.merchant_name])
-    writer.writerow(["Merchant ID", report.merchant_code])
-    writer.writerow(["Period", _period(report)])
-    writer.writerow([])
-    for label, value in report.totals:
-        writer.writerow([label, value])
-    writer.writerow([])
-
-    writer.writerow(report.headers)
-    writer.writerows(report.rows)
-
-    return buffer.getvalue().encode("utf-8-sig")
 
 
 def _pdf_text(value: str) -> str:
@@ -156,11 +126,15 @@ def render_pdf(report: Report) -> bytes:
     return bytes(pdf.output())
 
 
-def render_report(report: Report, *, report_format: str) -> tuple[bytes, str, str]:
-    """Returns (content, filename, media type) for the requested format."""
+def render_report(report: Report) -> tuple[bytes, str, str]:
+    """Returns (content, filename, media type). PDF is the only format.
+
+    A report is a statement a merchant files with or forwards, so it is
+    delivered as one fixed, readable document rather than as a choice the
+    merchant has to make before they can generate anything. The
+    Transactions and Wallet pages still export raw rows (CSV and Excel
+    respectively) for anyone who wants the data rather than the statement.
+    """
     slug = report.title.lower().replace(" ", "-")
     stem = f"infinitypay-{slug}-{report.start_date.isoformat()}-to-{report.end_date.isoformat()}"
-
-    if report_format == "CSV":
-        return render_csv(report), f"{stem}.csv", "text/csv"
     return render_pdf(report), f"{stem}.pdf", "application/pdf"

@@ -1276,7 +1276,7 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
         "Reference",
         "Provider Reference",
         "Payment Method",
-        "Payer Phone",
+        "Customer Phone",
         "Opening Balance",
         "Amount",
         "Charge / Fee",
@@ -1295,7 +1295,7 @@ def test_wallet_ledger_export_returns_xlsx_with_correct_content_type_and_filenam
     assert data_row[6] == "TXN-EXPORT-1"
     assert data_row[7] == "SELCOM-9"
     assert data_row[8] == "USSD_PUSH"
-    assert data_row[9] == "+255712345678"  # payer phone, via the entry's collection
+    assert data_row[9] == "+255712345678"  # customer phone, via the entry's collection
     assert data_row[10] == 0.0  # opening balance
     assert data_row[11] == 985.0  # amount
     assert data_row[12] == 15.0  # charge/fee
@@ -1611,8 +1611,8 @@ def test_get_transaction_by_reference_found(fake_client):
     assert response.json()["data"]["reference"] == "TXN-FINDME"
 
 
-def test_transactions_list_shows_the_payer_phone_for_a_collection(fake_client):
-    """Same lookup the wallet ledger uses (app/services/payer_lookup.py) —
+def test_transactions_list_shows_the_customer_phone_for_a_collection(fake_client):
+    """Same lookup the wallet ledger uses (app/services/customer_lookup.py) —
     the transactions list must not answer differently about who paid."""
     merchant_id, user_id = _merchant_and_member(fake_client)
     collection = fake_client.seed(
@@ -1647,10 +1647,10 @@ def test_transactions_list_shows_the_payer_phone_for_a_collection(fake_client):
 
     assert response.status_code == 200, response.text
     row = next(r for r in response.json()["data"] if r["reference"] == "TXN-WITH-PAYER")
-    assert row["payer_phone"] == "+255712345678"
+    assert row["customer_phone"] == "+255712345678"
 
 
-def test_a_withdrawal_transaction_reports_no_payer_phone(fake_client):
+def test_a_withdrawal_transaction_reports_no_customer_phone(fake_client):
     """A payout has no customer on the other side. Null, not the
     merchant's own number."""
     merchant_id, user_id = _merchant_and_member(fake_client)
@@ -1673,10 +1673,10 @@ def test_a_withdrawal_transaction_reports_no_payer_phone(fake_client):
     response = client.get("/v1/merchant/transactions", headers=auth_headers(user_id))
 
     row = next(r for r in response.json()["data"] if r["reference"] == "TXN-PAYOUT")
-    assert row["payer_phone"] is None
+    assert row["customer_phone"] is None
 
 
-def test_the_payer_phone_lookup_does_not_leak_another_merchants_collection(fake_client):
+def test_the_customer_phone_lookup_does_not_leak_another_merchants_collection(fake_client):
     """The batched lookup is by collection id. A transaction may only ever
     reference its own merchant's collection, and the response must never
     carry a phone belonging to someone else's customer."""
@@ -1718,7 +1718,7 @@ def test_the_payer_phone_lookup_does_not_leak_another_merchants_collection(fake_
     assert "TXN-OTHER" not in body
 
 
-def test_get_transaction_by_reference_includes_the_payer_phone(fake_client):
+def test_get_transaction_by_reference_includes_the_customer_phone(fake_client):
     merchant_id, user_id = _merchant_and_member(fake_client)
     collection = fake_client.seed(
         "collections",
@@ -1751,7 +1751,7 @@ def test_get_transaction_by_reference_includes_the_payer_phone(fake_client):
     response = client.get("/v1/merchant/transactions/TXN-DETAIL", headers=auth_headers(user_id))
 
     assert response.status_code == 200, response.text
-    assert response.json()["data"]["payer_phone"] == "+255700000123"
+    assert response.json()["data"]["customer_phone"] == "+255700000123"
 
 
 def test_get_transaction_by_reference_not_found(fake_client):

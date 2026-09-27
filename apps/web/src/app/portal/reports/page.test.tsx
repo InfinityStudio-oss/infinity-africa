@@ -15,7 +15,6 @@ function generated(overrides: Partial<GeneratedReport> = {}): GeneratedReport {
     title: "Transactions Summary",
     start_date: "2026-09-01",
     end_date: "2026-09-27",
-    format: "PDF",
     filename: "infinitypay-transactions-summary-2026-09-01-to-2026-09-27.pdf",
     row_count: 12,
     totals: { Transactions: "12" },
@@ -41,14 +40,13 @@ describe("Merchant portal ReportsPage", () => {
     await waitFor(() => expect(generateReport).toHaveBeenCalledTimes(1));
   });
 
-  it("sends the chosen report type, range and format", async () => {
+  it("sends the chosen report type and range", async () => {
     const { default: ReportsPage } = await import("./page");
     render(<ReportsPage />);
 
     fireEvent.change(screen.getByLabelText("Report Type"), { target: { value: "FEES_SUMMARY" } });
     fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-08-31" } });
-    fireEvent.click(screen.getByRole("button", { name: "CSV" }));
     fireEvent.click(screen.getByRole("button", { name: /Generate Report/ }));
 
     await waitFor(() => expect(generateReport).toHaveBeenCalledTimes(1));
@@ -56,9 +54,18 @@ describe("Merchant portal ReportsPage", () => {
       report_type: "FEES_SUMMARY",
       start_date: "2026-08-01",
       end_date: "2026-08-31",
-      format: "CSV",
       recipients: [],
     });
+  });
+
+  it("offers no format choice — a report is always a PDF", async () => {
+    const { default: ReportsPage } = await import("./page");
+    render(<ReportsPage />);
+
+    await waitFor(() => expect(screen.getByLabelText("Report Type")).toBeInTheDocument());
+    expect(screen.queryByText("Format")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "CSV" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PDF" })).not.toBeInTheDocument();
   });
 
   it("splits typed extra recipients into a list", async () => {

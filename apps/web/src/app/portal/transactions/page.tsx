@@ -21,7 +21,7 @@ const CSV_HEADER = [
   "Reference",
   "Provider Reference",
   "Channel",
-  "Payer Phone",
+  "Customer Phone",
   "Opening Balance",
   "Amount",
   "Charge",
@@ -49,7 +49,7 @@ function transactionsToCsv(transactions: Transaction[]): string {
       transaction.reference,
       transaction.provider_reference ?? "",
       transaction.method,
-      transaction.payer_phone ?? "",
+      transaction.customer_phone ?? "",
       transaction.balance_before ?? "",
       amount,
       transaction.fee_amount,
@@ -173,7 +173,7 @@ export default function TransactionsPage() {
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Provider Reference</th>
                 <th className={thClass}>Method</th>
-                <th className={thClass}>Payer Phone</th>
+                <th className={thClass}>Customer Phone</th>
                 <th className={thClass}>Opening Balance</th>
                 <th className={thClass}>Amount</th>
                 <th className={thClass}>Charge</th>
@@ -207,7 +207,7 @@ export default function TransactionsPage() {
                     <td className={`${tdClass} font-mono text-xs text-on-surface-variant`}>{transaction.provider_reference ?? "—"}</td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>{transaction.method}</td>
                     <td className={`${tdClass} font-mono text-xs text-on-background whitespace-nowrap`}>
-                      {transaction.payer_phone ?? "—"}
+                      {transaction.customer_phone ?? "—"}
                     </td>
                     <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>
                       {money(transaction.balance_before, transaction.currency)}

@@ -246,7 +246,7 @@ export function mockTransactions(): Transaction[] {
     balance_before: null,
     balance_after: null,
     direction: null,
-    payer_phone: type === "collection" ? "+255700000000" : null,
+    customer_phone: type === "collection" ? "+255700000000" : null,
     created_at,
   }));
 }

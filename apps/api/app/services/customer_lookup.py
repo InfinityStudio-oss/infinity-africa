@@ -18,7 +18,7 @@ import uuid
 from supabase import Client
 
 
-def payer_phones_for_collections(
+def customer_phones_for_collections(
     client: Client, collection_ids: set[str] | set[uuid.UUID]
 ) -> dict[str, str | None]:
     """Maps collection id -> customer phone, in one batched query.

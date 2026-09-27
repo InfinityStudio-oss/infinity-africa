@@ -20,8 +20,8 @@ from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import app
-from app.schemas.enums import ReportFormat, ReportType
-from app.services.report_rendering import render_csv, render_pdf, render_report
+from app.schemas.enums import ReportType
+from app.services.report_rendering import render_pdf, render_report
 from app.services.reports import build_report
 from tests.factories import (
     TEST_JWT_SECRET,
@@ -87,12 +87,30 @@ def _transaction(fake_client, merchant_id, *, reference, gross="1000", fee="0", 
     )
 
 
+def _pdf_text(content: bytes) -> str:
+    """The visible text of a rendered PDF.
+
+    Content streams are zlib-compressed, so a substring search over the
+    raw bytes finds nothing and would make a leak test pass while leaking.
+    """
+    import contextlib
+    import re
+    import zlib
+
+    out = []
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", content, re.DOTALL):
+        # Not every stream is a compressed text stream; skipping the ones
+        # that are not is the normal case here, not an error worth logging.
+        with contextlib.suppress(Exception):
+            out.append(zlib.decompress(match.group(1)).decode("latin-1"))
+    return "".join(out)
+
+
 def _generate(user_id, **overrides):
     payload = {
         "report_type": "TRANSACTIONS_SUMMARY",
         "start_date": "2026-09-01",
         "end_date": "2026-09-30",
-        "format": "CSV",
     }
     payload.update(overrides)
     return client.post("/v1/merchant/reports", headers=auth_headers(user_id), json=payload)
@@ -113,8 +131,9 @@ def test_generating_a_report_emails_it_with_the_file_attached(fake_client, merch
     attachments = send.call_args.kwargs["attachments"]
     assert len(attachments) == 1
     filename, content = attachments[0]
-    assert filename.endswith(".csv")
-    assert b"TXN-1" in content
+    assert filename.endswith(".pdf")
+    assert content.startswith(b"%PDF-")
+    assert "TXN-1" in _pdf_text(content)
 
 
 def test_the_report_goes_to_the_merchants_own_account_email(fake_client, merchant_user):
@@ -153,17 +172,33 @@ def test_a_failed_send_fails_the_request_rather_than_reporting_success(fake_clie
     assert "emailed_to" not in response.text
 
 
-def test_a_pdf_report_attaches_a_real_pdf(fake_client, merchant_user):
+def test_a_report_is_always_attached_as_a_pdf(fake_client, merchant_user):
+    """PDF is the only format. A report is a statement a merchant files
+    with or forwards, not a data dump — the Transactions and Wallet pages
+    still export raw rows for that."""
     _merchant, user_id = merchant_user
     _transaction(fake_client, _merchant["id"], reference="TXN-PDF")
 
     with patch("app.services.email.send_email", return_value="msg-1") as send:
-        response = _generate(user_id, format="PDF")
+        response = _generate(user_id)
 
     assert response.status_code == 200, response.text
     filename, content = send.call_args.kwargs["attachments"][0]
     assert filename.endswith(".pdf")
     assert content.startswith(b"%PDF-")
+
+
+def test_a_format_sent_by_an_old_client_is_ignored_rather_than_honoured(fake_client, merchant_user):
+    """The field is gone. A stale client still posting format=CSV must get
+    a PDF, not a 500 and not a CSV."""
+    _merchant, user_id = merchant_user
+
+    with patch("app.services.email.send_email", return_value="msg-1") as send:
+        response = _generate(user_id, format="CSV")
+
+    assert response.status_code == 200, response.text
+    filename, _content = send.call_args.kwargs["attachments"][0]
+    assert filename.endswith(".pdf")
 
 
 # --- the numbers are the real ones ----------------------------------------
@@ -294,8 +329,9 @@ def test_a_report_never_includes_another_merchants_rows(fake_client, merchant_us
 
     assert response.status_code == 200, response.text
     _filename, content = send.call_args.kwargs["attachments"][0]
-    assert b"TXN-MINE" in content
-    assert b"TXN-NOT-MINE" not in content
+    text = _pdf_text(content)
+    assert "TXN-MINE" in text, "the merchant's own row is missing, so this proves nothing"
+    assert "TXN-NOT-MINE" not in text
 
 
 # --- input bounds ----------------------------------------------------------
@@ -350,9 +386,9 @@ def test_another_merchants_member_cannot_generate_a_report_for_this_merchant(fak
 # --- rendering -------------------------------------------------------------
 
 
-def test_the_csv_quotes_a_value_containing_a_comma(fake_client, merchant_user):
-    """A destination or business name with a comma must not shift the
-    columns of every row after it."""
+def test_a_value_containing_a_comma_or_a_quote_renders(fake_client, merchant_user):
+    """A business or destination name with punctuation must not break the
+    render. The CSV writer used to handle this; the PDF has to as well."""
     merchant, _user_id = merchant_user
     fake_client.seed(
         "disbursements",
@@ -361,7 +397,7 @@ def test_the_csv_quotes_a_value_containing_a_comma(fake_client, merchant_user):
             "method": "BANK_ACCOUNT",
             "amount": "1000",
             "currency": "TZS",
-            "destination_name": "Juma, Traders Ltd",
+            "destination_name": 'Juma, "Traders" Ltd',
             "destination_identifier": "0123456789",
             "bank_name": "CRDB",
             "status": "successful",
@@ -376,8 +412,7 @@ def test_the_csv_quotes_a_value_containing_a_comma(fake_client, merchant_user):
         end_date=date(2026, 9, 30),
     )
 
-    text = render_csv(report).decode("utf-8-sig")
-    assert '"Juma, Traders Ltd"' in text
+    assert render_pdf(report).startswith(b"%PDF-")
 
 
 def test_a_pdf_renders_even_with_no_rows(fake_client, merchant_user):
@@ -411,7 +446,7 @@ def test_a_pdf_renders_a_name_outside_latin_1_instead_of_failing(fake_client):
 
 
 @pytest.mark.parametrize("report_type", list(ReportType))
-def test_every_report_type_builds_and_renders_in_both_formats(report_type, fake_client, merchant_user):
+def test_every_report_type_builds_and_renders(report_type, fake_client, merchant_user):
     merchant, _user_id = merchant_user
     collection = _collection(fake_client, merchant["id"], phone="+255700000001")
     _transaction(fake_client, merchant["id"], reference="TXN-X", fee="15", collection_id=collection["id"])
@@ -424,11 +459,11 @@ def test_every_report_type_builds_and_renders_in_both_formats(report_type, fake_
         end_date=date(2026, 9, 30),
     )
 
-    for fmt in ReportFormat:
-        content, filename, media_type = render_report(report, report_format=fmt.value)
-        assert content, f"{report_type} produced an empty {fmt} file"
-        assert filename.endswith(".csv" if fmt is ReportFormat.CSV else ".pdf")
-        assert media_type in ("text/csv", "application/pdf")
+    content, filename, media_type = render_report(report)
+
+    assert content.startswith(b"%PDF-"), f"{report_type} did not produce a PDF"
+    assert filename.endswith(".pdf")
+    assert media_type == "application/pdf"
 
 
 def test_the_filename_says_which_report_and_which_period(fake_client, merchant_user):
@@ -441,9 +476,9 @@ def test_the_filename_says_which_report_and_which_period(fake_client, merchant_u
         end_date=date(2026, 9, 30),
     )
 
-    _content, filename, _media = render_report(report, report_format="CSV")
+    _content, filename, _media = render_report(report)
 
-    assert filename == "infinitypay-fees-summary-2026-09-01-to-2026-09-30.csv"
+    assert filename == "infinitypay-fees-summary-2026-09-01-to-2026-09-30.pdf"
 
 
 def test_report_generation_is_rate_limited_per_merchant(fake_client, merchant_user):

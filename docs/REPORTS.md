@@ -1,8 +1,8 @@
 # Merchant Reports
 
 `POST /v1/merchant/reports` and the page at `/portal/reports`. A merchant
-picks a report type, a date range and a format; the backend builds the
-report from their own rows and emails it to them with the file attached.
+picks a report type and a date range; the backend builds the report from
+their own rows and emails it to them as a PDF attachment.
 
 ## Before 2026-09-27 this page generated nothing
 
@@ -15,7 +15,7 @@ and nothing was sent. That is now a real endpoint against real data.
 
 | Type | Source | One row per |
 |---|---|---|
-| `TRANSACTIONS_SUMMARY` | `transactions` | transaction, with the payer's phone |
+| `TRANSACTIONS_SUMMARY` | `transactions` | transaction, with the customer's phone |
 | `WITHDRAWALS_SUMMARY` | `disbursements` | withdrawal, with destination and status |
 | `FEES_SUMMARY` | `transactions` | transaction that was actually charged |
 | `CUSTOMER_STATEMENT` | `collections` | paying customer, grouped by phone |
@@ -75,16 +75,21 @@ not pydantic's `EmailStr`, which would pull in `email-validator`.
 Nothing in it queries anything, so a new report type only describes its
 data and a new format only renders this one shape.
 
-- **CSV** — written through the `csv` module, so a business name or
-  destination containing a comma or a quote cannot shift the columns.
-  Encoded UTF-8 **with a BOM**, because Excel otherwise renders accented
-  names as mojibake.
+**PDF is the only format** (2026-09-27; CSV was removed). A report is a
+statement a merchant files with or forwards, not a data dump, and making
+them choose a format before they could generate anything added a decision
+without adding an option worth having. Anyone who wants the raw rows still
+has the Transactions page's CSV export and the Wallet page's Excel export,
+both of which carry full untruncated values.
+
 - **PDF** — `fpdf2`, added as a dependency for this. Chosen because it
   is pure Python with no system libraries; WeasyPrint would have needed
   cairo and pango installed in the API container. Landscape A4, repeating
   header row on each page, zebra striping. Cell values are truncated
-  rather than wrapped so columns stay aligned down the page — the full
-  value is always in the CSV. Characters outside Latin-1 are replaced
+  rather than wrapped so columns stay aligned down the page. Column widths
+  are proportional to content, so truncation is rare; when a value is too
+  long for any layout, the Transactions CSV export has it in full.
+  Characters outside Latin-1 are replaced
   rather than allowed to raise, because report data is merchant input and
   one unusual character must not take down the whole report.
 
@@ -100,3 +105,6 @@ data and a new format only renders this one shape.
 - **No download-in-browser path.** The report is delivered by email. The
   wallet ledger export (`GET /v1/merchant/wallet/ledger/export`) remains
   the direct-download route for ledger data specifically.
+- **No format choice.** `format` was removed from the request and the
+  response; a stale client still posting `format=CSV` gets a PDF rather
+  than an error.

@@ -108,7 +108,7 @@ def test_a_successful_payment_shows_the_payers_phone(fake_client):
         fake_client, merchant_id, _transaction(fake_client, merchant_id, collection_id=collection_id)
     )
 
-    assert _ledger(fake_client, merchant_id)[0]["payer_phone"] == "+255712345678"
+    assert _ledger(fake_client, merchant_id)[0]["customer_phone"] == "+255712345678"
 
 
 def test_each_row_carries_its_own_payer(fake_client):
@@ -125,7 +125,7 @@ def test_each_row_carries_its_own_payer(fake_client):
 
     rows = _ledger(fake_client, merchant_id)
 
-    assert {r["payer_phone"] for r in rows} == {"+255700000001", "+255700000002"}
+    assert {r["customer_phone"] for r in rows} == {"+255700000001", "+255700000002"}
 
 
 def test_the_phone_follows_the_collection_rather_than_a_stored_copy(fake_client):
@@ -143,7 +143,7 @@ def test_the_phone_follows_the_collection_rather_than_a_stored_copy(fake_client)
         "id", str(collection_id)
     ).execute()
 
-    assert _ledger(fake_client, merchant_id)[0]["payer_phone"] == "+255711111111"
+    assert _ledger(fake_client, merchant_id)[0]["customer_phone"] == "+255711111111"
 
 
 def test_an_entry_posted_before_the_feature_existed_still_shows_a_phone(fake_client):
@@ -161,15 +161,15 @@ def test_an_entry_posted_before_the_feature_existed_still_shows_a_phone(fake_cli
         for r in fake_client.table("ledger_entries")._table.rows
         if r.get("transaction_id") == str(transaction_id)
     )
-    assert "payer_phone" not in entry
+    assert "customer_phone" not in entry
 
-    assert _ledger(fake_client, merchant_id)[0]["payer_phone"] == "+255700000003"
+    assert _ledger(fake_client, merchant_id)[0]["customer_phone"] == "+255700000003"
 
 
 # --- and stays empty where there is genuinely no payer --------------------
 
 
-def test_a_withdrawal_has_no_payer_phone(fake_client):
+def test_a_withdrawal_has_no_customer_phone(fake_client):
     """A payout goes to the merchant's own destination; there is no
     customer on the other side. Null, not the merchant's own number."""
     merchant_id = _merchant(fake_client)
@@ -190,7 +190,7 @@ def test_a_withdrawal_has_no_payer_phone(fake_client):
     )
 
     debit = next(r for r in _ledger(fake_client, merchant_id) if r["direction"] == "debit")
-    assert debit["payer_phone"] is None
+    assert debit["customer_phone"] is None
 
 
 def test_a_qr_scan_with_no_captured_phone_is_null_not_guessed(fake_client):
@@ -203,13 +203,13 @@ def test_a_qr_scan_with_no_captured_phone_is_null_not_guessed(fake_client):
         fake_client, merchant_id, _transaction(fake_client, merchant_id, collection_id=collection_id)
     )
 
-    assert _ledger(fake_client, merchant_id)[0]["payer_phone"] is None
+    assert _ledger(fake_client, merchant_id)[0]["customer_phone"] is None
 
 
 # --- the money path is untouched ------------------------------------------
 
 
-def test_adding_the_payer_phone_did_not_change_any_balance(fake_client):
+def test_adding_the_customer_phone_did_not_change_any_balance(fake_client):
     """The join is read-side only. Balances, direction and amounts must be
     exactly what they were before."""
     merchant_id = _merchant(fake_client)

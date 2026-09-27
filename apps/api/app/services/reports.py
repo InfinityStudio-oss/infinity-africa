@@ -25,7 +25,7 @@ from supabase import Client
 
 from app.core.time import dar_es_salaam_day_bounds_utc
 from app.schemas.enums import ReportType
-from app.services.payer_lookup import payer_phones_for_collections
+from app.services.customer_lookup import customer_phones_for_collections
 
 
 @dataclass
@@ -93,7 +93,7 @@ def _sorted_newest_first(rows: list[dict], column: str) -> list[dict]:
 def _transactions_summary(client: Client, merchant_id: uuid.UUID, start: date, end: date) -> tuple[list[str], list[list[str]], list[tuple[str, str]]]:
     rows = _in_range(_fetch(client, "transactions", merchant_id), column="created_at", start=start, end=end)
     rows = _sorted_newest_first(rows, "created_at")
-    phones = payer_phones_for_collections(client, {r.get("collection_id") for r in rows})
+    phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})
 
     headers = [
         "Date",
@@ -101,7 +101,7 @@ def _transactions_summary(client: Client, merchant_id: uuid.UUID, start: date, e
         "Reference",
         "Provider Reference",
         "Method",
-        "Payer Phone",
+        "Customer Phone",
         "Amount",
         "Charge",
         "Net",

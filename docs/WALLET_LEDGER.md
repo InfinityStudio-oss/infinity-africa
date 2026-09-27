@@ -13,7 +13,7 @@ document is about the read side.
 | Date | `ledger_entries.created_at`, rendered in Dar es Salaam time |
 | Transaction ID | `ledger_entries.transaction_id` (first 8 chars) |
 | Type / Reference / Provider Reference / Payment Method / Charge / Net / Status | joined from the entry's `transactions` row |
-| Payer Phone | joined through `transactions.collection_id` → `collections.customer_phone` |
+| Customer Phone | joined through `transactions.collection_id` → `collections.customer_phone` |
 | Opening / Closing Balance | `ledger_entries.balance_before/balance_after`, with a replay fallback for rows posted before those columns existed |
 | Amount, Direction | `ledger_entries.amount` / `.direction` |
 
@@ -23,13 +23,13 @@ API (`GET /v1/merchant/wallet/ledger`) and the Excel export
 (`GET /v1/merchant/wallet/ledger/export`) call — so the two can never
 disagree about a row.
 
-## Payer phone (2026-09-27)
+## Customer phone (2026-09-27)
 
 A merchant reading their wallet could see money arriving but not who
 sent it; matching a credit to a customer meant opening the Collections
 page and comparing amounts and timestamps. The ledger row now carries
 the paying customer's phone number, in the portal table and as a
-**Payer Phone** column in the Excel export.
+**Customer Phone** column in the Excel export.
 
 ### It is resolved on read, not stored on the entry
 
@@ -62,7 +62,7 @@ not change the shape of that trade-off.
 guessed, never substituted with the merchant's own number:
 
 - **Withdrawals** — a payout goes to the merchant's own destination.
-  There is no payer.
+  There is no paying customer.
 - **Dynamic QR** — no phone is captured when a customer scans (see the
   column comment in
   `supabase/migrations/20260814090009_collections.sql`).
@@ -72,8 +72,8 @@ guessed, never substituted with the merchant's own number:
 ### The same number appears on Transactions
 
 The Transactions page (`/portal/transactions`) and its detail drawer show
-the same **Payer Phone**, resolved the same way through
-`app/services/payer_lookup.py`, and it is a column in that page's CSV
+the same **Customer Phone**, resolved the same way through
+`app/services/customer_lookup.py`, and it is a column in that page's CSV
 export and in the Transactions Summary report
 ([`docs/REPORTS.md`](./REPORTS.md)). One helper behind all of them, so
 the ledger and the transactions list cannot answer differently about who

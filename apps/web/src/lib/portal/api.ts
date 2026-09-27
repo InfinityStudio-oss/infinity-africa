@@ -42,7 +42,6 @@ import type {
   Transaction,
   WalletLedgerEntry,
   GeneratedReport,
-  ReportFormat,
   ReportType,
   WebhookConfig,
   WebhookConfigWithSecret,
@@ -887,7 +886,6 @@ export async function generateReport(input: {
   report_type: ReportType;
   start_date: string;
   end_date: string;
-  format: ReportFormat;
   recipients: string[];
 }): Promise<GeneratedReport> {
   return apiWrite<GeneratedReport>("/v1/merchant/reports", "POST", input);

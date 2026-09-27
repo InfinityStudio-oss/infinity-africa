@@ -18,7 +18,7 @@ from app.core.errors import InsufficientBalanceError
 from app.core.pagination import PaginationParams
 from app.core.time import dar_es_salaam_day_bounds_utc
 from app.services.crud import execute_maybe_single, get_by_id, insert_row
-from app.services.payer_lookup import payer_phones_for_collections
+from app.services.customer_lookup import customer_phones_for_collections
 
 
 def _get_or_create_ledger_account(
@@ -174,7 +174,7 @@ def _wallet_ledger_entries(
     reference/method/fee_amount/net_amount/status) for the Wallet Ledger's
     audit columns — batched in one query, not per-row.
 
-    The payer's phone comes through a second hop, transactions.collection_id
+    The customer's phone comes through a second hop, transactions.collection_id
     -> collections.customer_phone, resolved on read rather than copied onto
     ledger_entries at posting time. Two reasons. Writing it would mean
     changing post_ledger_entries (see supabase/migrations/
@@ -186,7 +186,8 @@ def _wallet_ledger_entries(
     every historic entry shows a phone immediately, with no backfill.
 
     Null for anything that is not a customer collection — a withdrawal has
-    no payer, and a DYNAMIC_QR scan has no phone to capture. Never guessed."""
+    no paying customer, and a DYNAMIC_QR scan has no phone to capture.
+    Never guessed."""
     account_id = _get_or_create_ledger_account(
         client, merchant_id=merchant_id, purpose="merchant_wallet", account_type="liability", currency=currency
     )
@@ -206,10 +207,10 @@ def _wallet_ledger_entries(
         txn_rows = client.table("transactions").select("*").in_("id", list(transaction_ids)).execute().data or []
         transactions_by_id = {t["id"]: t for t in txn_rows}
 
-    # Second hop for the payer's phone. Batched the same way, and only for
+    # Second hop for the customer's phone. Batched the same way, and only for
     # the transactions that actually reference a collection — withdrawals
     # never will.
-    payer_phone_by_collection = payer_phones_for_collections(
+    customer_phone_by_collection = customer_phones_for_collections(
         client, {t["collection_id"] for t in transactions_by_id.values() if t.get("collection_id")}
     )
 
@@ -245,7 +246,7 @@ def _wallet_ledger_entries(
                 "fee_amount": txn.get("fee_amount"),
                 "net_amount": txn.get("net_amount"),
                 "status": txn.get("status"),
-                "payer_phone": payer_phone_by_collection.get(txn.get("collection_id")),
+                "customer_phone": customer_phone_by_collection.get(txn.get("collection_id")),
             }
         )
     enriched.reverse()  # newest first, matching every other list endpoint's convention

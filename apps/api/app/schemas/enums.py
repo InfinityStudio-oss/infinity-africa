@@ -375,7 +375,3 @@ class ReportType(StrEnum):
     FEES_SUMMARY = "FEES_SUMMARY"
     CUSTOMER_STATEMENT = "CUSTOMER_STATEMENT"
 
-
-class ReportFormat(StrEnum):
-    PDF = "PDF"
-    CSV = "CSV"
