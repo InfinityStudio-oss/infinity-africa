@@ -423,3 +423,33 @@ def test_every_scheduler_starter_returns_a_task_or_none(monkeypatch):
                 task.cancel()
 
     asyncio.run(_check())
+
+
+def test_a_test_delivery_is_distinguishable_from_a_real_one():
+    """The test payload deliberately reads `event: collection.success` so a
+    merchant exercises their real success handler — which means a partner
+    keying only on that field would fulfil a fake order. Three independent
+    tells must therefore stay present; the partner doc tells integrators to
+    check them.
+    """
+    from app.routers.merchant_webhooks import _sample_test_payload
+
+    payload = _sample_test_payload({"merchant_code": "27413765"})
+
+    assert payload["test"] is True
+    assert payload["collection_id"] == "00000000-0000-0000-0000-000000000000"
+    assert payload["reference"] == "TXN-TEST0000"
+
+
+def test_a_real_delivery_never_claims_to_be_a_test(fake_client):
+    """The inverse, and the one that actually matters: if a real event ever
+    carried `test: true`, a correctly-written partner would silently drop a
+    genuine payment."""
+    merchant = _merchant(fake_client)
+    _event(fake_client, merchant, payload={"event": "collection.success", "collection_id": "col-1"})
+
+    with patch(_DELIVERY, return_value=_Response(200)) as post:
+        deliver_pending_webhooks(fake_client)
+
+    body = json.loads(post.call_args.kwargs["content"])
+    assert "test" not in body

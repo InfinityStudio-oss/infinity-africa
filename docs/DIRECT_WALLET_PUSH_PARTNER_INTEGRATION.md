@@ -183,6 +183,28 @@ Also sent: `X-Infinity-Event`, `X-Infinity-Delivery` (dedupe on this), and
 `X-Infinity-Timestamp` (Unix seconds; **not** signed — verify over the body
 alone).
 
+### Test deliveries look like real ones — on purpose
+
+**Send Test Webhook** posts a payload whose body reads
+`"event": "collection.success"` with `"status": "successful"`. That is
+deliberate: it means your real success handler is the thing being
+exercised, not a special-cased branch you would never run in production.
+
+It also means a handler that keys only on the body's `event` field will
+treat a test as a real payment. **Reject test deliveries explicitly**,
+using either signal:
+
+```python
+if payload.get("test") is True:
+    return 200          # acknowledge, do not fulfil
+if request.headers.get("X-Infinity-Event") == "webhook.test":
+    return 200
+```
+
+A test delivery also carries all-zero UUIDs for `collection_id` and
+`transaction_id`, and the reference `TXN-TEST0000`, so any of those is a
+reliable tell. Real events never set `test`.
+
 ### Retries
 
 Any `2xx` is success. Anything else retries up to **5 attempts** —
