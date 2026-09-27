@@ -21,6 +21,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
     label: "API Reference",
     items: [
       { label: "Collections API", href: "/developers/collections" },
+      { label: "Direct Wallet Push", href: "/developers/direct-wallet-push" },
       { label: "Dynamic QR API", href: "/developers/dynamic-qr" },
       { label: "Payment Links API", href: "/developers/payment-links" },
       { label: "Invoices API", href: "/developers/invoices" },
