@@ -180,7 +180,6 @@ def _start_disbursement_reconciliation_task() -> asyncio.Task | None:
     return asyncio.create_task(_disbursement_reconciliation_loop(interval))
 
 
-@contextlib.asynccontextmanager
 async def _webhook_delivery_loop(interval_seconds: float) -> None:
     """Drains the outbound merchant webhook queue on a timer.
 
@@ -212,6 +211,7 @@ def _start_webhook_delivery_task() -> asyncio.Task | None:
     return asyncio.create_task(_webhook_delivery_loop(interval))
 
 
+@contextlib.asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     tasks = [
         task

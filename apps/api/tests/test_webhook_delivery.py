@@ -19,6 +19,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from app.config import get_settings
 from app.core.secret_box import encrypt_secret
 from app.services.webhook_delivery import (
     _MAX_ATTEMPTS,
@@ -360,3 +361,65 @@ def test_a_non_2xx_is_not_treated_as_delivered(code, fake_client):
 
     with patch(_DELIVERY, return_value=_Response(code)):
         assert deliver_pending_webhooks(fake_client)["delivered"] == 0
+
+
+# --- the app must actually start --------------------------------------------
+
+
+def test_the_app_starts_with_the_delivery_scheduler_enabled(monkeypatch):
+    """Regression cover for a production outage.
+
+    Wiring the scheduler in placed the new loop function directly above
+    `lifespan` and, in doing so, took `@contextlib.asynccontextmanager`
+    with it — leaving `lifespan` undecorated and the loop wrapped as a
+    context manager. uvicorn failed with "Application startup failed.
+    Exiting." and the API would not boot.
+
+    `import app.main` succeeded throughout, which is exactly why it was
+    missed: importing the module never runs the lifespan. Entering
+    TestClient as a context manager does, the same way uvicorn does.
+    """
+    import inspect
+
+    from fastapi.testclient import TestClient
+
+    import app.main as main_module
+
+    monkeypatch.setenv("WEBHOOK_DELIVERY_INTERVAL_SECONDS", "30")
+    get_settings.cache_clear()
+
+    with TestClient(main_module.app) as test_client:
+        assert test_client.get("/health").status_code == 200
+
+    # The exact shape mix-up the outage came down to, asserted directly.
+    assert inspect.iscoroutinefunction(main_module._webhook_delivery_loop), (
+        "_webhook_delivery_loop must stay a plain coroutine function — "
+        "decorating it makes create_task() schedule the wrong object"
+    )
+
+
+def test_every_scheduler_starter_returns_a_task_or_none(monkeypatch):
+    """Each starter either schedules real work or opts out. Returning
+    anything else (a coroutine, a context manager) is the failure mode
+    that took the API down."""
+    import asyncio
+
+    import app.main as main_module
+
+    monkeypatch.setenv("WEBHOOK_DELIVERY_INTERVAL_SECONDS", "30")
+    get_settings.cache_clear()
+
+    async def _check():
+        for starter in (
+            main_module._start_checkout_reconciliation_task,
+            main_module._start_disbursement_reconciliation_task,
+            main_module._start_webhook_delivery_task,
+        ):
+            task = starter()
+            assert task is None or isinstance(task, asyncio.Task), (
+                f"{starter.__name__} returned {type(task).__name__}"
+            )
+            if task is not None:
+                task.cancel()
+
+    asyncio.run(_check())
