@@ -12,7 +12,7 @@
  *    real Supabase/session code not worth mocking just to read a metadata
  *    object two lines away.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -312,5 +312,46 @@ describe("private route groups are noindex", () => {
   it.each(privateLayoutFiles)("%s sets robots: { index: false, follow: false }", (relativePath) => {
     const layoutSource = source(relativePath);
     expect(layoutSource).toMatch(/robots:\s*{\s*index:\s*false,\s*follow:\s*false\s*}/);
+  });
+});
+
+describe("documented hostnames", () => {
+  // Two dead hosts shipped in the public docs: sandbox.infinitypay.me
+  // (there is no separate sandbox host — the API key picks the
+  // environment) and pay.infinitypay.me (payment links live at
+  // infinitypay.me/pay/{slug}). Neither resolves, so an integrator
+  // following the docs hits a DNS failure and reasonably concludes the
+  // integration is broken.
+  const REAL_HOSTS = new Set(["api.infinitypay.me", "infinitypay.me", "www.infinitypay.me"]);
+
+  function docsSources(): Array<[string, string]> {
+    const dir = join(appDir, "developers");
+    const out: Array<[string, string]> = [];
+    const walk = (current: string) => {
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        const full = join(current, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith(".tsx")) out.push([full, readFileSync(full, "utf8")]);
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  it("only advertises hostnames that actually exist", () => {
+    const offenders: string[] = [];
+    for (const [file, source] of docsSources()) {
+      for (const match of source.matchAll(/https:\/\/([a-z0-9.-]*infinitypay\.me)/g)) {
+        if (!REAL_HOSTS.has(match[1])) offenders.push(`${file}: ${match[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("does not claim a separate sandbox host", () => {
+    // Sandbox is chosen by the key (sk_test_), against the same base URL.
+    for (const [, source] of docsSources()) {
+      expect(source).not.toMatch(/sandbox\.infinitypay\.me/);
+    }
   });
 });

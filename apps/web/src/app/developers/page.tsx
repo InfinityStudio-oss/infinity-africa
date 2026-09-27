@@ -32,11 +32,16 @@ export default function DocsOverviewPage() {
       <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Base URL</h2>
         <p className="text-sm text-on-surface-variant mb-3">
-          Every endpoint in these docs is relative to your environment&apos;s base URL:
+          Every endpoint in these docs is relative to this base URL:
         </p>
-        <CodeBlock language="text">{`Production   https://api.infinitypay.me
-Sandbox      https://sandbox.infinitypay.me
-Local dev    http://localhost:8000`}</CodeBlock>
+        <CodeBlock language="text">{`https://api.infinitypay.me`}</CodeBlock>
+        <p className="text-sm text-on-surface-variant leading-relaxed mt-3">
+          There is no separate sandbox host. <strong>Your key decides the environment</strong> — an{" "}
+          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">sk_test_</code> key is
+          simulated and moves no money, an{" "}
+          <code className="font-mono text-xs bg-surface-container-low px-1.5 py-0.5 rounded">sk_live_</code> key is
+          real, and both go to the same address. Switching to production means swapping the key, not the URL.
+        </p>
       </section>
 
       <section className="mb-12">

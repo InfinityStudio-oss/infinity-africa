@@ -60,7 +60,7 @@ export default function PaymentLinksApiPage() {
     "expires_at": "2026-08-24T00:00:00Z",
     "status": "ACTIVE",
     "public_slug": "PLK-7X29QK",
-    "public_url": "https://pay.infinitypay.me/pay/PLK-7X29QK",
+    "public_url": "https://infinitypay.me/pay/PLK-7X29QK",
     "created_at": "2026-08-14T09:00:00Z",
     "updated_at": "2026-08-14T09:00:00Z"
   }

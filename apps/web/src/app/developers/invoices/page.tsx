@@ -103,7 +103,7 @@ export default function InvoicesApiPage() {
     "amount": "320000.00",
     "status": "ACTIVE",
     "public_slug": "PLK-4M18RT",
-    "public_url": "https://pay.infinitypay.me/link/PLK-4M18RT",
+    "public_url": "https://infinitypay.me/pay/PLK-4M18RT",
     "...": "same PaymentLinkResponse shape"
   }
 }`}</CodeBlock>
