@@ -190,7 +190,13 @@ async def _webhook_delivery_loop(interval_seconds: float) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
         try:
-            summary = deliver_pending_webhooks(get_supabase_admin())
+            # Off the event loop: deliver_pending_webhooks is synchronous
+            # and uses blocking httpx, so calling it directly here would
+            # stall every request this API is serving for the duration of
+            # the sweep — up to 50 sequential POSTs at an 8s timeout each.
+            # That is survivable at a trickle and not at all survivable
+            # during a billing run.
+            summary = await asyncio.to_thread(deliver_pending_webhooks, get_supabase_admin())
             # Only worth a line when it actually did something; an idle
             # queue every 30s would drown the log.
             if summary["due"]:

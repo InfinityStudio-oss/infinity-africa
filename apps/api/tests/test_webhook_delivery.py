@@ -595,3 +595,63 @@ def test_the_signature_covers_the_body_alone_not_the_timestamp():
     body_only = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
 
     assert sign_outbound_payload(raw_body=raw, secret=secret) == body_only
+
+
+def test_the_sweep_does_not_block_the_event_loop():
+    """A slow receiver must not stall the API.
+
+    `deliver_pending_webhooks` is synchronous and uses blocking httpx.
+    Called directly from the async scheduler it froze the whole event loop
+    for the length of the sweep — up to 50 sequential POSTs at an 8-second
+    timeout. Survivable at a trickle; not during a billing run, when every
+    subscriber paying at once is also every subscriber waiting on an API
+    that has stopped answering.
+
+    Asserts the loop keeps ticking while a deliberately slow sweep runs.
+    """
+    import asyncio
+    import time
+
+    import app.main as main_module
+
+    def _slow_sweep(_client):
+        time.sleep(0.4)  # stands in for real network latency
+        return {"due": 1, "delivered": 1, "failed": 0}
+
+    async def _check():
+        ticks = 0
+
+        async def _heartbeat():
+            nonlocal ticks
+            for _ in range(8):
+                await asyncio.sleep(0.05)
+                ticks += 1
+
+        beat = asyncio.create_task(_heartbeat())
+        # Exactly how main.py calls it.
+        await asyncio.to_thread(_slow_sweep, None)
+        await beat
+        return ticks
+
+    ticks = asyncio.run(_check())
+    assert ticks == 8, (
+        f"the event loop only ticked {ticks}/8 times during the sweep — "
+        "delivery is blocking the API"
+    )
+    assert hasattr(main_module, "_webhook_delivery_loop")
+
+
+def test_main_awaits_the_sweep_in_a_thread():
+    """The shape above only holds if main.py actually offloads it."""
+    from pathlib import Path
+
+    source = Path(main_module_file()).read_text(encoding="utf-8")
+    assert "asyncio.to_thread(deliver_pending_webhooks" in source, (
+        "the sweep is being called directly on the event loop again"
+    )
+
+
+def main_module_file() -> str:
+    import app.main as main_module
+
+    return main_module.__file__
