@@ -11,7 +11,7 @@ and Selcom sequencing see
 
 1. Choose a withdrawal method and destination provider.
 2. Enter the destination phone number or bank account number, the amount,
-   and optionally notes.
+   and optionally notes. That is the whole form.
 3. **Check Balance** — a read-only quote. Nothing is created.
 4. **Request Withdrawal** — opens a review step. Still nothing created, and
    no request has left the browser.
@@ -52,6 +52,41 @@ integrator still sending one are unaffected.
 
 Consequence for Super Admin: for phone-based withdrawals the `destination`
 column now mirrors `destination_identifier`. Both are still shown.
+
+## The merchant does not enter a bank name or a network either
+
+Removed 2026-09-27, for the same reason and with the same approach. Both
+are already decided by the **Destination Provider** the merchant picks:
+choosing "CRDB Bank" names the bank, and choosing "M-Pesa" names the
+network. Asking again was asking them to retype a value the form already
+held.
+
+The Network box was actively misleading in practice — with the recipient
+name field gone from above it, merchants started typing a person's name
+into it.
+
+Both are now derived server-side from `destination_code`, by
+`WithdrawalCreate.resolved_bank_name` and `resolved_network`, using
+`DESTINATION_CODE_LABELS` in `app/schemas/enums.py`. A value explicitly
+sent still wins, so the `/v1/disbursements/*` routes and any integrator
+posting one are unaffected.
+
+`disbursements` has a CHECK constraint requiring a `bank_name` for
+`BANK_ACCOUNT`, and it is still satisfied — the derived value is never
+blank. The account number is still required: nothing derives that.
+
+### The two label maps must not drift
+
+The stored bank name on a real payout now comes from
+`DESTINATION_CODE_LABELS`, and the web app renders its own copy in
+`packages/shared/src/destination-code.ts`. If the two disagreed, a
+merchant would see one bank on screen while a different name was recorded
+and sent to the provider — and nothing else would notice, because each
+side is internally consistent.
+
+`apps/api/tests/test_destination_code_labels.py` parses the TypeScript
+file and compares it entry by entry, rather than keeping a third hardcoded
+mirror that could also fall out of date.
 
 ## Email verification (OTP)
 

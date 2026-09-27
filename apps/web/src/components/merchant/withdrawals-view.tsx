@@ -80,8 +80,6 @@ export function WithdrawalsView() {
     DESTINATION_CODES_BY_METHOD[DisbursementMethod.SELCOM_PESA][0],
   );
   const [recipientIdentifier, setRecipientIdentifier] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [network, setNetwork] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -164,10 +162,6 @@ export function WithdrawalsView() {
       setError("Enter a valid withdrawal amount.");
       return;
     }
-    if (method === DisbursementMethod.BANK_ACCOUNT && !bankName) {
-      setError("Bank name is required for bank account payouts.");
-      return;
-    }
     if (!quote || quoteIsStale) {
       setError("Check your balance before confirming this withdrawal.");
       return;
@@ -196,8 +190,8 @@ export function WithdrawalsView() {
         // inventing it. The backend derives its own display label.
         destination_identifier: recipientIdentifier,
         destination_code: destinationCode,
-        bank_name: method === DisbursementMethod.BANK_ACCOUNT ? bankName : null,
-        network: method === DisbursementMethod.MOBILE_MONEY ? network || null : null,
+        // Neither bank_name nor network is sent. The destination provider
+        // already identifies both, and the backend derives them from it.
         amount,
         description: notes || null,
       });
@@ -311,36 +305,6 @@ export function WithdrawalsView() {
               />
             </div>
           </div>
-          {/* Only rendered when the chosen method actually has a field to
-              put here — Selcom Pesa has neither, and an empty grid row
-              leaves a visible gap. */}
-          {(method === DisbursementMethod.BANK_ACCOUNT || method === DisbursementMethod.MOBILE_MONEY) && (
-          <div className="grid sm:grid-cols-2 gap-5">
-            {method === DisbursementMethod.BANK_ACCOUNT && (
-              <div>
-                <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Bank Name</label>
-                <input
-                  className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
-                  placeholder="e.g. CRDB Bank"
-                  type="text"
-                  value={bankName}
-                  onChange={(event) => setBankName(event.target.value)}
-                />
-              </div>
-            )}
-            {method === DisbursementMethod.MOBILE_MONEY && (
-              <div>
-                <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Network (optional)</label>
-                <input
-                  className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
-                  placeholder="Detected from destination provider"
-                  value={network}
-                  onChange={(event) => setNetwork(event.target.value)}
-                />
-              </div>
-            )}
-          </div>
-          )}
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Amount (TZS)</label>
@@ -484,7 +448,6 @@ export function WithdrawalsView() {
           method={method}
           destinationCode={destinationCode}
           destinationIdentifier={recipientIdentifier}
-          bankName={bankName}
           amount={amount}
           balance={balance}
           busy={submitting}
@@ -501,8 +464,6 @@ export function WithdrawalsView() {
             setDisbursements((prev) => [disbursement, ...prev]);
             // Cleared only now, once the withdrawal actually exists.
             setRecipientIdentifier("");
-            setBankName("");
-            setNetwork("");
             setAmount("");
             setNotes("");
             setQuote(null);

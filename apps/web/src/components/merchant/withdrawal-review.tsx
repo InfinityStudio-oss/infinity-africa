@@ -30,7 +30,6 @@ export function WithdrawalReview({
   method,
   destinationCode,
   destinationIdentifier,
-  bankName,
   amount,
   balance,
   busy,
@@ -43,7 +42,6 @@ export function WithdrawalReview({
   method: DisbursementMethod;
   destinationCode: string;
   destinationIdentifier: string;
-  bankName: string;
   amount: string;
   balance: string;
   busy: boolean;
@@ -80,9 +78,6 @@ export function WithdrawalReview({
               as though there were two different things to check. */}
           {destinationLabel !== methodLabel ? (
             <Row label="Destination" value={destinationLabel} />
-          ) : null}
-          {method === DisbursementMethod.BANK_ACCOUNT && bankName ? (
-            <Row label="Bank" value={bankName} />
           ) : null}
           <Row
             label={method === DisbursementMethod.BANK_ACCOUNT ? "Account number" : "Phone number"}

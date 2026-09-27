@@ -409,4 +409,87 @@ describe("WithdrawalsView", () => {
       ).toBeInTheDocument(),
     );
   });
+
+  // --- bank name and network are implied by the provider -------------------
+
+  it("does not ask for a bank name on a bank withdrawal", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request a Withdrawal")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Withdraw to Bank Account"));
+
+    expect(screen.queryByText("Bank Name")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("e.g. CRDB Bank")).not.toBeInTheDocument();
+  });
+
+  it("does not ask for a network on a mobile money withdrawal", async () => {
+    // This field was being filled in with a person's name, because the
+    // recipient-name box had just been removed from above it.
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request a Withdrawal")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Withdraw to Mobile Money"));
+
+    expect(screen.queryByText("Network (optional)")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Detected from destination provider")).not.toBeInTheDocument();
+  });
+
+  it("sends neither a bank name nor a network", async () => {
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await fillFormAndCheckBalance();
+    await requestAndConfirmReview();
+
+    await waitFor(() => expect(createDisbursement).toHaveBeenCalledTimes(1));
+    const sent = createDisbursement.mock.calls[0][0];
+    expect(sent).not.toHaveProperty("bank_name");
+    expect(sent).not.toHaveProperty("network");
+  });
+
+  it("submits a bank withdrawal with only a provider, account number and amount", async () => {
+    createDisbursement.mockResolvedValueOnce(CHALLENGE);
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request a Withdrawal")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Withdraw to Bank Account"));
+    fireEvent.change(screen.getByPlaceholderText("+255 7XX XXX XXX or account no."), {
+      target: { value: "0123456789" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
+    fireEvent.click(screen.getByText("Check Balance"));
+    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
+
+    await requestAndConfirmReview();
+
+    await waitFor(() => expect(createDisbursement).toHaveBeenCalledTimes(1));
+    expect(createDisbursement.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ method: "BANK_ACCOUNT", destination_identifier: "0123456789" }),
+    );
+  });
+
+  it("names the bank on the review step from the provider that was picked", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request a Withdrawal")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Withdraw to Bank Account"));
+    fireEvent.change(screen.getByPlaceholderText("+255 7XX XXX XXX or account no."), {
+      target: { value: "0123456789" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
+    fireEvent.click(screen.getByText("Check Balance"));
+    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
+    // The bank is still stated, just not retyped — it comes from the
+    // destination provider the merchant already chose.
+    expect(within(dialog).getByText("CRDB Bank")).toBeInTheDocument();
+    expect(within(dialog).getByText("Account number")).toBeInTheDocument();
+  });
 });

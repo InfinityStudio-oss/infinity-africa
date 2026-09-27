@@ -167,6 +167,38 @@ class DestinationCode(StrEnum):
     TCB = "TCB"
 
 
+# Display names for each destination provider. The merchant picks a
+# provider and nothing else: the bank name and the mobile-money network
+# are both implied by that choice, so they are derived from here rather
+# than typed in (see WithdrawalCreate.resolved_bank_name/resolved_network).
+#
+# Must stay identical to packages/shared/src/destination-code.ts's
+# DESTINATION_CODE_LABELS — a real payout's stored bank name now comes from
+# this map, so a drift between the two would mean the merchant picked one
+# bank and a different name was recorded. tests/test_destination_code_labels.py
+# reads that file and fails if they diverge.
+DESTINATION_CODE_LABELS: dict[DestinationCode, str] = {
+    DestinationCode.SELCOM: "Selcom Pesa",
+    DestinationCode.MPESA: "M-Pesa",
+    DestinationCode.AIRTELMONEY: "Airtel Money",
+    DestinationCode.HALOPESA: "HaloPesa",
+    DestinationCode.MIXXBYYAS: "Mixx by Yas (Tigo Pesa)",
+    DestinationCode.TTCLPESA: "TTCL Pesa",
+    DestinationCode.CRDB: "CRDB Bank",
+    DestinationCode.NMB: "NMB Bank",
+    DestinationCode.NBC: "NBC Bank",
+    DestinationCode.ABSA: "Absa Bank",
+    DestinationCode.BOA: "Bank of Africa",
+    DestinationCode.DTB: "Diamond Trust Bank",
+    DestinationCode.EQUITY: "Equity Bank",
+    DestinationCode.EXIM: "Exim Bank",
+    DestinationCode.KCB: "KCB Bank",
+    DestinationCode.STANBIC: "Stanbic Bank",
+    DestinationCode.SCB: "Standard Chartered Bank",
+    DestinationCode.TCB: "Tanzania Commercial Bank",
+}
+
+
 class WebhookEvent(StrEnum):
     """Event names delivered to merchant webhook endpoints."""
 

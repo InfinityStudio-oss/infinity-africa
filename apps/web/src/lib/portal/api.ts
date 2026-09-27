@@ -381,10 +381,10 @@ export interface CreateDisbursementInput {
    * lookup resolves one, so the backend derives its own display label
    * from the destination rather than being handed an unverified name. */
   destination_identifier: string;
+  /** Identifies the bank or the mobile-money network on its own, so
+   * neither is collected separately — the backend derives them from it. */
   destination_code: string;
-  bank_name: string | null;
   amount: string;
-  network?: string | null;
   description?: string | null;
 }
 
@@ -392,16 +392,13 @@ export class InsufficientBalanceError extends Error {}
 
 export async function createDisbursement(input: CreateDisbursementInput): Promise<WithdrawalOtpChallenge> {
   const isBank = input.method === "BANK_ACCOUNT";
-  const isMobileMoney = input.method === "MOBILE_MONEY";
   const payload = {
     method: input.method,
     amount: input.amount,
     currency: "TZS",
     destination_code: input.destination_code,
     destination_phone: isBank ? null : input.destination_identifier,
-    bank_name: isBank ? input.bank_name : null,
     bank_account_number: isBank ? input.destination_identifier : null,
-    network: isMobileMoney ? (input.network ?? null) : null,
     description: input.description ?? null,
   };
 

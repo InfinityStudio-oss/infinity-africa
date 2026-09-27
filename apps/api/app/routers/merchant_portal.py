@@ -1186,8 +1186,10 @@ async def create_my_withdrawal(
         "destination_name": payload.resolved_destination_name,
         "destination_identifier": payload.destination_identifier,
         "destination_code": payload.destination_code,
-        "bank_name": payload.bank_name if payload.method.value == "BANK_ACCOUNT" else None,
-        "network": payload.network if payload.method.value == "MOBILE_MONEY" else None,
+        # Derived from destination_code, not typed by the merchant — see
+        # WithdrawalCreate.resolved_bank_name/resolved_network.
+        "bank_name": payload.resolved_bank_name,
+        "network": payload.resolved_network,
         "description": payload.description,
         # Carried so the eventual withdrawal inherits the caller's key —
         # replaying the same key cannot create two withdrawals.

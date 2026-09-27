@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.phone import validate_and_normalize_phone
 from app.schemas.enums import (
+    DESTINATION_CODE_LABELS,
     LEGACY_ALLOWED_PAYMENT_METHODS_DEFAULT,
     CollectionMethod,
     DestinationCode,
@@ -245,9 +246,12 @@ class WithdrawalCreate(BaseModel):
     # (the Merchant Portal withdrawal form collects one for every method).
     destination_name: str | None = None
     destination_phone: str | None = None
-    # Optional, MOBILE_MONEY-only in practice — Selcom's real requirement
-    # here is unverified (see app/services/selcom/withdrawals.py), so this
-    # stays unvalidated rather than guessing a required/allowed-values list.
+    # Both of these are implied by destination_code — a merchant who picked
+    # "CRDB Bank" has already named the bank, and one who picked "M-Pesa"
+    # has already named the network. The portal no longer asks for either;
+    # they stay accepted so the /v1/disbursements/* routes and any
+    # integrator still sending them keep working, and are otherwise derived
+    # by resolved_bank_name/resolved_network below.
     network: str | None = None
     bank_name: str | None = None
     bank_account_number: str | None = None
@@ -257,8 +261,11 @@ class WithdrawalCreate(BaseModel):
     @model_validator(mode="after")
     def _validate_destination(self) -> "WithdrawalCreate":
         if self.method == DisbursementMethod.BANK_ACCOUNT:
-            if not self.bank_name or not self.bank_account_number:
-                raise ValueError("bank_name and bank_account_number are required for BANK_ACCOUNT withdrawals")
+            # bank_name is no longer required: destination_code already
+            # identifies the bank, and resolved_bank_name derives it. The
+            # account number has no such source and is still required.
+            if not self.bank_account_number:
+                raise ValueError("bank_account_number is required for BANK_ACCOUNT withdrawals")
         else:
             if not self.destination_phone:
                 raise ValueError("destination_phone is required for this withdrawal method")
@@ -279,6 +286,29 @@ class WithdrawalCreate(BaseModel):
         if self.method == DisbursementMethod.BANK_ACCOUNT:
             return self.bank_account_name or self.bank_account_number or "Bank withdrawal"
         return self.destination_name or self.destination_phone or "Withdrawal"
+
+    @property
+    def resolved_bank_name(self) -> str | None:
+        """The bank, for BANK_ACCOUNT withdrawals.
+
+        disbursements has a CHECK constraint requiring a bank_name for this
+        method, and the merchant no longer types one — but they did choose
+        the bank in the destination-provider picker, so the label for that
+        code is the bank, not a guess. A value explicitly sent by an
+        integrator still wins.
+        """
+        if self.method != DisbursementMethod.BANK_ACCOUNT:
+            return None
+        return self.bank_name or DESTINATION_CODE_LABELS.get(self.destination_code)
+
+    @property
+    def resolved_network(self) -> str | None:
+        """The mobile-money network, recorded on the disbursement's
+        metadata. Same reasoning: the merchant picked "M-Pesa" in the
+        provider list, so there is nothing for them to retype."""
+        if self.method != DisbursementMethod.MOBILE_MONEY:
+            return None
+        return self.network or DESTINATION_CODE_LABELS.get(self.destination_code)
 
 
 # --- Team / Users ------------------------------------------------------------

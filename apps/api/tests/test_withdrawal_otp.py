@@ -647,3 +647,113 @@ def test_a_failing_audit_write_does_not_mask_the_real_validation_error(fake_clie
     response = _request(user_id, _body(amount="999999"))
 
     assert response.status_code < 500, response.text
+
+
+# --- bank name and network are derived, not typed --------------------------
+
+
+def _bank_body(**overrides):
+    return {
+        "method": "BANK_ACCOUNT",
+        "amount": "10000",
+        "destination_code": "CRDB",
+        "bank_account_number": "0123456789",
+        **overrides,
+    }
+
+
+def test_a_bank_withdrawal_needs_no_bank_name(fake_client):
+    """destination_code already identifies the bank, so the portal stopped
+    asking. A request omitting bank_name must be accepted."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(user_id, _bank_body())
+
+    assert response.status_code == 202, response.text
+
+
+def test_the_bank_name_is_derived_from_the_chosen_provider(fake_client):
+    """The disbursements CHECK constraint requires a bank_name for this
+    method, and a real payout stores it — so it must be the bank the
+    merchant actually picked, never blank."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(user_id, _bank_body(destination_code="NMB"))
+
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["bank_name"] == "NMB Bank"
+
+
+def test_a_derived_bank_name_survives_to_the_created_withdrawal(fake_client):
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    challenge_id = _request(user_id, _bank_body()).json()["data"]["challenge_id"]
+    verified = _verify(user_id, challenge_id, _code_for(fake_client, challenge_id))
+
+    assert verified.status_code == 202, verified.text
+    row = next(
+        r for r in fake_client.table("disbursements")._table.rows if r["id"] == verified.json()["data"]["id"]
+    )
+    assert row["bank_name"] == "CRDB Bank"
+
+
+def test_an_explicit_bank_name_still_wins(fake_client):
+    """The field stayed accepted so /v1/disbursements/* and any integrator
+    sending one keep working."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(user_id, _bank_body(bank_name="CRDB Bank PLC, Mwanza branch"))
+
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["bank_name"] == "CRDB Bank PLC, Mwanza branch"
+
+
+def test_a_bank_withdrawal_still_needs_an_account_number(fake_client):
+    """Unlike the bank name, nothing derives this one."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    body = _bank_body()
+    del body["bank_account_number"]
+
+    assert _request(user_id, body).status_code == 422
+
+
+def test_the_network_is_derived_from_the_chosen_provider(fake_client):
+    """The Network box was being filled in with a person's name after the
+    recipient-name field above it was removed. It is the provider."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    response = _request(
+        user_id,
+        {
+            "method": "MOBILE_MONEY",
+            "amount": "10000",
+            "destination_code": "MPESA",
+            "destination_phone": "+255700000000",
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["network"] == "M-Pesa"
+
+
+def test_a_selcom_pesa_withdrawal_carries_neither(fake_client):
+    """Neither concept applies, and inventing a value would put a bank name
+    on something that is not a bank transfer."""
+    merchant_id, user_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund(fake_client, merchant_id)
+
+    body = _body()
+    del body["destination_name"]
+    response = _request(user_id, body)
+
+    stored = _challenge_row(fake_client, response.json()["data"]["challenge_id"])["withdrawal_payload"]
+    assert stored["bank_name"] is None
+    assert stored["network"] is None
