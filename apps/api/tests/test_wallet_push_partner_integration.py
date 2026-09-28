@@ -460,3 +460,90 @@ def test_sending_your_own_merchant_id_still_works(fake_client):
 
     with patch(_PUSH, return_value=_fake_collection(merchant["id"])):
         assert _push(secret, _body(merchant["id"])).status_code == 202
+
+
+# --- rate limiting ----------------------------------------------------------
+#
+# A billing platform calls for many merchants from ONE address, so a limit
+# keyed only on the source address makes those merchants share a bucket.
+# See the collection_create_max_per_minute_* settings.
+
+
+def _limits(monkeypatch, *, per_ip, per_key):
+    monkeypatch.setenv("COLLECTION_CREATE_MAX_PER_MINUTE_PER_IP", str(per_ip))
+    monkeypatch.setenv("COLLECTION_CREATE_MAX_PER_MINUTE_PER_KEY", str(per_key))
+    get_settings.cache_clear()
+
+
+def _push_until_refused(secret, merchant_id, *, ceiling=40):
+    """Pushes until one is refused, returning how many were accepted.
+    `ceiling` only stops a broken limit from looping forever."""
+    for accepted in range(ceiling):
+        with patch(_PUSH, return_value=_fake_collection(merchant_id)):
+            if _push(secret, _body(merchant_id)).status_code != 202:
+                return accepted
+    raise AssertionError(f"never refused after {ceiling} pushes")
+
+
+def test_one_merchants_billing_run_does_not_lock_out_another_on_the_same_address(
+    fake_client, monkeypatch
+):
+    """The regression this limit exists for. Both merchants reach us from
+    one billing platform, so both present the same source address."""
+    _limits(monkeypatch, per_ip=10, per_key=3)
+    busy = _approved(fake_client)
+    quiet = _approved(fake_client)
+    busy_key = _api_key(fake_client, busy["id"])
+    quiet_key = _api_key(fake_client, quiet["id"])
+
+    _push_until_refused(busy_key, busy["id"])
+
+    with patch(_PUSH, return_value=_fake_collection(quiet["id"])):
+        response = _push(quiet_key, _body(quiet["id"]))
+
+    assert response.status_code == 202, "a neighbour's billing run exhausted the shared bucket"
+
+
+def test_a_single_key_is_capped_and_told_when_to_retry(fake_client, monkeypatch):
+    _limits(monkeypatch, per_ip=50, per_key=3)
+    merchant = _approved(fake_client)
+    secret = _api_key(fake_client, merchant["id"])
+
+    assert _push_until_refused(secret, merchant["id"]) == 3
+
+    with patch(_PUSH) as push:
+        response = _push(secret, _body(merchant["id"]))
+
+    assert response.status_code == 429
+    assert int(response.headers["Retry-After"]) > 0
+    # A refused push must never reach Selcom.
+    push.assert_not_called()
+
+
+def test_the_shared_address_still_has_a_ceiling_of_its_own(fake_client, monkeypatch):
+    """Per-key alone would let one host open many keys and concentrate
+    their combined traffic onto Selcom, so the address limit stays.
+
+    Note that a push refused by the per-key limit still spends address
+    budget — rejecting it is work we did. That is why the first key's
+    four requests (three accepted, one refused) leave four of the six.
+    """
+    _limits(monkeypatch, per_ip=6, per_key=3)
+    first = _approved(fake_client)
+    second = _approved(fake_client)
+    first_key = _api_key(fake_client, first["id"])
+    second_key = _api_key(fake_client, second["id"])
+
+    assert _push_until_refused(first_key, first["id"]) == 3
+
+    # The second key has its own untouched per-key allowance of 3, but
+    # only two of the address's six remain.
+    for _ in range(2):
+        with patch(_PUSH, return_value=_fake_collection(second["id"])):
+            assert _push(second_key, _body(second["id"])).status_code == 202
+
+    with patch(_PUSH) as push:
+        response = _push(second_key, _body(second["id"]))
+
+    assert response.status_code == 429
+    push.assert_not_called()

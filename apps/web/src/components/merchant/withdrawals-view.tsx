@@ -184,12 +184,18 @@ export function WithdrawalsView() {
     // up the merchant, so nothing here is awaited before showing the step.
     setRecipientName(null);
     setResolvingName(true);
+    // .catch before .finally, not instead of it: `void` silences the
+    // linter but not the runtime, and `.finally` re-throws what it was
+    // handed, so without this a failed lookup surfaced as an unhandled
+    // rejection. The review already renders "Name not available" from a
+    // null name, which is the right thing to show either way.
     void resolveWithdrawalRecipient({
       method,
       destination_code: destinationCode,
       destination_identifier: recipientIdentifier,
     })
       .then(setRecipientName)
+      .catch(() => setRecipientName(null))
       .finally(() => setResolvingName(false));
   }
 

@@ -18,6 +18,7 @@ before scaling horizontally.
 import hashlib
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 from threading import Lock
 
 from fastapi import Request
@@ -74,18 +75,27 @@ class _InMemoryRateLimiter:
 _limiter = _InMemoryRateLimiter()
 
 
-def rate_limit(*, scope: str, limit: int, window_seconds: float):
+def rate_limit(*, scope: str, limit: int | Callable[[], int], window_seconds: float):
     """Returns a FastAPI dependency: `Depends(rate_limit(scope="...",
     limit=N, window_seconds=W))`. `scope` namespaces the bucket so the
     same caller IP is tracked independently per endpoint/purpose — hitting
     the limit on one scope never affects another. Keyed by IP (via
     app.core.request_ip.client_ip); a request with no resolvable client IP
     at all (host missing, e.g. some test clients) falls back to a shared
-    "unknown" bucket rather than skipping the limit entirely."""
+    "unknown" bucket rather than skipping the limit entirely.
+
+    `limit` may be a callable, evaluated per request rather than frozen at
+    import time. That is what lets a limit come from Settings: the
+    dependency is built while the router module is still being imported,
+    long before get_settings() should be touched, and a test that
+    overrides a limit needs the new value to take effect without
+    re-importing the router.
+    """
 
     def _dependency(request: Request) -> None:
         ip = client_ip(request) or "unknown"
-        _limiter.check(f"{scope}:{ip}", limit=limit, window_seconds=window_seconds)
+        resolved = limit() if callable(limit) else limit
+        _limiter.check(f"{scope}:{ip}", limit=resolved, window_seconds=window_seconds)
 
     return _dependency
 

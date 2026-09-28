@@ -134,8 +134,15 @@ every retry of that attempt. Do not reuse it for a genuinely new payment.
 
 ## Webhooks
 
-Configure the URL and generate a signing secret in the portal, or via
-`PATCH /v1/merchant/webhook-config`.
+The merchant sets the URL and generates a signing secret **in the
+portal**, signed in to their own account.
+
+**Your API key cannot do this for them.** `PATCH
+/v1/merchant/webhook-config` exists but requires a dashboard session, not
+an API key, so there is no way to register a receiving URL
+programmatically. If you are a platform onboarding merchants, show each
+one the URL you expect to receive on and have them paste it in
+themselves; the signing secret comes back to you the same way, by hand.
 
 Delivery is automatic. Events relevant here:
 
@@ -267,6 +274,35 @@ Inspect attempts at `GET /v1/merchant/webhook-events`.
 
 Handle unknown codes gracefully — the set can grow.
 
+## Rate limits
+
+Creation endpoints are limited on two dimensions at once, per minute:
+
+| Limit | Default | Applies to |
+|---|---|---|
+| Per API key | 30 | Each key independently |
+| Per source address | 60 | Everything arriving from one address |
+
+Both matter to a platform. Your merchants share the second one, because
+they all reach us from your servers — so the address limit, not the key
+limit, is what a bulk run hits first. The key limit is there so one
+merchant's billing cycle cannot consume the whole allowance and lock out
+its neighbours.
+
+Over either limit you get `429` with a `Retry-After` header in seconds.
+Honour it: the limits are deliberately close to what our payment
+provider will accept downstream, so pacing against `Retry-After` is
+faster end to end than retrying hard and being refused again.
+
+For a bulk run, pace at roughly **one request per second per key** and
+spread merchants across the run rather than finishing one before
+starting the next. A refused request still counts against the address
+limit, so retrying into a `429` makes the queue longer, not shorter.
+
+If your volume needs more than this, ask before the run rather than
+discovering it mid-cycle — the ceiling is a provider limit, not an
+arbitrary one, and raising it is a conversation with them.
+
 ## IP allowlist (optional)
 
 Off by default: a valid key from any address works.
@@ -356,5 +392,19 @@ retry five times and then stop, which is the intended behaviour.
 - Confirm `SELCOM_OUTBOUND_MAX_PER_MINUTE` against Selcom's real limit.
   It is currently a guess (60), and a billing run across hundreds of
   subscribers is exactly the burst it was set for.
+
+  This number is now load-bearing twice over:
+  `COLLECTION_CREATE_MAX_PER_MINUTE_PER_IP` defaults to the same 60,
+  deliberately, so we reject at the door rather than queueing requests
+  behind a provider slot that will not free in time. If Selcom confirms
+  a higher limit, raise both together; raising only the inbound one
+  moves the queue rather than removing it.
+
+- The inbound creation limit was per-IP only, at 20/min, which one
+  aggregator's billing run exhausted in seconds while also starving
+  every other merchant behind the same address. It is now per-IP **and**
+  per-key (`COLLECTION_CREATE_MAX_PER_MINUTE_PER_KEY`, default 30). The
+  per-key half is what makes an aggregator workable; the per-IP half is
+  what stops one host multiplying its allowance by opening more keys.
 - Bound the reconciliation sweep, which polls Selcom once per pending
   collection and shares that same budget.

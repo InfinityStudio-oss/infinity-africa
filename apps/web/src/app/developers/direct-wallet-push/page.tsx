@@ -87,6 +87,12 @@ export default function DirectWalletPushPage() {
           With no webhook URL configured, no events are sent at all — silently, with no error. If you plan to react
           to payment outcomes rather than poll for them, confirm the business has set one before going live.
         </Callout>
+        <Callout title="You cannot set the webhook URL for them">
+          Steps 3 and 4 are done by hand, in the portal, by someone signed in to that business&apos;s own account.
+          There is no API-key route to register a receiving URL. If you onboard businesses at scale, show each one
+          the URL you expect to receive on and have them paste it in; the signing secret comes back to you the same
+          way.
+        </Callout>
       </section>
 
       <section className="mb-12">
@@ -441,6 +447,22 @@ def handle_webhook(request):
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="mb-12">
+        <h2 className="text-xl font-semibold text-on-surface mb-3">Rate limits</h2>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Creation endpoints are limited on two dimensions at once, per minute: <strong>30 per API key</strong> and{" "}
+          <strong>60 per source address</strong>. If you are a platform calling on behalf of several businesses,
+          they all reach us from your servers and therefore share the second limit — so that is the one a bulk run
+          hits first. The per-key limit exists so one business&apos;s billing cycle cannot consume the whole
+          allowance and lock out its neighbours.
+        </p>
+        <p className="text-sm text-on-surface-variant leading-relaxed">
+          Over either limit you get <Code>429</Code> with a <Code>Retry-After</Code> header in seconds. For a bulk
+          run, pace at roughly one request per second per key. A refused request still counts against the address
+          limit, so retrying hard into a <Code>429</Code> makes the queue longer, not shorter.
+        </p>
       </section>
 
       <section className="mb-12">

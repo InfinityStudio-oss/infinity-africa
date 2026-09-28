@@ -41,6 +41,30 @@ class Settings(BaseSettings):
     selcom_circuit_breaker_failure_threshold: int = 10
     selcom_circuit_breaker_cooldown_seconds: int = 60
 
+    # Inbound limits on the public Collections API's creation endpoints.
+    #
+    # Two dimensions, because either alone has a hole. Per-IP alone
+    # punishes an aggregator: a billing platform serving many merchants
+    # calls from one address, so every merchant behind it shares one
+    # bucket and the busiest starves the rest (a real finding -- the
+    # per-IP limit was 20/min, which a single monthly billing run
+    # exhausted in seconds). Per-key alone lets one host open many keys
+    # and concentrate their combined traffic onto Selcom.
+    #
+    # These REJECT (429 + Retry-After) rather than queue, deliberately
+    # unlike selcom_outbound_* above, which makes callers wait. Waiting
+    # is right for a slot that frees in milliseconds; it is wrong here,
+    # where a bulk run would otherwise park hundreds of requests holding
+    # open connections until the client times out and retries them all.
+    # A 429 with Retry-After lets an integrator pace deterministically.
+    #
+    # The real ceiling is selcom_outbound_max_per_minute, shared with the
+    # reconciliation sweep, so the per-IP default sits at it rather than
+    # above it. Raise both once Selcom confirms their actual limit --
+    # 60 is still our own guess (docs/DIRECT_WALLET_PUSH_PARTNER_INTEGRATION.md).
+    collection_create_max_per_minute_per_ip: int = 60
+    collection_create_max_per_minute_per_key: int = 30
+
     # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
     # When true, require_super_admin additionally demands a Supabase `aal2`
     # session — a Super Admin holding only a password is refused with

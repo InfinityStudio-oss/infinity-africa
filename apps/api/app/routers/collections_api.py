@@ -29,9 +29,10 @@ from app.auth import (
     get_authenticated_caller,
     require_api_key_scope,
 )
+from app.config.settings import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationAPIError
 from app.core.feature_flags import require_collections_enabled
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedCaller
 from app.schemas.collections_api import (
@@ -122,6 +123,36 @@ def _push_message(collection: dict, *, pending_message: str) -> str:
     return pending_message
 
 
+def _collection_create_ip_limit() -> int:
+    return get_settings().collection_create_max_per_minute_per_ip
+
+
+def _enforce_caller_create_limit(caller: AuthenticatedCaller) -> None:
+    """The second half of the creation limit — see the
+    collection_create_max_per_minute_* settings for why one dimension is
+    not enough.
+
+    The `rate_limit` dependency on each endpoint can only key on the
+    source address, because it runs before the caller is resolved. That
+    is the wrong dimension for a billing platform: it calls for many
+    merchants from one host, so without this they share a single bucket
+    and whichever merchant runs its billing cycle first locks the others
+    out. Keying on the caller as well gives each merchant its own
+    allowance inside the host's.
+
+    Keyed on the actor rather than the merchant so that a merchant who
+    splits traffic across several API keys (staging vs production
+    workers, one key per region) gets an allowance per key. The IP limit
+    is what stops that being a way to multiply the total.
+    """
+    enforce_rate_limit(
+        scope="collection_create_caller",
+        key=f"{caller.actor_type}:{caller.actor_id}",
+        limit=get_settings().collection_create_max_per_minute_per_key,
+        window_seconds=60,
+    )
+
+
 def _status_response(row: dict) -> CollectionStatusResponse:
     return CollectionStatusResponse(
         collection_id=uuid.UUID(row["id"]),
@@ -146,7 +177,10 @@ async def create_collection(
     payload: CollectionCreateRequest,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-    _rate_limit: Annotated[None, Depends(rate_limit(scope="collection_create", limit=20, window_seconds=60))],
+    _rate_limit: Annotated[
+        None,
+        Depends(rate_limit(scope="collection_create", limit=_collection_create_ip_limit, window_seconds=60)),
+    ],
 ):
     """The recommended flow for ecommerce/mobile apps: creates an
     Infinity Payment Page (internally the same payment_links resource
@@ -158,6 +192,7 @@ async def create_collection(
     merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
+    _enforce_caller_create_limit(caller)
     client = get_supabase_admin()
 
     async def _handler() -> tuple[int, dict]:
@@ -217,7 +252,10 @@ async def create_wallet_push_collection(
     payload: CollectionPushCreateRequest,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-    _rate_limit: Annotated[None, Depends(rate_limit(scope="collection_create", limit=20, window_seconds=60))],
+    _rate_limit: Annotated[
+        None,
+        Depends(rate_limit(scope="collection_create", limit=_collection_create_ip_limit, window_seconds=60)),
+    ],
 ):
     """Sends a real Mobile Money Push prompt immediately — best for a
     checkout where you already have the customer's phone number. A
@@ -229,6 +267,7 @@ async def create_wallet_push_collection(
     merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
+    _enforce_caller_create_limit(caller)
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
 
@@ -288,7 +327,10 @@ async def create_selcom_pesa_collection(
     payload: CollectionPushCreateRequest,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-    _rate_limit: Annotated[None, Depends(rate_limit(scope="collection_create", limit=20, window_seconds=60))],
+    _rate_limit: Annotated[
+        None,
+        Depends(rate_limit(scope="collection_create", limit=_collection_create_ip_limit, window_seconds=60)),
+    ],
 ):
     """Sends a real Selcom Pesa prompt immediately. Same rule as
     wallet-push: `"processing"` means the prompt was sent, not that
@@ -297,6 +339,7 @@ async def create_selcom_pesa_collection(
     merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
+    _enforce_caller_create_limit(caller)
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
 
@@ -356,7 +399,10 @@ async def create_qr_collection(
     payload: CollectionQrCreateRequest,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-    _rate_limit: Annotated[None, Depends(rate_limit(scope="collection_create", limit=20, window_seconds=60))],
+    _rate_limit: Annotated[
+        None,
+        Depends(rate_limit(scope="collection_create", limit=_collection_create_ip_limit, window_seconds=60)),
+    ],
 ):
     """POS/counter/delivery scan-to-pay. `qr_payload`/`payment_token` are
     exactly what Selcom's own create-order-minimal response returned —
@@ -367,6 +413,7 @@ async def create_qr_collection(
     merchant_id = _resolve_merchant_id(caller, payload.merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
+    _enforce_caller_create_limit(caller)
     _reject_simulate_status_outside_sandbox(caller, payload.simulate_status)
     client = get_supabase_admin()
 
