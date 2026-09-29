@@ -23,6 +23,7 @@ export function WebhooksView() {
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null);
+  const [secretCopied, setSecretCopied] = useState(false);
 
   useEffect(() => {
     getWebhookConfig().then((data) => {
@@ -34,6 +35,20 @@ export function WebhooksView() {
     });
     listWebhookEvents().then(setEvents);
   }, []);
+
+  async function handleCopySecret() {
+    if (!revealedSecret) return;
+    try {
+      await navigator.clipboard.writeText(revealedSecret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable (older browser, or an insecure origin —
+      // it needs HTTPS). The secret stays on screen and selectable, which
+      // is the whole point of showing it: this button is a convenience,
+      // never the only way to get the value out.
+    }
+  }
 
   function toggleEvent(eventName: string) {
     setSelectedEvents((prev) =>
@@ -158,9 +173,20 @@ export function WebhooksView() {
               <p className="text-sm text-error font-medium mb-2">
                 Copy this secret now. You will not be able to view it again.
               </p>
-              <code className="block bg-on-surface text-primary-fixed text-sm px-4 py-3 rounded-lg font-mono break-all">
-                {revealedSecret}
-              </code>
+              <div className="flex items-start gap-2">
+                <code className="flex-1 min-w-0 bg-on-surface text-primary-fixed text-sm px-4 py-3 rounded-lg font-mono break-all">
+                  {revealedSecret}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopySecret}
+                  aria-label="Copy webhook signing secret"
+                  className="shrink-0 flex items-center gap-1.5 text-sm font-medium px-3 py-3 rounded-lg border border-outline-variant hover:bg-surface-variant/40 transition-colors"
+                >
+                  <Icon name={secretCopied ? "check" : "content_copy"} className="text-[18px]" />
+                  {secretCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
             </div>
           )}
 
