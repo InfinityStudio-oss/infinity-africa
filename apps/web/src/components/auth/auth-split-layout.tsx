@@ -7,16 +7,26 @@ import { Icon } from "@/components/portal/icon";
  * /dashboard/login, /create-account): a brand panel on the left (hidden on
  * small screens, where the card alone carries the page) and the page's own
  * card on the right.
+ *
+ * `showBrandPanel={false}` drops the left panel and centres the card alone.
+ * That is for the password-recovery pages: someone who is locked out is
+ * mid-task, not being introduced to the product, and a sales pitch beside
+ * the form is noise at the moment they are least receptive to it. The
+ * panel stays on the pages where a first impression is the point — signing
+ * in, creating an account, accepting an invite.
  */
 export function AuthSplitLayout({
   children,
   maxWidthClassName = "max-w-sm",
+  showBrandPanel = true,
 }: {
   children: React.ReactNode;
   maxWidthClassName?: string;
+  showBrandPanel?: boolean;
 }) {
   return (
     <div className="flex flex-1 min-h-full">
+      {showBrandPanel && (
       <div className="hidden lg:flex lg:w-[52%] relative flex-col justify-center overflow-hidden bg-primary text-on-primary p-8">
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-on-primary/5" aria-hidden />
         <div className="absolute bottom-10 left-10 w-80 h-80 rounded-full bg-on-primary/5" aria-hidden />
@@ -70,8 +80,15 @@ export function AuthSplitLayout({
           </p>
         </div>
       </div>
+      )}
 
-      <div className="flex flex-1 items-center justify-center bg-surface-container px-4 py-16 xl:pl-8 xl:pr-16">
+      <div
+        className={
+          showBrandPanel
+            ? "flex flex-1 items-center justify-center bg-surface-container px-4 py-16 xl:pl-8 xl:pr-16"
+            : "flex flex-1 items-center justify-center bg-surface-container px-4 py-16"
+        }
+      >
         <div className={`w-full ${maxWidthClassName}`}>
           <Link
             href="/"

@@ -43,4 +43,33 @@ describe("AuthSplitLayout", () => {
     expect(column?.querySelector("a")).toBe(backLink);
     expect(column?.textContent).toContain("form content");
   });
+
+  it("drops the brand panel when asked, keeping the card and the back link", async () => {
+    const { AuthSplitLayout } = await import("./auth-split-layout");
+    const { container } = render(<AuthSplitLayout showBrandPanel={false}>form content</AuthSplitLayout>);
+
+    expect(container.querySelector(".bg-primary.text-on-primary")).toBeNull();
+    expect(screen.queryByText("help@infinitypay.me")).not.toBeInTheDocument();
+    expect(screen.getByText("Back to website")).toBeInTheDocument();
+    expect(screen.getByText("form content")).toBeInTheDocument();
+  });
+
+  it("centres the card evenly once there is no panel to sit beside", async () => {
+    // The asymmetric xl padding exists to nudge the card left, toward the
+    // panel. With no panel it would just look off-centre on a wide screen.
+    const { AuthSplitLayout } = await import("./auth-split-layout");
+    const { container } = render(<AuthSplitLayout showBrandPanel={false}>form content</AuthSplitLayout>);
+
+    const column = container.querySelector(".bg-surface-container");
+    expect(column?.className).not.toContain("xl:pl-8");
+    expect(column?.className).not.toContain("xl:pr-16");
+    expect(column?.className).toContain("px-4");
+  });
+
+  it("keeps the panel by default, so the sign-in pages are unaffected", async () => {
+    const { AuthSplitLayout } = await import("./auth-split-layout");
+    const { container } = render(<AuthSplitLayout>form content</AuthSplitLayout>);
+
+    expect(container.querySelector(".bg-primary.text-on-primary")).not.toBeNull();
+  });
 });

@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function MerchantResetPasswordPage() {
   return (
-    <AuthSplitLayout>
+    <AuthSplitLayout showBrandPanel={false}>
       <h1 className="text-2xl font-bold text-on-surface">Set a new password</h1>
       <p className="mt-2 text-sm text-on-surface-variant">Choose a new password for your account.</p>
       <ResetPasswordForm />
