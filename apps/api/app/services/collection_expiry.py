@@ -83,6 +83,18 @@ def _iso(moment: datetime) -> str:
     return moment.isoformat()
 
 
+def _parse_ts(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # A naive timestamp compares as UTC rather than raising, which is what
+    # the column actually holds.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def _expiry_candidates(client: Client, *, cutoff: datetime, limit: int) -> list[dict]:
     """Pushes old enough to have been abandoned. Oldest first, so a long
     backlog drains in a stable order across sweeps instead of the same
@@ -175,6 +187,8 @@ async def expire_stale_pushes(client: Client) -> dict[str, int]:
     candidates = _expiry_candidates(client, cutoff=now - timedelta(minutes=window_minutes), limit=limit)
     summary["candidates"] = len(candidates)
 
+    stuck_cutoff = now - timedelta(hours=max(1, settings.collection_push_expiry_grace_hours))
+
     for row in candidates:
         collection_id = uuid.UUID(row["id"])
         try:
@@ -186,7 +200,39 @@ async def expire_stale_pushes(client: Client) -> dict[str, int]:
                 if refreshed and refreshed.get("status") != "processing":
                     summary["resolved_instead"] += 1
                     continue
+        except (NotFoundError, ConflictError) as exc:
+            logger.warning("collection_expiry_skipped collection_id=%s reason=%s", collection_id, exc)
+            continue
+        except Exception:
+            # The check itself failed, so we have no provider answer at
+            # all. Usually transient (their API is down, we are rate
+            # limited), and the right response to that is to wait.
+            #
+            # But it is not always transient. A collection whose
+            # Selcom-reported provider_reference collides with another
+            # row's raises here on EVERY attempt and can never be
+            # resolved — confirmed live 2026-08-28, and the row that
+            # found it was still erroring a month later, polled every
+            # tick, its merchant never told anything. Unresolvable is
+            # exactly what expiry is for.
+            #
+            # Age is what separates the two. A provider outage makes every
+            # check fail at once, including on pushes minutes old, and
+            # those are left alone. Only a push that has been failing this
+            # check for longer than the grace window is closed on a
+            # failure, by which point "transient" no longer describes it.
+            if not _parse_ts(row.get("created_at")) or _parse_ts(row["created_at"]) > stuck_cutoff:
+                summary["errors"] += 1
+                logger.exception("collection_expiry_check_failed collection_id=%s", collection_id)
+                continue
+            logger.warning(
+                "collection_expiry_closing_unresolvable collection_id=%s created_at=%s "
+                "reason=provider_check_has_failed_since_before_grace_window",
+                collection_id,
+                row.get("created_at"),
+            )
 
+        try:
             current = get_by_id(client, "collections", collection_id)
             if not current or current.get("status") != "processing":
                 summary["resolved_instead"] += 1

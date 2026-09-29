@@ -257,3 +257,55 @@ def test_one_bad_row_does_not_stop_the_sweep(fake_client, monkeypatch):
     assert summary["errors"] == 1
     assert summary["expired"] == 1
     assert _row(fake_client, second["id"])["status"] == "failed"
+
+
+# --- when the provider check itself fails -----------------------------------
+
+
+def test_a_provider_outage_does_not_expire_recent_pushes(fake_client, monkeypatch):
+    """Every check failing at once is what an outage looks like. Closing
+    payments because we could not ask about them would be the worst
+    possible reading of that."""
+    collection, _ctx = _seed_pending_collection(fake_client, monkeypatch)
+    _age(fake_client, collection, minutes=90)
+
+    with patch(_REFRESH, side_effect=RuntimeError("selcom unreachable")):
+        summary = _sweep(fake_client)
+
+    assert summary["expired"] == 0
+    assert summary["errors"] == 1
+    assert _row(fake_client, collection["id"])["status"] == "processing"
+
+
+def test_a_push_whose_check_has_failed_for_weeks_is_finally_closed(fake_client, monkeypatch):
+    """The real row this came from: a collection whose Selcom-reported
+    provider_reference collides with another row's raises on every single
+    attempt, so it can never resolve. Found live 2026-08-28 and still
+    erroring every tick a month later, its merchant never told anything.
+    Unresolvable is what expiry is for."""
+    collection, _ctx = _seed_pending_collection(fake_client, monkeypatch)
+    _age(fake_client, collection, minutes=60 * 24 * 30)
+
+    duplicate_key = RuntimeError('duplicate key value violates unique constraint "collections_provider_reference_key"')
+    with patch(_REFRESH, side_effect=duplicate_key):
+        summary = _sweep(fake_client)
+
+    assert summary["expired"] == 1
+    assert summary["errors"] == 0, "a permanently stuck row should stop being reported as a fresh error"
+    row = _row(fake_client, collection["id"])
+    assert row["status"] == "failed"
+    assert row["failure_reason_code"] == "expired"
+
+
+def test_closing_an_unresolvable_push_does_not_rewrite_provider_fields(fake_client, monkeypatch):
+    """The collision is on provider_reference, so the expiry write must
+    not touch it — otherwise closing the row would hit the very
+    constraint that made it unresolvable."""
+    collection, _ctx = _seed_pending_collection(fake_client, monkeypatch)
+    _age(fake_client, collection, minutes=60 * 24 * 30)
+    before = _row(fake_client, collection["id"]).get("provider_reference")
+
+    with patch(_REFRESH, side_effect=RuntimeError("duplicate key value violates unique constraint")):
+        _sweep(fake_client)
+
+    assert _row(fake_client, collection["id"]).get("provider_reference") == before
