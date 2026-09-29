@@ -94,7 +94,34 @@ describe("establishRecoveryLinkSession", () => {
     expect(supabase.auth.exchangeCodeForSession).not.toHaveBeenCalled();
     expect(supabase.auth.verifyOtp).not.toHaveBeenCalled();
     expect(supabase.auth.setSession).not.toHaveBeenCalled();
-    expect(result).toEqual({ status: "invalid", errorDescription: null });
+    expect(result).toEqual({ status: "invalid", errorDescription: null, carriedParams: [] });
+  });
+
+  it("names the parameters an empty link did carry, so the two failures are tellable apart", async () => {
+    // "invalid or expired" reads identically whether a real token was
+    // rejected or nothing arrived at all. These have different causes.
+    setUrl("?utm_source=mail&type=recovery");
+    const supabase = fakeSupabase();
+
+    const result = await establishRecoveryLinkSession(supabase, { allowedOtpTypes: ["recovery"] });
+
+    expect(result).toEqual({
+      status: "invalid",
+      errorDescription: null,
+      carriedParams: ["utm_source", "type"],
+    });
+  });
+
+  it("never reports a token value, only parameter names", async () => {
+    // A token rendered into the page is a secret that ends up in
+    // screenshots and support threads.
+    setUrl("?token_hash=super-secret-value&type=unexpected");
+    const supabase = fakeSupabase();
+
+    const result = await establishRecoveryLinkSession(supabase, { allowedOtpTypes: ["recovery"] });
+
+    expect(JSON.stringify(result)).not.toContain("super-secret-value");
+    expect(result).toMatchObject({ carriedParams: ["token_hash", "type"] });
   });
 
   it("scrubs the token from the URL after a successful exchange, so a reload can't replay it", async () => {

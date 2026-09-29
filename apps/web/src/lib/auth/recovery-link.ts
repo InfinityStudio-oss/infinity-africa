@@ -2,7 +2,28 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type RecoveryLinkOutcome =
   | { status: "ready" }
-  | { status: "invalid"; errorDescription: string | null };
+  | { status: "invalid"; errorDescription: string | null; carriedParams?: string[] };
+
+/**
+ * The parameter NAMES a link arrived with — never their values.
+ *
+ * "This link is invalid or has expired" is unfalsifiable on its own: it
+ * looks identical whether the provider rejected a real token, or the URL
+ * turned up carrying nothing at all. Those have completely different
+ * causes and completely different fixes, and telling them apart used to
+ * mean reading the source. Naming the parameters present separates them
+ * at a glance, for whoever is holding the phone.
+ *
+ * Names only. A token value in the page body would be a secret rendered
+ * into the DOM, screenshotted into a support thread and pasted into a
+ * chat — which is exactly how single-use tokens leak.
+ */
+function carriedParamNames(query: URLSearchParams, hashParams: URLSearchParams): string[] {
+  const names = new Set<string>();
+  for (const key of query.keys()) names.add(key);
+  for (const key of hashParams.keys()) names.add(key);
+  return [...names];
+}
 
 /**
  * Establishes the session a recovery/invite link is supposed to carry —
@@ -86,7 +107,16 @@ export async function establishRecoveryLinkSession(
   // exact link opened a second time after the URL was already scrubbed
   // once, or a direct navigation with nothing attached. Never treated as
   // success just because there's nothing to actively reject.
-  return { status: "invalid", errorDescription: null };
+  //
+  // The provider rejected nothing here, so there is no message to show.
+  // Report what the URL did carry instead: this branch and a genuinely
+  // expired token produce the same words otherwise, and they are not the
+  // same problem.
+  return {
+    status: "invalid",
+    errorDescription: null,
+    carriedParams: carriedParamNames(query, hashParams),
+  };
 }
 
 function scrubLinkParamsFromUrl(): void {

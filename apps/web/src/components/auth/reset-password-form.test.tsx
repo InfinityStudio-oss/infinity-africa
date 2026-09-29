@@ -79,16 +79,38 @@ describe("ResetPasswordForm", () => {
     expect(updateUser).not.toHaveBeenCalled();
   });
 
-  it("shows the invalid/expired message when the link carries no usable token", async () => {
+  it("says the link carried no token, rather than claiming it expired", async () => {
+    // Nothing was rejected here, so "expired" would be a guess presented
+    // as a diagnosis -- and it sends people to request link after link,
+    // each failing identically, with nothing on screen to suggest why.
     window.history.replaceState(null, "", "/dashboard/reset-password");
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
     await waitFor(() =>
-      expect(screen.getByText("This reset link is invalid or has expired. Please request a new one.")).toBeInTheDocument(),
+      expect(screen.getByText("This link didn't carry a reset token.")).toBeInTheDocument(),
     );
+    expect(screen.queryByText(/has expired/)).not.toBeInTheDocument();
+    expect(screen.getByText(/link carried: nothing/)).toBeInTheDocument();
     expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
     expect(setSession).not.toHaveBeenCalled();
+  });
+
+  it("still says expired when the provider actually rejected the token", async () => {
+    // The other half of the split: a real rejection keeps the provider's
+    // own words, and shows none of the empty-link guidance.
+    window.history.replaceState(
+      null,
+      "",
+      "/dashboard/reset-password#error=access_denied&error_description=Email+link+is+invalid+or+has+expired",
+    );
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Email link is invalid or has expired")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/link carried:/)).not.toBeInTheDocument();
   });
 
   it("shows Supabase's own error_description when the link was rejected outright", async () => {

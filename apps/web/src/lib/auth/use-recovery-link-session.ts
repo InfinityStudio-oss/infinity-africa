@@ -9,7 +9,7 @@ import { establishRecoveryLinkSession } from "./recovery-link";
 export type RecoveryLinkState =
   | { status: "verifying" }
   | { status: "ready" }
-  | { status: "invalid"; errorDescription: string | null };
+  | { status: "invalid"; errorDescription: string | null; carriedParams?: string[] };
 
 /**
  * Runs establishRecoveryLinkSession() exactly once per page load — see
