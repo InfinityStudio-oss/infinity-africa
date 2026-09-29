@@ -34,14 +34,32 @@ retried forever against a live provider's traffic.
 
 **Delivery never blocks payment processing.** Nothing here is called from
 a request path. The scheduler in app/main.py drives it, and every
-exception is contained per event, so one merchant's dead endpoint cannot
-stall the queue for everyone else.
+exception is contained per event.
+
+**One merchant's backlog cannot starve another's.** Two separate things
+are needed for that, and the first version had neither:
+
+*Waiting is not occupying.* The batch used to be sliced off the oldest
+queued rows and only then filtered for which were actually due, so events
+sitting out a retry backoff still held batch slots. One endpoint going
+down was enough to fill all 50 with rows that were due in up to half an
+hour, at which point the sweep delivered nothing at all — platform-wide,
+to every merchant — until that cohort cleared. The scan window is now
+wider than the batch and due-ness is decided before anything is taken.
+
+*Fair share.* Even among genuinely due events, oldest-first means a
+merchant with a large backlog takes the whole batch. Events are
+interleaved round-robin across merchants instead, so each gets a turn.
+A merchant queueing alone still gets the entire batch, since there is
+nobody to interleave with.
 """
 
 import json
 import logging
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
+from itertools import zip_longest
 from typing import Any
 
 import httpx
@@ -65,6 +83,13 @@ _TIMEOUT_SECONDS = 8.0
 # Bounded so one sweep cannot spend unbounded time in a scheduler tick.
 _BATCH_SIZE = 50
 
+# How many queued rows a sweep will look at to find its batch. Larger than
+# the batch on purpose: rows waiting out a backoff are skipped rather than
+# delivered, so the scan has to be able to see past a block of them to the
+# due events behind. Still bounded, so a pathological queue cannot make one
+# sweep unbounded.
+_SCAN_LIMIT = 500
+
 
 def _parse_ts(value: Any) -> datetime | None:
     if not value:
@@ -87,6 +112,8 @@ def _is_due(event: dict, *, now: datetime) -> bool:
 
 
 def _pending_events(client: Client) -> list[dict]:
+    """The scan window, oldest first — NOT the batch. Slicing to the batch
+    here is what used to let backed-off rows crowd out due ones."""
     rows = (
         client.table("webhook_events")
         .select("*")
@@ -96,7 +123,33 @@ def _pending_events(client: Client) -> list[dict]:
         .data
         or []
     )
-    return rows[:_BATCH_SIZE]
+    return rows[:_SCAN_LIMIT]
+
+
+def _batch_fairly(due: list[dict]) -> list[dict]:
+    """Round-robin the due events across merchants, then take the batch.
+
+    `due` arrives oldest-first, so taking the head of it would hand the
+    whole batch to whichever merchant queued earliest — normally the one
+    with the largest backlog, which is exactly the merchant least able to
+    absorb it and most likely to be failing. Interleaving gives every
+    merchant with something waiting a slot in every sweep.
+
+    Order within a merchant is preserved, so an individual receiver still
+    sees its own events oldest-first. Events with no merchant_id (there
+    should be none) group under one key rather than being dropped.
+    """
+    by_merchant: OrderedDict[str, list[dict]] = OrderedDict()
+    for event in due:
+        by_merchant.setdefault(str(event.get("merchant_id")), []).append(event)
+
+    interleaved = [
+        event
+        for round_ in zip_longest(*by_merchant.values())
+        for event in round_
+        if event is not None
+    ]
+    return interleaved[:_BATCH_SIZE]
 
 
 def _secret_for(client: Client, merchant_id: str) -> str | None:
@@ -201,7 +254,7 @@ def deliver_pending_webhooks(client: Client) -> dict[str, int]:
     """One sweep of the queue. Returns a small summary for the scheduler
     log — never raises, for the same reason deliver_event does not."""
     now = datetime.now(timezone.utc)
-    due = [event for event in _pending_events(client) if _is_due(event, now=now)]
+    due = _batch_fairly([event for event in _pending_events(client) if _is_due(event, now=now)])
 
     delivered = 0
     failed = 0

@@ -26,6 +26,7 @@ import pytest
 from app.config import get_settings
 from app.core.secret_box import encrypt_secret
 from app.services.webhook_delivery import (
+    _BATCH_SIZE,
     _MAX_ATTEMPTS,
     deliver_event,
     deliver_pending_webhooks,
@@ -655,3 +656,101 @@ def main_module_file() -> str:
     import app.main as main_module
 
     return main_module.__file__
+
+
+# --- one merchant's backlog cannot starve another's -------------------------
+
+
+def _event_at(fake_client, merchant, *, created_at, status="pending", attempts=0, last_attempted_at=None):
+    """Like _event but pins created_at, which is what the queue orders on."""
+    return fake_client.seed(
+        "webhook_events",
+        {
+            "merchant_id": merchant["id"],
+            "event_name": "collection.success",
+            "payload": {"event": "collection.success", "collection_id": "col-1"},
+            "target_url": merchant.get("webhook_url"),
+            "status": status,
+            "attempts": attempts,
+            "last_attempted_at": last_attempted_at,
+            "created_at": created_at,
+        },
+    )
+
+
+def _ago(seconds: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+
+
+def test_events_waiting_out_a_backoff_do_not_crowd_out_due_ones(fake_client):
+    """The regression. One merchant's endpoint goes down, its events go to
+    `retrying`, and because they are the oldest rows they used to fill the
+    whole batch — every one of them mid-backoff, so the sweep delivered
+    nothing, to anybody, until they cleared."""
+    down = _merchant(fake_client, url="https://down.example.com/hooks")
+    up = _merchant(fake_client, url="https://up.example.com/hooks")
+
+    for i in range(_BATCH_SIZE + 10):
+        # attempts=2 means the next attempt is owed 300s after the last;
+        # these were tried seconds ago, so none of them is due.
+        _event_at(fake_client, down, created_at=_ago(900 - i), status="retrying", attempts=2,
+                  last_attempted_at=_ago(5))
+
+    fresh = _event_at(fake_client, up, created_at=_ago(1))
+
+    with patch(_DELIVERY, return_value=_Response(200)) as post:
+        summary = deliver_pending_webhooks(fake_client)
+
+    assert summary["delivered"] == 1, "a healthy merchant was starved by a failing one's backlog"
+    assert post.call_args.args[0] == "https://up.example.com/hooks"
+    assert _row(fake_client, fresh["id"])["status"] == "delivered"
+
+
+def test_a_large_backlog_does_not_take_the_whole_batch(fake_client):
+    """Both merchants' events are genuinely due here — no backoff involved.
+    Oldest-first alone would still hand the entire batch to whoever queued
+    first, which is normally the merchant furthest behind."""
+    early = _merchant(fake_client, url="https://early.example.com/hooks")
+    later = _merchant(fake_client, url="https://later.example.com/hooks")
+
+    for i in range(_BATCH_SIZE):
+        _event_at(fake_client, early, created_at=_ago(900 - i))
+    for i in range(_BATCH_SIZE):
+        _event_at(fake_client, later, created_at=_ago(400 - i))
+
+    with patch(_DELIVERY, return_value=_Response(200)) as post:
+        summary = deliver_pending_webhooks(fake_client)
+
+    assert summary["delivered"] == _BATCH_SIZE
+    urls = [call.args[0] for call in post.call_args_list]
+    assert urls.count("https://later.example.com/hooks") == _BATCH_SIZE // 2
+    assert urls.count("https://early.example.com/hooks") == _BATCH_SIZE // 2
+
+
+def test_a_merchant_queueing_alone_still_gets_the_whole_batch(fake_client):
+    """Fairness must not become a per-merchant cap: with nobody to
+    interleave with, one merchant should still saturate the sweep."""
+    solo = _merchant(fake_client, url="https://solo.example.com/hooks")
+    for i in range(_BATCH_SIZE + 20):
+        _event_at(fake_client, solo, created_at=_ago(900 - i))
+
+    with patch(_DELIVERY, return_value=_Response(200)):
+        summary = deliver_pending_webhooks(fake_client)
+
+    assert summary["delivered"] == _BATCH_SIZE
+
+
+def test_a_merchants_own_events_are_still_delivered_oldest_first(fake_client):
+    """Interleaving reorders across merchants, never within one."""
+    merchant = _merchant(fake_client, url="https://ordered.example.com/hooks")
+    first = _event_at(fake_client, merchant, created_at=_ago(300))
+    second = _event_at(fake_client, merchant, created_at=_ago(200))
+    third = _event_at(fake_client, merchant, created_at=_ago(100))
+
+    with patch(_DELIVERY, return_value=_Response(200)) as post:
+        deliver_pending_webhooks(fake_client)
+
+    sent = [json.loads(call.kwargs["content"])["collection_id"] for call in post.call_args_list]
+    assert len(sent) == 3
+    delivery_ids = [call.kwargs["headers"]["X-Infinity-Delivery"] for call in post.call_args_list]
+    assert delivery_ids == [first["id"], second["id"], third["id"]]
