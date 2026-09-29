@@ -274,6 +274,37 @@ Inspect attempts at `GET /v1/merchant/webhook-events`.
 
 Handle unknown codes gracefully — the set can grow.
 
+## A push does not stay pending forever
+
+If the customer never acts — dismisses the prompt, walks away, mistypes
+their PIN — the collection is closed after about **30 minutes** with
+`collection.failed` and `failure_reason_code: "expired"`.
+
+This matters if you are billing subscribers: every push you start now
+reaches a terminal state, so nothing sits in your system as "awaiting
+payment" indefinitely. Before this existed, an abandoned push simply
+never resolved.
+
+We ask the provider one final time before closing anything, so a payment
+that quietly succeeded is settled rather than expired.
+
+### A `failed` can, rarely, be followed by a `success`
+
+For **24 hours** after expiring a collection we keep asking the provider
+about it. If it turns out the customer did pay after all, the collection
+is settled properly: the wallet is credited and you receive
+`collection.success` for a collection you were already told had failed.
+
+This is deliberate. The alternative is keeping quiet for a day, or
+crediting a merchant for money we told you never arrived.
+
+Handle it by keying on `collection_id` and **letting the latest event
+win**, rather than ignoring anything that arrives after a terminal one.
+Concretely: don't cancel a subscriber's service irreversibly the instant
+`collection.failed` lands for an `expired` reason — or if you do, make
+reactivation automatic when the later `success` arrives. Every other
+`failure_reason_code` is final and will not be revisited.
+
 ## Rate limits
 
 Creation endpoints are limited on two dimensions at once, per minute:
@@ -383,6 +414,15 @@ retry five times and then stop, which is the intended behaviour.
   `unknown_provider_error`. Add the mapping in
   `app/services/failure_reasons.py` once a real response proves the code —
   nothing else needs to change.
+
+  `expired` was in this list until `app/services/collection_expiry.py`
+  existed. Note that in practice it now absorbs most of what those three
+  codes would have described: Selcom reports a wrong PIN or an ignored
+  prompt as an indefinite `PENDING`, not as a distinguishable failure, so
+  a customer who mistyped their PIN reaches the merchant as `expired`.
+  That is honest — we genuinely do not know which it was — but it means
+  `expired` is not a rare code, it is the normal outcome for any push the
+  customer did not complete.
 - **Delivery is single-replica.** The sweep has no cross-process lock, so
   two API replicas would each deliver the same event. Same constraint as
   the in-memory rate limiter, and fine at one replica.

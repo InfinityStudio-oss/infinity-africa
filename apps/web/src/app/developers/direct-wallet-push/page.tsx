@@ -450,6 +450,24 @@ def handle_webhook(request):
       </section>
 
       <section className="mb-12">
+        <h2 className="text-xl font-semibold text-on-surface mb-3">A push does not stay pending forever</h2>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          If the customer never acts — dismisses the prompt, walks away, mistypes their PIN — the collection is
+          closed after about <strong>30 minutes</strong> with <Code>collection.failed</Code> and{" "}
+          <Code>failure_reason_code: &quot;expired&quot;</Code>. Every push you start reaches a terminal state, so
+          nothing sits in your system awaiting payment indefinitely. We ask the provider one final time before
+          closing anything, so a payment that quietly succeeded is settled rather than expired.
+        </p>
+        <Callout title="A failed can, rarely, be followed by a success">
+          For 24 hours after expiring a collection we keep asking the provider about it. If the customer did pay
+          after all, it settles properly and you receive <Code>collection.success</Code> for a collection you were
+          already told had failed. Key on <Code>collection_id</Code> and let the latest event win. Concretely:
+          don&apos;t cut off a subscriber irreversibly the instant an <Code>expired</Code> failure lands, or make
+          reactivation automatic when the later success arrives. Every other failure code is final.
+        </Callout>
+      </section>
+
+      <section className="mb-12">
         <h2 className="text-xl font-semibold text-on-surface mb-3">Rate limits</h2>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
           Creation endpoints are limited on two dimensions at once, per minute: <strong>30 per API key</strong> and{" "}

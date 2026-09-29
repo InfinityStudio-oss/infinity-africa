@@ -39,6 +39,7 @@ from app.routers import (
     webhooks,
 )
 from app.services.checkout_reconciliation import reconcile_pending_checkout_collections
+from app.services.collection_expiry import expire_stale_pushes
 from app.services.disbursements import reconcile_pending_disbursements
 from app.services.webhook_delivery import deliver_pending_webhooks
 
@@ -124,6 +125,18 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
             logger.info("scheduled_checkout_reconciliation %s", summary)
         except Exception:
             logger.exception("scheduled_checkout_reconciliation_failed")
+
+        # Same tick rather than a loop of its own: expiry is the other
+        # half of resolving a pending collection, it draws on the same
+        # rate-limited provider budget, and running it here means
+        # ENABLE_AUTO_RECONCILIATION stops both with one switch. Kept in
+        # its own try so an expiry failure never stops reconciliation --
+        # crediting wallets matters more than closing stale ones.
+        try:
+            expiry_summary = await expire_stale_pushes(get_supabase_admin())
+            logger.info("scheduled_collection_expiry %s", expiry_summary)
+        except Exception:
+            logger.exception("scheduled_collection_expiry_failed")
 
 
 def _start_checkout_reconciliation_task() -> asyncio.Task | None:

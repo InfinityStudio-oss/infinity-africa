@@ -65,6 +65,36 @@ class Settings(BaseSettings):
     collection_create_max_per_minute_per_ip: int = 60
     collection_create_max_per_minute_per_key: int = 30
 
+    # Giving an abandoned mobile money push a terminal answer
+    # (app/services/collection_expiry.py).
+    #
+    # A customer who dismisses the prompt or mistypes their PIN leaves the
+    # collection "processing" and Selcom reporting PENDING -- forever. Our
+    # own oldest is from 2026-08-16. Nothing ever resolved these, so an
+    # integrator waiting on a webhook waited indefinitely, and the
+    # reconciliation sweep re-polled every one of them against a shared
+    # provider budget on every pass.
+    #
+    # 0 disables expiry entirely, which is the switch to reach for if this
+    # ever starts failing payments that were really going to succeed.
+    collection_push_expiry_minutes: int = 30
+
+    # How many collections one sweep may expire. Each one costs a live
+    # provider status call, drawn from selcom_outbound_max_per_minute and
+    # therefore competing with real payments. Deliberately small: a long
+    # backlog drains over several sweeps rather than saturating the
+    # provider budget in one.
+    collection_push_expiry_batch_size: int = 25
+
+    # After expiry we keep asking the provider about a collection for this
+    # long, because being wrong here costs a customer real money.
+    # resolve_collection() no-ops on anything that is not "processing", so
+    # an expired collection the provider later reports as paid would never
+    # be credited -- the debit leaves the customer's wallet and the
+    # merchant is never paid. Within this window such a collection is put
+    # back to "processing" and settled normally. 0 disables the recheck.
+    collection_push_expiry_grace_hours: int = 24
+
     # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
     # When true, require_super_admin additionally demands a Supabase `aal2`
     # session — a Super Admin holding only a password is refused with
