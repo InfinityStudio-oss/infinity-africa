@@ -412,6 +412,43 @@ def send_staff_invite_email(
 # --- 3. Password reset --------------------------------------------------------
 
 
+def _recovery_link_for(result: Any, *, redirect_to: str) -> str:
+    """Builds the reset link we actually email, pointing straight at our own
+    page with the token as a query parameter.
+
+    `action_link` — Supabase's own `/auth/v1/verify?...` URL — is what this
+    used to send, and it has two failure modes that both end with a reset
+    page showing "this link is invalid or has expired" while Supabase
+    itself reported no error at all:
+
+    **The token rides back in a URL fragment.** Verify redirects to
+    `redirect_to#access_token=...`, and a fragment does not survive a
+    further redirect. Any hop between that redirect and the page — apex
+    to www, http to https, a trailing slash — silently drops it, and the
+    page loads with nothing in the URL to exchange.
+
+    **A link scanner spends it first.** The token is consumed by fetching
+    the URL, so Apple Mail, Outlook and corporate filters that prefetch
+    links burn it before the recipient taps anything. The first real click
+    then finds it already used.
+
+    `hashed_token` avoids both. It goes in a query parameter, which every
+    redirect preserves, and it is only spent when the page's own JavaScript
+    calls verifyOtp — a scanner that fetches the URL gets HTML and runs
+    nothing, leaving the token intact. The browser side already handles
+    this shape (apps/web/src/lib/auth/recovery-link.ts's `token_hash`
+    branch); this is the sender finally using it.
+
+    Falls back to `action_link` if Supabase ever stops returning a hashed
+    token, since a link with a known weakness still beats no link at all.
+    """
+    hashed_token = getattr(result.properties, "hashed_token", None)
+    if not hashed_token:
+        return result.properties.action_link
+    separator = "&" if "?" in redirect_to else "?"
+    return f"{redirect_to}{separator}token_hash={hashed_token}&type=recovery"
+
+
 def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -> dict | None:
     """Generates a Supabase recovery link (auth.admin.generate_link, which
     does not send Supabase's own email) and sends our branded reset email
@@ -432,7 +469,7 @@ def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -
         # prevention), so every exception type is swallowed identically here.
         return None
 
-    reset_url = result.properties.action_link
+    reset_url = _recovery_link_for(result, redirect_to=redirect_to)
     settings = get_settings()
     subject = "Reset your InfinityPay password"
     sender = settings.email_from

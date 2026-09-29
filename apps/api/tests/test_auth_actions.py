@@ -153,7 +153,7 @@ def test_forgot_password_button_and_fallback_link_are_identical(fake_client, fak
 
     html = fake_resend.calls[0]["html"]
     hrefs = re.findall(r'href="([^"]+)"', html)
-    reset_hrefs = [h for h in hrefs if h.startswith("https://fake.supabase.test/auth/v1/verify")]
+    reset_hrefs = [h for h in hrefs if "token_hash=" in h]
     assert len(reset_hrefs) == 2  # the button, and the plain-text fallback
     assert reset_hrefs[0] == reset_hrefs[1]
 
@@ -170,4 +170,4 @@ def test_forgot_password_redirect_to_matches_the_production_reset_page(fake_clie
     client.post("/v1/auth/forgot-password", json={"email": "amina@example.com"})
 
     html = fake_resend.calls[0]["html"]
-    assert f"redirect_to={settings.app_url}/dashboard/reset-password" in html
+    assert f'href="{settings.app_url}/dashboard/reset-password?token_hash=' in html
