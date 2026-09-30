@@ -174,7 +174,7 @@ describe("ResetPasswordForm", () => {
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
-    await waitFor(() => expect(screen.getByLabelText("6-Digit Code")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
   });
 
@@ -183,15 +183,15 @@ describe("ResetPasswordForm", () => {
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
-    await waitFor(() => expect(screen.getByLabelText("6-Digit Code")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
-    fireEvent.change(screen.getByLabelText("6-Digit Code"), { target: { value: "123456" } });
+    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "75456908" } });
     fireEvent.click(screen.getByText("Continue"));
 
     await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
     expect(verifyOtp).toHaveBeenCalledWith({
       email: "ceo@infinitypay.me",
-      token: "123456",
+      token: "75456908",
       type: "recovery",
     });
   });
@@ -202,9 +202,9 @@ describe("ResetPasswordForm", () => {
     const { ResetPasswordForm } = await import("./reset-password-form");
     render(<ResetPasswordForm />);
 
-    await waitFor(() => expect(screen.getByLabelText("6-Digit Code")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
-    fireEvent.change(screen.getByLabelText("6-Digit Code"), { target: { value: "000000" } });
+    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "00000000" } });
     fireEvent.click(screen.getByText("Continue"));
 
     await waitFor(() => expect(screen.getByText("Token has expired or is invalid")).toBeInTheDocument());
@@ -218,6 +218,6 @@ describe("ResetPasswordForm", () => {
     render(<ResetPasswordForm />);
 
     await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
-    expect(screen.queryByLabelText("6-Digit Code")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Verification Code")).not.toBeInTheDocument();
   });
 });

@@ -484,8 +484,8 @@ def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -
     email_otp = getattr(result.properties, "email_otp", None)
     code_block = (
         f"""
-    <p style="margin:24px 0 8px;font-size:13px;color:#6b7280;">Or open <a href="{redirect_to}" style="color:#065f46;">this page</a> and enter this code:</p>
-    <div style="margin:0 0 4px;font-family:monospace;font-size:26px;letter-spacing:4px;color:#1f2937;font-weight:700;">{email_otp}</div>
+    <p style="margin:28px 0 12px;font-size:13px;color:#6b7280;text-align:center;">Or open <a href="{redirect_to}" style="color:#065f46;">this page</a> and enter this code:</p>
+    <div style="margin:0 auto 4px;padding:14px 8px;max-width:320px;background-color:#f4f4f5;border-radius:8px;font-family:monospace;font-size:28px;letter-spacing:6px;color:#1f2937;font-weight:700;text-align:center;">{email_otp}</div>
     """
         if email_otp
         else ""

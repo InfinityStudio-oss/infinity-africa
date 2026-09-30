@@ -124,7 +124,7 @@ export function ResetPasswordForm({
           <div>
             <p className="text-sm font-semibold text-on-surface">Use the code from your email instead</p>
             <p className="mt-1 text-xs text-on-surface-variant">
-              The same email contains a 6-digit code. Typing it works even when the link does not.
+              The same email contains a code. Typing it works even when the link does not.
             </p>
           </div>
           {codeErrors.length > 0 && (
@@ -151,7 +151,7 @@ export function ResetPasswordForm({
           </div>
           <div>
             <label htmlFor="code" className={labelClass}>
-              6-Digit Code
+              Verification Code
             </label>
             <input
               id="code"
@@ -161,7 +161,7 @@ export function ResetPasswordForm({
               value={code}
               onChange={(event) => setCode(event.target.value)}
               className={inputClass}
-              placeholder="123456"
+              placeholder="Code from your email"
               required
             />
           </div>
