@@ -55,12 +55,14 @@ def _link(send):
     that way passes against the exact bug it is meant to catch."""
     html = send.call_args.kwargs["html"]
     hrefs = re.findall(r'href="([^"]+)"', html)
-    # The same URL appears more than once — the CTA button and a plain
-    # fallback link beneath it — so dedupe rather than expecting one match.
-    # They must agree: a button and a fallback pointing at different tokens
-    # would mean one of them is always dead.
-    reset_links = {href for href in hrefs if "token" in href or "reset-password" in href}
-    assert len(reset_links) == 1, f"expected one distinct reset link, got {reset_links}"
+    # Only the tokened link. The email also carries a plain link to the
+    # same page beside the typed code, which deliberately has no token in
+    # it, so "any href mentioning reset-password" now matches two
+    # different URLs. The CTA button and its plain-text fallback are the
+    # same URL twice and must agree: a button and a fallback pointing at
+    # different tokens would mean one of them is always dead.
+    reset_links = {href for href in hrefs if "token_hash=" in href}
+    assert len(reset_links) == 1, f"expected one distinct tokened link, got {reset_links}"
     return reset_links.pop()
 
 

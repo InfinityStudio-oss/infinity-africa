@@ -474,10 +474,28 @@ def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -
     subject = "Reset your InfinityPay password"
     sender = settings.email_from
 
+    # A code as well as a link, because a link is the fragile part. It
+    # passes through a mail provider that may rewrite it, a scanner that
+    # may spend it, and any redirect between here and the page, each of
+    # which can strip the token and leave a reset page that looks broken
+    # for reasons nobody on either end can see. A code the recipient types
+    # goes through none of that. Same single-use token underneath, same
+    # expiry — this is a second way to carry it, not a weaker one.
+    email_otp = getattr(result.properties, "email_otp", None)
+    code_block = (
+        f"""
+    <p style="margin:24px 0 8px;font-size:13px;color:#6b7280;">Or open <a href="{redirect_to}" style="color:#065f46;">this page</a> and enter this code:</p>
+    <div style="margin:0 0 4px;font-family:monospace;font-size:26px;letter-spacing:4px;color:#1f2937;font-weight:700;">{email_otp}</div>
+    """
+        if email_otp
+        else ""
+    )
+
     body = f"""
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Reset your password</h1>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;">We received a request to reset the password for your InfinityPay account.</p>
     {_cta_button(reset_url, "Reset Password")}
+    {code_block}
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">If you did not request this, you can ignore this email.</p>
     """
     html = _email_shell(body_html=body)

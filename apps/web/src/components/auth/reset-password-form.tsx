@@ -31,6 +31,36 @@ export function ResetPasswordForm({
   const [errors, setErrors] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
   const linkSession = useRecoveryLinkSession(["recovery"]);
+  // The typed way in, for when the emailed link arrives with nothing in
+  // it. Same single-use token as the link carries, just not routed
+  // through anything that can rewrite a URL.
+  const [codeEmail, setCodeEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [codeErrors, setCodeErrors] = useState<string[]>([]);
+  const [codeStatus, setCodeStatus] = useState<"idle" | "loading">("idle");
+  const [codeAccepted, setCodeAccepted] = useState(false);
+
+  async function handleCodeSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setCodeErrors([]);
+    setCodeStatus("loading");
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email: codeEmail.trim(),
+      token: code.trim(),
+      type: "recovery",
+    });
+
+    setCodeStatus("idle");
+    if (error) {
+      setCodeErrors([error.message]);
+      return;
+    }
+    // A session now exists, so the password form below can do its work
+    // exactly as it would after a working link.
+    setCodeAccepted(true);
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -60,7 +90,7 @@ export function ResetPasswordForm({
     return <p className="text-sm text-on-surface-variant">Verifying your reset link…</p>;
   }
 
-  if (linkSession.status === "invalid") {
+  if (linkSession.status === "invalid" && !codeAccepted) {
     // Two different failures wore the same sentence. A token the provider
     // rejected is expired or already used — asking for a new link fixes
     // it. A link that arrived with nothing in it was never a valid link
@@ -90,6 +120,59 @@ export function ResetPasswordForm({
             </p>
           </div>
         )}
+        <form onSubmit={handleCodeSubmit} className="space-y-4 rounded-lg border border-outline-variant p-4">
+          <div>
+            <p className="text-sm font-semibold text-on-surface">Use the code from your email instead</p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              The same email contains a 6-digit code. Typing it works even when the link does not.
+            </p>
+          </div>
+          {codeErrors.length > 0 && (
+            <ul className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error space-y-1">
+              {codeErrors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          )}
+          <div>
+            <label htmlFor="code-email" className={labelClass}>
+              Email Address
+            </label>
+            <input
+              id="code-email"
+              type="email"
+              autoComplete="username"
+              value={codeEmail}
+              onChange={(event) => setCodeEmail(event.target.value)}
+              className={inputClass}
+              placeholder="you@business.co.tz"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="code" className={labelClass}>
+              6-Digit Code
+            </label>
+            <input
+              id="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              className={inputClass}
+              placeholder="123456"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={codeStatus === "loading"}
+            className="w-full bg-primary text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+          >
+            {codeStatus === "loading" ? "Checking…" : "Continue"}
+          </button>
+        </form>
         <a
           href={forgotPasswordPath}
           className="block w-full text-center bg-primary-container text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity"

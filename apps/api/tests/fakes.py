@@ -314,8 +314,11 @@ class _FakeGetUserResult:
 
 
 class _FakeGenerateLinkProperties:
-    def __init__(self, action_link: str, hashed_token: str):
+    def __init__(self, action_link: str, hashed_token: str, email_otp: str):
         self.action_link = action_link
+        # Emailed as a typed fallback beside the link, so the reset still
+        # works when something in transit mangles the URL.
+        self.email_otp = email_otp
         # The real generate_link returns this alongside action_link, and
         # app/services/email.py::_recovery_link_for prefers it — a query
         # parameter survives the redirects that silently eat action_link's
@@ -325,9 +328,9 @@ class _FakeGenerateLinkProperties:
 
 
 class _FakeGenerateLinkResult:
-    def __init__(self, user: _FakeAuthAdminUser, action_link: str, hashed_token: str):
+    def __init__(self, user: _FakeAuthAdminUser, action_link: str, hashed_token: str, email_otp: str):
         self.user = user
-        self.properties = _FakeGenerateLinkProperties(action_link, hashed_token)
+        self.properties = _FakeGenerateLinkProperties(action_link, hashed_token, email_otp)
 
 
 class _FakeAuthAdmin:
@@ -417,7 +420,7 @@ class _FakeAuthAdmin:
             raise NotImplementedError(f"generate_link type={link_type}")
 
         action_link = f"https://fake.supabase.test/auth/v1/verify?type={link_type}&token={token}&redirect_to={redirect_to}"
-        return _FakeGenerateLinkResult(user, action_link, hashed_token=f"pkce_{token}")
+        return _FakeGenerateLinkResult(user, action_link, hashed_token=f"pkce_{token}", email_otp="123456")
 
 
 class _FakeAuth:
