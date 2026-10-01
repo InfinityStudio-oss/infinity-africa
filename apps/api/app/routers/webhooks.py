@@ -12,7 +12,7 @@ from app.auth import require_role
 from app.config import get_settings
 from app.core.errors import NotFoundError, ValidationAPIError
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import RateLimitExceededError, enforce_rate_limit, rate_limit
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
@@ -348,7 +348,33 @@ async def selcom_checkout_webhook(
     # regardless of how confident we are that Selcom "really did" send it.
     # No secrets in this log/audit entry: dev_bypass_used is a bool, never
     # the test secret itself.
-    if not accepted:
+    # An unsigned delivery may still be allowed to act as a HINT — never
+    # as a source of truth. Everything below this point already ignores
+    # what the callback claims and asks Selcom directly over our own
+    # authenticated connection, so letting an unsigned one through buys
+    # latency (seconds instead of up to two minutes waiting for the
+    # reconciliation sweep) without buying trust.
+    #
+    # Rate limited, because the one thing a forged callback can cost us
+    # is provider budget. Keyed on the claimed event id as well as the
+    # caller's address: keying on address alone lets one attacker rotate
+    # addresses against a single order, and on the id alone lets one
+    # address work through many.
+    hinting_unsigned = False
+    if not accepted and settings.selcom_checkout_accept_unsigned_callbacks:
+        try:
+            enforce_rate_limit(
+                scope="selcom_unsigned_callback",
+                key=event_id,
+                limit=settings.selcom_unsigned_callback_max_per_minute,
+                window_seconds=60,
+                request=request,
+            )
+            hinting_unsigned = True
+        except RateLimitExceededError:
+            logger.warning("selcom_checkout unsigned callback rate limited (event_id=%s)", event_id)
+
+    if not accepted and not hinting_unsigned:
         update_row(
             client,
             "selcom_webhook_events",
@@ -390,6 +416,19 @@ async def selcom_checkout_webhook(
         )
         raise NotFoundError("No matching collection found for this webhook")
 
+    # An unsigned hint may only nudge a collection that is still waiting
+    # for an answer. Anything already resolved has nothing to learn from
+    # a lookup, so re-asking about one is pure provider budget spent on
+    # an unauthenticated request's say-so.
+    if hinting_unsigned and collection.get("status") != "processing":
+        update_row(
+            client,
+            "selcom_webhook_events",
+            uuid.UUID(stored["id"]),
+            {"status": "failed", "processing_error": "unsigned callback for an already-resolved collection"},
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+
     # Deliberately ignores payload.payment_status/result/resultcode —
     # never trusted directly (see this function's docstring). Only used
     # to find the collection and to know which Selcom order to ask about.
@@ -410,7 +449,14 @@ async def selcom_checkout_webhook(
         resource_id=uuid.UUID(collection["id"]),
         actor_type="system",
         merchant_id=uuid.UUID(collection["merchant_id"]),
-        metadata={"event_id": event_id, "dev_bypass_used": dev_bypass_used},
+        metadata={
+            "event_id": event_id,
+            "dev_bypass_used": dev_bypass_used,
+            # Recorded so the callback log tells the difference between a
+            # verified delivery and an unsigned one we chose to act on.
+            "signature_valid": signature_valid,
+            "unsigned_hint": hinting_unsigned,
+        },
     )
 
     return APIResponse(data={"status": "acknowledged"})

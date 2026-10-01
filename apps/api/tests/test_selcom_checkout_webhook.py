@@ -418,3 +418,100 @@ def test_no_bypass_at_all_when_test_secret_is_blank_even_in_development(fake_cli
     response = _post_webhook(body, headers={"X-Internal-Test-Secret": ""})
 
     assert response.status_code == 401
+
+
+# --- unsigned deliveries as a hint, never as truth -------------------------------------
+#
+# Selcom does not sign these. Opting in lets an unsigned callback trigger
+# the SAME authenticated lookup the reconciliation sweep performs, just
+# sooner -- seconds instead of up to two minutes. What it must never do is
+# make us believe the callback's own claims.
+
+
+def _allow_unsigned(monkeypatch, *, per_minute: int = 30):
+    monkeypatch.setenv("SELCOM_CHECKOUT_ACCEPT_UNSIGNED_CALLBACKS", "true")
+    monkeypatch.setenv("SELCOM_UNSIGNED_CALLBACK_MAX_PER_MINUTE", str(per_minute))
+    get_settings.cache_clear()
+
+
+def test_unsigned_is_still_rejected_when_the_flag_is_off(fake_client, monkeypatch):
+    """The default. Deploying this must change nothing until someone
+    decides otherwise."""
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _stub_order_status(monkeypatch, payment_status="COMPLETED")
+
+    response = _post_webhook(_webhook_body(collection, payment_status="COMPLETED"))
+
+    assert response.status_code == 401
+    row = next(r for r in fake_client.table("collections")._table.rows if r["id"] == collection["id"])
+    assert row["status"] == "processing"
+
+
+def test_an_unsigned_hint_triggers_the_authenticated_lookup_and_credits(fake_client, monkeypatch):
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _allow_unsigned(monkeypatch)
+    _stub_order_status(monkeypatch, payment_status="COMPLETED")
+
+    response = _post_webhook(_webhook_body(collection, payment_status="COMPLETED"))
+
+    assert response.status_code == 200
+    row = next(r for r in fake_client.table("collections")._table.rows if r["id"] == collection["id"])
+    assert row["status"] == "successful"
+
+
+def test_an_unsigned_hint_never_credits_from_its_own_claims(fake_client, monkeypatch):
+    """The security property that makes this safe at all. The callback
+    says COMPLETED; the authenticated lookup says still pending. Nothing
+    may credit."""
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _allow_unsigned(monkeypatch)
+    _stub_order_status(monkeypatch, payment_status="PENDING", result="PENDING", resultcode="111")
+
+    response = _post_webhook(_webhook_body(collection, payment_status="COMPLETED"))
+
+    assert response.status_code == 200
+    row = next(r for r in fake_client.table("collections")._table.rows if r["id"] == collection["id"])
+    assert row["status"] == "processing"
+    assert Decimal(str(fake_client.table("ledger_accounts")._table.rows[0]["balance"])) == Decimal(0)
+
+
+def test_an_unsigned_hint_is_refused_for_an_already_resolved_collection(fake_client, monkeypatch):
+    """Nothing to learn, so nothing to spend provider budget on at an
+    unauthenticated request's say-so."""
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _allow_unsigned(monkeypatch)
+    _stub_order_status(monkeypatch, payment_status="COMPLETED")
+    assert _post_webhook(_webhook_body(collection, payment_status="COMPLETED")).status_code == 200
+
+    # Same delivery details, new event id so it is not deduped as a repeat.
+    body = _webhook_body(collection, payment_status="COMPLETED")
+    body["transid"] = collection["provider_transid"]
+    fake_client.table("selcom_webhook_events")._table.rows.clear()
+
+    assert _post_webhook(body).status_code == 401
+
+
+def test_unsigned_hints_are_rate_limited(fake_client, monkeypatch):
+    """The one thing a forged callback can cost us is provider budget."""
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _allow_unsigned(monkeypatch, per_minute=1)
+    _stub_order_status(monkeypatch, payment_status="PENDING", result="PENDING", resultcode="111")
+
+    body = _webhook_body(collection, payment_status="COMPLETED")
+    assert _post_webhook(body).status_code == 200
+
+    fake_client.table("selcom_webhook_events")._table.rows.clear()
+    assert _post_webhook(body).status_code == 401
+
+
+def test_acting_on_an_unsigned_hint_still_records_it_as_unverified(fake_client, monkeypatch):
+    """The callback log must not start claiming these were verified."""
+    collection = _seed_pending_collection(fake_client, monkeypatch)
+    _allow_unsigned(monkeypatch)
+    _stub_order_status(monkeypatch, payment_status="COMPLETED")
+
+    _post_webhook(_webhook_body(collection, payment_status="COMPLETED"))
+
+    event = fake_client.table("selcom_webhook_events")._table.rows[0]
+    assert event["signature_valid"] is False
+    assert event["status"] == "processed"
