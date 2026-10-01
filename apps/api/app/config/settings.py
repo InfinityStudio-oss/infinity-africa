@@ -95,6 +95,58 @@ class Settings(BaseSettings):
     # back to "processing" and settled normally. 0 disables the recheck.
     collection_push_expiry_grace_hours: int = 24
 
+    # SELF_PAYMENT_OWN_TILL: the amount above which a self-payment is held
+    # for review rather than credited (app/services/
+    # fraud_monitoring_service.py::check_self_payment_risk).
+    #
+    # The rule fires when the payer's phone matches the merchant's own
+    # registered contact phone. It began as an unconditional hold, after a
+    # real "you are trying to pay into your own till" incident. The cost of
+    # that was paid by every honest integrator: testing a payment from your
+    # own phone is the first thing anyone does, and it left their money
+    # sitting at pending_review with nothing explaining why. A partner hit
+    # exactly this on 2026-10-01 and reasonably concluded the API was
+    # broken.
+    #
+    # A self-payment is not profitable on its own -- the payer loses the
+    # fee. What the hold actually guards is the reversal window: pay in,
+    # withdraw the balance, then dispute the original mobile money
+    # transaction. That only pays off at size, so size is what decides.
+    # Below this, credit immediately and raise the alert anyway; above it,
+    # hold as before.
+    #
+    # 0 holds every self-payment, restoring the original behaviour.
+    self_payment_hold_above_amount: Decimal = Decimal("50000")
+
+    # Whether an UNSIGNED Selcom Checkout callback may trigger an
+    # authenticated status lookup (app/routers/webhooks.py).
+    #
+    # Selcom does not sign these callbacks. No real delivery has ever
+    # carried a Digest/Timestamp/Digest-Method header -- the scheme in
+    # signer.py was inferred from their outbound auth and has never
+    # matched anything. So every callback fails closed, and collections
+    # are instead resolved by the reconciliation sweep up to two minutes
+    # later.
+    #
+    # Turning this on does NOT make us believe an unsigned payload. The
+    # handler already ignores everything a callback claims -- status,
+    # amount, result code -- and uses it only to learn which order to ask
+    # Selcom about, over our own authenticated connection. An unsigned
+    # callback becomes a "look at this one now" nudge for a lookup that
+    # already happens on a timer; the answer still comes from Selcom
+    # directly.
+    #
+    # What it does expose is our provider rate budget, so the unsigned
+    # path is rate limited and only acts on a collection that is still
+    # `processing`. A forged callback can at most make us re-ask about a
+    # payment we were already going to ask about.
+    #
+    # Default off: this is security-adjacent and the platform works
+    # without it, so switching it on is a deliberate decision rather than
+    # something a deploy does quietly.
+    selcom_checkout_accept_unsigned_callbacks: bool = False
+    selcom_unsigned_callback_max_per_minute: int = 30
+
     # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
     # When true, require_super_admin additionally demands a Supabase `aal2`
     # session — a Super Admin holding only a password is refused with

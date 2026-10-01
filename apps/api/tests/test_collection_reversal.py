@@ -18,6 +18,7 @@ import asyncio
 import uuid
 from decimal import Decimal
 
+from app.config import get_settings
 from app.services.checkout_reconciliation import complete_checkout_collection_once
 from app.services.collections import (
     finalize_pending_review_collection,
@@ -271,10 +272,23 @@ def test_reversing_an_already_reversed_collection_is_a_noop(fake_client, monkeyp
     assert Decimal(str(wallet["balance"])) == Decimal(0)
 
 
-# --- self-payment / own-till: held before crediting, never auto-credited --------------
+# --- self-payment / own-till ---------------------------------------------------------
+#
+# The rule fires on a payer phone matching the merchant's own contact
+# phone. Whether that HOLDS the funds or merely records an alert now
+# depends on the amount: see Settings.self_payment_hold_above_amount for
+# why, and _hold_every_self_payment below for the original behaviour.
+# These fixtures create a 1000 collection, so the threshold each test
+# sets is what decides which path it takes.
+
+
+def _hold_above(monkeypatch, amount):
+    monkeypatch.setenv("SELF_PAYMENT_HOLD_ABOVE_AMOUNT", str(amount))
+    get_settings.cache_clear()
 
 
 def test_self_payment_phone_match_holds_pending_review_not_credited(fake_client, monkeypatch):
+    _hold_above(monkeypatch, 500)  # the 1000 collection below exceeds this
     seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
     collection, _merchant_id, _link, _invoice = _seed_pending_collection(
         fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
@@ -292,6 +306,7 @@ def test_self_payment_phone_match_holds_pending_review_not_credited(fake_client,
 
 
 def test_self_payment_holds_linked_invoice_from_being_marked_paid(fake_client, monkeypatch):
+    _hold_above(monkeypatch, 500)
     seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
     collection, _merchant_id, _link, invoice = _seed_pending_collection(
         fake_client,
@@ -324,6 +339,7 @@ def test_different_phone_from_merchant_credits_normally(fake_client, monkeypatch
 
 
 def test_finalizing_pending_review_collection_credits_it_exactly_once(fake_client, monkeypatch):
+    _hold_above(monkeypatch, 500)
     seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
     collection, _merchant_id, _link, _invoice = _seed_pending_collection(
         fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
@@ -351,6 +367,9 @@ def test_admin_clearing_self_payment_alert_finalizes_collection(fake_client, mon
     from tests.factories import TEST_JWT_SECRET, auth_headers, make_super_admin
 
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
+    # Below this the collection would be credited outright and there would
+    # be nothing for an admin to clear.
+    monkeypatch.setenv("SELF_PAYMENT_HOLD_ABOVE_AMOUNT", "500")
     get_settings.cache_clear()
 
     seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
@@ -379,3 +398,84 @@ def test_admin_clearing_self_payment_alert_finalizes_collection(fake_client, mon
     assert fake_client.table("collections")._table.rows[0]["status"] == "successful"
 
     get_settings.cache_clear()
+
+
+# --- self-payment below the hold threshold: credited, still recorded ------------------
+
+
+def test_a_small_self_payment_is_credited_rather_than_held(fake_client, monkeypatch):
+    """The honest case this cost. Testing a payment from your own phone is
+    the first thing any integrator does, and an unconditional hold left
+    their money at pending_review with nothing explaining why — a partner
+    hit exactly this on 2026-10-01 and concluded the API was broken."""
+    _hold_above(monkeypatch, 50000)  # the 1000 collection below is well under
+    seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
+    collection, _merchant_id, _link, _invoice = _seed_pending_collection(
+        fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
+    )
+
+    resolved = _complete(fake_client, collection)
+
+    assert resolved["status"] == "successful"
+    wallet = fake_client.table("ledger_accounts")._table.rows[0]
+    assert Decimal(str(wallet["balance"])) == Decimal("985.00")
+
+
+def test_a_credited_self_payment_still_raises_an_alert(fake_client, monkeypatch):
+    """Not holding is not the same as not noticing. A merchant cycling
+    money through their own account must still be visible to an admin."""
+    _hold_above(monkeypatch, 50000)
+    seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
+    collection, _merchant_id, _link, _invoice = _seed_pending_collection(
+        fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
+    )
+
+    _complete(fake_client, collection)
+
+    alerts = [a for a in fake_client.table("fraud_alerts")._table.rows if a["rule_code"] == "SELF_PAYMENT_OWN_TILL"]
+    assert len(alerts) == 1
+    assert alerts[0]["metadata"]["held"] is False
+    assert "Held for review" not in alerts[0]["reason"]
+
+
+def test_a_large_self_payment_is_still_held(fake_client, monkeypatch):
+    """The threshold moves where the line sits; it does not remove it.
+    Paying in, withdrawing, then disputing the original mobile money
+    transaction only pays off at size, which is what still gets held."""
+    _hold_above(monkeypatch, 500)
+    seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
+    collection, _merchant_id, _link, _invoice = _seed_pending_collection(
+        fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
+    )
+
+    resolved = _complete(fake_client, collection)
+
+    assert resolved["status"] == "pending_review"
+    assert Decimal(str(fake_client.table("ledger_accounts")._table.rows[0]["balance"])) == Decimal(0)
+    alerts = [a for a in fake_client.table("fraud_alerts")._table.rows if a["rule_code"] == "SELF_PAYMENT_OWN_TILL"]
+    assert alerts[0]["metadata"]["held"] is True
+
+
+def test_a_zero_threshold_holds_every_self_payment(fake_client, monkeypatch):
+    """The switch back to the original behaviour, for if this turns out to
+    have been the wrong trade."""
+    _hold_above(monkeypatch, 0)
+    seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
+    collection, _merchant_id, _link, _invoice = _seed_pending_collection(
+        fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255747730270"
+    )
+
+    assert _complete(fake_client, collection)["status"] == "pending_review"
+
+
+def test_the_rule_still_ignores_a_different_payer_entirely(fake_client, monkeypatch):
+    """No alert at all for an ordinary customer — the threshold must not
+    turn this into something that fires on every payment."""
+    _hold_above(monkeypatch, 50000)
+    seed_fraud_rules(fake_client, "SELF_PAYMENT_OWN_TILL")
+    collection, _merchant_id, _link, _invoice = _seed_pending_collection(
+        fake_client, monkeypatch, customer_phone="255747730270", contact_phone="255700000000"
+    )
+
+    assert _complete(fake_client, collection)["status"] == "successful"
+    assert fake_client.table("fraud_alerts")._table.rows == []

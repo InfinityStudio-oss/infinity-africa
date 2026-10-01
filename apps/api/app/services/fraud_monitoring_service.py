@@ -15,11 +15,12 @@ its own exceptions and returns an empty list rather than propagating.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from supabase import Client
 
+from app.config.settings import get_settings
 from app.schemas.enums import NotificationType
 from app.services.crud import execute_maybe_single, get_by_id, insert_row, update_row
 from app.services.notifications_service import notify_merchant
@@ -120,6 +121,20 @@ def _raise_alert(
     return alert
 
 
+def _exceeds_self_payment_hold_threshold(collection: dict) -> bool:
+    """Whether this self-payment is big enough to hold rather than just
+    record. A threshold of 0 holds everything, which is where this rule
+    started. An unreadable amount holds too — the safe direction when we
+    cannot tell how much is moving."""
+    threshold = get_settings().self_payment_hold_above_amount
+    if threshold <= 0:
+        return True
+    try:
+        return Decimal(str(collection.get("amount") or 0)) > threshold
+    except (InvalidOperation, TypeError, ValueError):
+        return True
+
+
 def check_self_payment_risk(client: Client, *, collection: dict, transaction: dict | None) -> dict | None:
     """Gate, not just an alert: called from resolve_collection() *before*
     a collection is credited, so a self-payment/own-till match can hold
@@ -146,16 +161,33 @@ def check_self_payment_risk(client: Client, *, collection: dict, transaction: di
         if not merchant_phone or merchant_phone != phone:
             return None
 
-        return _raise_alert(
+        # Amount decides whether this holds or merely records. A
+        # self-payment loses the payer the fee, so it is not profitable by
+        # itself; what the hold guards against is paying in, withdrawing,
+        # then disputing the original mobile money transaction, which only
+        # pays off at size. Holding every one of them taxed the honest
+        # case instead — testing from your own phone is the first thing
+        # any integrator does, and it stranded their money at
+        # pending_review with nothing on screen explaining why.
+        held = _exceeds_self_payment_hold_threshold(collection)
+        alert = _raise_alert(
             client,
             merchant_id=uuid.UUID(collection["merchant_id"]),
             transaction_id=uuid.UUID(transaction["id"]) if transaction else None,
             customer_phone=collection.get("customer_phone"),
             rule_code="SELF_PAYMENT_OWN_TILL",
-            reason="Suspicious activity detected: the payer's phone number matches this merchant's own registered "
-            "contact phone. Held for review before funds become available.",
-            metadata={"collection_id": collection["id"]},
+            reason=(
+                "Suspicious activity detected: the payer's phone number matches this merchant's own registered "
+                "contact phone. Held for review before funds become available."
+                if held
+                else "The payer's phone number matches this merchant's own registered contact phone. Credited "
+                "normally — below the amount that holds funds for review. Raised for visibility."
+            ),
+            metadata={"collection_id": collection["id"], "held": held},
         )
+        # The alert is recorded either way; only a held one is returned,
+        # because the caller gates on this value.
+        return alert if held else None
     except Exception:  # noqa: BLE001 — a fraud-check failure must never break a real payment flow
         return None
 
