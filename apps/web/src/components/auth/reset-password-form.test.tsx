@@ -6,11 +6,12 @@ const signOut = vi.fn();
 const setSession = vi.fn();
 const verifyOtp = vi.fn();
 const exchangeCodeForSession = vi.fn();
+const getSession = vi.fn();
 const push = vi.fn();
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    auth: { updateUser, signOut, setSession, verifyOtp, exchangeCodeForSession },
+    auth: { updateUser, signOut, setSession, verifyOtp, exchangeCodeForSession, getSession },
   }),
 }));
 
@@ -30,6 +31,7 @@ describe("ResetPasswordForm", () => {
     setSession.mockResolvedValue({ error: null });
     verifyOtp.mockResolvedValue({ error: null });
     exchangeCodeForSession.mockResolvedValue({ error: null });
+    getSession.mockResolvedValue({ data: { session: { access_token: "at" } } });
     setValidRecoveryLinkUrl();
   });
 
@@ -219,5 +221,25 @@ describe("ResetPasswordForm", () => {
 
     await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
     expect(screen.queryByLabelText("Verification Code")).not.toBeInTheDocument();
+  });
+
+  it("does not reach the password form when the code leaves no session behind", async () => {
+    // The bug this form actually had: verifyOtp returned no error, the
+    // form declared a session existed, and the failure surfaced one
+    // screen later as "this reset link is invalid or has expired" --
+    // after the person had typed a new password, blaming the link for a
+    // session we never had.
+    getSession.mockResolvedValue({ data: { session: null } });
+    window.history.replaceState(null, "", "/dashboard/reset-password");
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
+    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "75456908" } });
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(screen.getByText(/no session was created/)).toBeInTheDocument());
+    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
   });
 });

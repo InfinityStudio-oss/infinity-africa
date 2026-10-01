@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -30,7 +30,16 @@ export function ResetPasswordForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
-  const linkSession = useRecoveryLinkSession(["recovery"]);
+  // ONE client for the whole page. This form used to build three --
+  // one inside the hook that establishes the session, one to verify a
+  // typed code, and one to set the password. Each is its own session
+  // store, so the session was established on one client and
+  // updateUser() ran on another that could not see it. It failed with
+  // "Auth session missing!", which this form's own error mapping turned
+  // into "this reset link is invalid or has expired" -- blaming the link
+  // for a session we had thrown away ourselves.
+  const supabase = useMemo(() => createClient(), []);
+  const linkSession = useRecoveryLinkSession(["recovery"], supabase);
   // The typed way in, for when the emailed link arrives with nothing in
   // it. Same single-use token as the link carries, just not routed
   // through anything that can rewrite a URL.
@@ -45,7 +54,6 @@ export function ResetPasswordForm({
     setCodeErrors([]);
     setCodeStatus("loading");
 
-    const supabase = createClient();
     const { error } = await supabase.auth.verifyOtp({
       email: codeEmail.trim(),
       token: code.trim(),
@@ -57,8 +65,19 @@ export function ResetPasswordForm({
       setCodeErrors([error.message]);
       return;
     }
-    // A session now exists, so the password form below can do its work
-    // exactly as it would after a working link.
+
+    // Checked, not assumed. verifyOtp can return without an error and
+    // still leave no usable session, and the previous version simply
+    // declared one existed -- so the failure surfaced one screen later,
+    // after the person had typed a new password, as a message blaming
+    // the link.
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      setCodeErrors([
+        "That code was accepted but no session was created. Request a new link and try again.",
+      ]);
+      return;
+    }
     setCodeAccepted(true);
   }
 
@@ -71,7 +90,6 @@ export function ResetPasswordForm({
     if (passwordErrors.length > 0) return;
 
     setStatus("loading");
-    const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
