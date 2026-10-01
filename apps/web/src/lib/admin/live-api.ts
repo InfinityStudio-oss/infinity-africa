@@ -513,6 +513,17 @@ export async function listAdminNotifications(): Promise<AdminNotificationRow[]> 
   return apiList<AdminNotificationRow>("/v1/admin/notifications");
 }
 
-export async function listAdminTeam(): Promise<AdminTeamMember[]> {
-  return apiList<AdminTeamMember>("/v1/admin/team");
+/**
+ * Returns null when the roster could not be READ, as distinct from an
+ * empty array meaning there are genuinely no admins.
+ *
+ * apiList collapses both into []: apiGet swallows a 404, a 500, an
+ * expired token and a dropped connection alike and returns null. For
+ * most lists that is a reasonable trade. For this one it is not -- "no
+ * platform admins found" shown to a signed-in super admin is impossible
+ * by definition, so rendering it means the page is lying about something
+ * it could simply have said it did not know.
+ */
+export async function listAdminTeam(): Promise<AdminTeamMember[] | null> {
+  return apiGet<AdminTeamMember[]>("/v1/admin/team");
 }

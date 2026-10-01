@@ -18,7 +18,7 @@ import type { AdminTeamMember } from "@/lib/admin/types";
  * super admins turns any single admin-session compromise into a
  * permanent platform takeover — see docs/SUPER_ADMIN_MFA_RUNBOOK.md.
  */
-export function AdminTeamCard({ team }: { team: AdminTeamMember[] }) {
+export function AdminTeamCard({ team }: { team: AdminTeamMember[] | null }) {
   return (
     <Card id="admins" className="scroll-mt-24">
       <div className="mb-5">
@@ -28,7 +28,14 @@ export function AdminTeamCard({ team }: { team: AdminTeamMember[] }) {
         </p>
       </div>
 
-      {team.length === 0 ? (
+      {team === null ? (
+        // Never "no admins": a signed-in super admin is proof of at least
+        // one, so an empty roster here always means the read failed.
+        <p className="text-sm text-error">
+          Couldn&apos;t load the admin roster. This is a failed request, not an empty list — retry shortly, and
+          check the API is reachable if it persists.
+        </p>
+      ) : team.length === 0 ? (
         <p className="text-sm text-on-surface-variant">No platform admins found.</p>
       ) : (
         <div className="overflow-x-auto">
