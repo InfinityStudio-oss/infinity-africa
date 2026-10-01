@@ -7,11 +7,23 @@ const setSession = vi.fn();
 const verifyOtp = vi.fn();
 const exchangeCodeForSession = vi.fn();
 const getSession = vi.fn();
+const getAuthenticatorAssuranceLevel = vi.fn();
+const listFactors = vi.fn();
+const challenge = vi.fn();
+const verify = vi.fn();
 const push = vi.fn();
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    auth: { updateUser, signOut, setSession, verifyOtp, exchangeCodeForSession, getSession },
+    auth: {
+      updateUser,
+      signOut,
+      setSession,
+      verifyOtp,
+      exchangeCodeForSession,
+      getSession,
+      mfa: { getAuthenticatorAssuranceLevel, listFactors, challenge, verify },
+    },
   }),
 }));
 
@@ -32,6 +44,11 @@ describe("ResetPasswordForm", () => {
     verifyOtp.mockResolvedValue({ error: null });
     exchangeCodeForSession.mockResolvedValue({ error: null });
     getSession.mockResolvedValue({ data: { session: { access_token: "at" } } });
+    // No MFA by default: a merchant account.
+    getAuthenticatorAssuranceLevel.mockResolvedValue({ data: { currentLevel: "aal1", nextLevel: "aal1" } });
+    listFactors.mockResolvedValue({ data: { totp: [{ id: "f1", status: "verified" }] }, error: null });
+    challenge.mockResolvedValue({ data: { id: "c1" }, error: null });
+    verify.mockResolvedValue({ error: null });
     setValidRecoveryLinkUrl();
   });
 
@@ -241,5 +258,98 @@ describe("ResetPasswordForm", () => {
 
     await waitFor(() => expect(screen.getByText(/no session was created/)).toBeInTheDocument());
     expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
+  });
+
+  // --- MFA-enabled accounts ------------------------------------------------
+  //
+  // Supabase refuses updateUser from an aal1 session when MFA is on, and a
+  // recovery session is always aal1. The whole reset flow failed on this
+  // for days, at the last possible moment, behind a message blaming the
+  // link.
+
+  function requireMfa() {
+    getAuthenticatorAssuranceLevel.mockResolvedValue({
+      data: { currentLevel: "aal1", nextLevel: "aal2" },
+    });
+  }
+
+  it("asks for the authenticator code before the password form, not after", async () => {
+    requireMfa();
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Authentication Code")).toBeInTheDocument());
+    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
+  });
+
+  it("a correct code unlocks the password form", async () => {
+    requireMfa();
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Authentication Code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Authentication Code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
+    expect(verify).toHaveBeenCalledWith({ factorId: "f1", challengeId: "c1", code: "123456" });
+  });
+
+  it("a wrong code fails safely and keeps the password form shut", async () => {
+    requireMfa();
+    verify.mockResolvedValue({ error: { message: "Invalid TOTP code entered" } });
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Authentication Code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Authentication Code"), { target: { value: "000000" } });
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(screen.getByText(/code isn't valid/)).toBeInTheDocument());
+    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
+  });
+
+  it("never reveals whether a wrong code hit a live challenge", async () => {
+    // One message for a wrong code and an expired challenge alike.
+    requireMfa();
+    challenge.mockResolvedValue({ data: null, error: { message: "challenge expired" } });
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Authentication Code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Authentication Code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(screen.getByText(/code isn't valid/)).toBeInTheDocument());
+    expect(screen.queryByText(/expired challenge|challenge expired/)).not.toBeInTheDocument();
+  });
+
+  it("offers no bypass when MFA is demanded but nothing is enrolled", async () => {
+    requireMfa();
+    listFactors.mockResolvedValue({ data: { totp: [] }, error: null });
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("Authentication Code")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Authentication Code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Continue"));
+
+    await waitFor(() => expect(screen.getByText(/Ask another Super Admin/)).toBeInTheDocument());
+    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("a merchant without MFA still goes straight to the password form", async () => {
+    setValidRecoveryLinkUrl();
+    const { ResetPasswordForm } = await import("./reset-password-form");
+    render(<ResetPasswordForm />);
+
+    await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Authentication Code")).not.toBeInTheDocument();
   });
 });

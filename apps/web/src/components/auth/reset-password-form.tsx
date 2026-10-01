@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -48,6 +48,83 @@ export function ResetPasswordForm({
   const [codeErrors, setCodeErrors] = useState<string[]>([]);
   const [codeStatus, setCodeStatus] = useState<"idle" | "loading">("idle");
   const [codeAccepted, setCodeAccepted] = useState(false);
+  // Second factor, for an account that has TOTP enrolled. Supabase refuses
+  // a password change from an aal1 session when MFA is on, and a recovery
+  // session is always aal1 -- so without this step the reset reaches the
+  // password form and then fails at the last moment.
+  const [totp, setTotp] = useState("");
+  const [mfaErrors, setMfaErrors] = useState<string[]>([]);
+  const [mfaStatus, setMfaStatus] = useState<"idle" | "loading">("idle");
+  const [mfaSatisfied, setMfaSatisfied] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState<boolean | null>(null);
+
+  const sessionReady = linkSession.status === "ready" || codeAccepted;
+
+  useEffect(() => {
+    if (!sessionReady || mfaRequired !== null) return;
+    let cancelled = false;
+    // Asked of Supabase rather than inferred from whether a factor
+    // exists: enrolment says MFA was set up, nextLevel says this session
+    // has to present it. Any failure resolves to "required" -- if we
+    // cannot establish that a second factor is unnecessary, assume it is.
+    supabase.auth.mfa
+      .getAuthenticatorAssuranceLevel()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setMfaRequired(data?.nextLevel === "aal2" && data?.currentLevel !== "aal2");
+      })
+      .catch(() => {
+        if (!cancelled) setMfaRequired(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionReady, mfaRequired, supabase]);
+
+  async function handleTotpSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setMfaErrors([]);
+    setMfaStatus("loading");
+    try {
+      const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
+      if (listError) throw listError;
+
+      const factor = (factors?.totp ?? []).find((candidate) => candidate.status === "verified");
+      if (!factor) {
+        // Supabase demands aal2 but there is nothing to present. No
+        // bypass belongs here: recovery goes through another Super Admin
+        // (docs/super-admin-mfa-recovery-runbook.md).
+        setMfaErrors([
+          "This account requires two-factor authentication, but no authenticator is enrolled. Ask another Super Admin to recover access.",
+        ]);
+        setMfaStatus("idle");
+        return;
+      }
+
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: factor.id,
+      });
+      if (challengeError) throw challengeError;
+
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: factor.id,
+        challengeId: challenge.id,
+        code: totp,
+      });
+      if (verifyError) throw verifyError;
+
+      // The session is aal2 from here, so updateUser will be accepted.
+      setMfaSatisfied(true);
+      setMfaStatus("idle");
+    } catch {
+      // Deliberately one message for a wrong code and an expired
+      // challenge alike: telling them apart confirms to someone guessing
+      // that they reached a live challenge.
+      setMfaErrors(["That code isn't valid. Check your authenticator app and try again."]);
+      setTotp("");
+      setMfaStatus("idle");
+    }
+  }
 
   async function handleCodeSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -207,6 +284,53 @@ export function ResetPasswordForm({
           Request a new link
         </a>
       </div>
+    );
+  }
+
+  // The second factor, before the password form rather than after it.
+  // Supabase refuses updateUser from an aal1 session when MFA is on, and
+  // a recovery session is always aal1 -- so letting someone type a new
+  // password first means failing them at the last moment, which is
+  // exactly how this flow used to behave.
+  if (sessionReady && mfaRequired && !mfaSatisfied) {
+    return (
+      <form onSubmit={handleTotpSubmit} className="mt-6 space-y-5">
+        <p className="text-sm text-on-surface-variant">
+          This account uses two-factor authentication. Enter the 6-digit code from your authenticator app to
+          continue.
+        </p>
+        {mfaErrors.length > 0 && (
+          <ul className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error space-y-1">
+            {mfaErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        )}
+        <div>
+          <label htmlFor="totp" className={labelClass}>
+            Authentication Code
+          </label>
+          <input
+            id="totp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={totp}
+            onChange={(event) => setTotp(event.target.value.replace(/\D/g, ""))}
+            className={inputClass}
+            placeholder="123456"
+            required
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={mfaStatus === "loading" || totp.length !== 6}
+          className="w-full bg-primary text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+        >
+          {mfaStatus === "loading" ? "Verifying…" : "Continue"}
+        </button>
+      </form>
     );
   }
 
