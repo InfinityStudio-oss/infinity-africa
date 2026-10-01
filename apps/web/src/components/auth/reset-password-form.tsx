@@ -94,8 +94,17 @@ export function ResetPasswordForm({
 
     if (error) {
       setStatus("idle");
-      const message = error.message.toLowerCase().includes("session") ? EXPIRED_MESSAGE : error.message;
-      setErrors([message]);
+      // Any error mentioning "session" used to be replaced wholesale with
+      // "this reset link is invalid or has expired" -- which is a guess,
+      // and which threw away the only evidence of what actually went
+      // wrong. Four separate diagnoses of this flow were made from the
+      // substituted text and all four were wrong, because the real
+      // message never reached anyone.
+      //
+      // The friendly line stays, since it is usually the right advice,
+      // but the provider's own words now travel with it.
+      const looksLikeASessionProblem = error.message.toLowerCase().includes("session");
+      setErrors(looksLikeASessionProblem ? [EXPIRED_MESSAGE, error.message] : [error.message]);
       return;
     }
 
