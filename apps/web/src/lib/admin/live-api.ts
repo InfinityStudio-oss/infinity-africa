@@ -14,6 +14,7 @@ import type {
   AdminInvoiceRow,
   AdminIpAllowlistRow,
   AdminNotificationRow,
+  AdminTeamMember,
   AdminNotificationSettingsRow,
   AdminOverview,
   AdminPayByLinkListRow,
@@ -510,4 +511,8 @@ export async function updateRefundStatus(
 
 export async function listAdminNotifications(): Promise<AdminNotificationRow[]> {
   return apiList<AdminNotificationRow>("/v1/admin/notifications");
+}
+
+export async function listAdminTeam(): Promise<AdminTeamMember[]> {
+  return apiList<AdminTeamMember>("/v1/admin/team");
 }

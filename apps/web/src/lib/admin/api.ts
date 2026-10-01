@@ -1,7 +1,9 @@
 /**
  * Data-access boundary for the super admin dashboard's remaining MOCK
  * resources — customers, pricing, API keys, reconciliation, settlement
- * accounts, compliance/KYC, provider status, support tickets, admin team.
+ * accounts, compliance/KYC, provider status, support tickets. (Admin team
+ * moved to live-api.ts on 2026-10-01 — it was showing three invented
+ * people on a live platform.)
  * These still live at /admin/* (out of scope for the /super-admin/* live
  * rewire — see lib/admin/live-api.ts for the 10 resources that moved and
  * are now real). No "server-only" marker here: 5 of these pages are still
@@ -10,7 +12,6 @@
 
 import {
   mockAdminCustomers,
-  mockAdminTeam,
   mockComplianceFlags,
   mockDuplicateReferences,
   mockFailedCallbacks,
@@ -25,7 +26,6 @@ import {
 } from "./mock-data";
 import type {
   AdminCustomerRow,
-  AdminTeamMember,
   ComplianceFlagRow,
   DuplicateReferenceRow,
   FailedCallbackRow,
@@ -52,7 +52,6 @@ const store = {
   providerHealth: mockProviderHealth(),
   incidents: mockIncidents(),
   supportTickets: mockSupportTickets(),
-  adminTeam: mockAdminTeam(),
 };
 
 /** Audit Logs is now a real, live page (lib/admin/live-api.ts) — nothing
@@ -168,7 +167,3 @@ export async function listSupportTickets(): Promise<SupportTicketRow[]> {
 }
 
 // --- Admin team --------------------------------------------------------
-
-export async function listAdminTeam(): Promise<AdminTeamMember[]> {
-  return store.adminTeam;
-}

@@ -291,8 +291,8 @@ class _FakeStorage:
 
 class _FakeAuthAdminUser:
     """Mirrors the subset of supabase-py's gotrue User object
-    app/services/admin_directory.py actually reads: .email and
-    .user_metadata (for "full_name")."""
+    app/services/admin_directory.py actually reads: .email,
+    .user_metadata (for "full_name") and .last_sign_in_at."""
 
     def __init__(
         self,
@@ -301,11 +301,15 @@ class _FakeAuthAdminUser:
         email: str | None,
         full_name: str | None,
         email_confirmed_at: str | None = None,
+        last_sign_in_at: str | None = None,
     ):
         self.id = user_id
         self.email = email
         self.user_metadata = {"full_name": full_name} if full_name else {}
         self.email_confirmed_at = email_confirmed_at
+        # None means "never signed in", which is a real and important
+        # state for a backup admin account, not merely missing data.
+        self.last_sign_in_at = last_sign_in_at
 
 
 class _FakeGetUserResult:
@@ -344,9 +348,14 @@ class _FakeAuthAdmin:
         email: str | None = None,
         full_name: str | None = None,
         email_confirmed_at: str | None = None,
+        last_sign_in_at: str | None = None,
     ) -> None:
         self._users[str(user_id)] = _FakeAuthAdminUser(
-            str(user_id), email=email, full_name=full_name, email_confirmed_at=email_confirmed_at
+            str(user_id),
+            email=email,
+            full_name=full_name,
+            email_confirmed_at=email_confirmed_at,
+            last_sign_in_at=last_sign_in_at,
         )
 
     def create_user(self, attributes: dict) -> _FakeGetUserResult:

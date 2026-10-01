@@ -641,8 +641,15 @@ export interface AdminNotificationRow {
 
 export interface AdminTeamMember {
   id: string;
-  name: string;
-  email: string;
-  role: "Super Admin" | "Operations Admin" | "Support Admin";
-  status: "active";
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  /** Always SUPER_ADMIN: platform_admins.role has a CHECK constraint that
+   * permits nothing else. The Operations/Support tiers an older mock
+   * displayed never existed. */
+  role: string;
+  /** null means this account has never signed in — a backup admin that is
+   * unproven rather than merely new. */
+  last_sign_in_at: string | null;
+  created_at: string;
 }

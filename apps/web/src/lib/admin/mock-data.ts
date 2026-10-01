@@ -7,7 +7,6 @@
 
 import type {
   AdminCustomerRow,
-  AdminTeamMember,
   ComplianceFlagRow,
   DuplicateReferenceRow,
   FailedCallbackRow,
@@ -186,12 +185,4 @@ export function mockSupportTickets(): SupportTicketRow[] {
     status,
     updated_at,
   }));
-}
-
-export function mockAdminTeam(): AdminTeamMember[] {
-  return [
-    { id: id("adm"), name: "Admin User", email: "admin@infinitypay.me", role: "Super Admin", status: "active" },
-    { id: id("adm"), name: "David Komba", email: "david.komba@infinitypay.me", role: "Operations Admin", status: "active" },
-    { id: id("adm"), name: "Rehema Ally", email: "rehema.ally@infinitypay.me", role: "Support Admin", status: "active" },
-  ];
 }

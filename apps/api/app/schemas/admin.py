@@ -290,3 +290,26 @@ class AdminInquiryResponse(BaseModel):
     message: str
     source: str
     created_at: datetime
+
+
+class AdminTeamMemberResponse(BaseModel):
+    """One row of the platform_admins roster.
+
+    `role` is always SUPER_ADMIN — the table's own CHECK constraint
+    allows nothing else. There are no Operations or Support admin tiers
+    on this platform, whatever an older mock once displayed.
+
+    `last_sign_in_at` is the field worth reading. An admin who has never
+    signed in satisfies "a second admin exists" on paper while being
+    unproven in practice, which is exactly the state
+    docs/SUPER_ADMIN_MFA_RUNBOOK.md warns about before MFA enforcement is
+    switched on.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    email: str | None = None
+    full_name: str | None = None
+    role: str
+    last_sign_in_at: str | None = None
+    created_at: datetime

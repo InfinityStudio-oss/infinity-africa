@@ -29,6 +29,7 @@ from app.schemas.admin import (
     AdminCollectionResponse,
     AdminCustomerResponse,
     AdminInquiryResponse,
+    AdminTeamMemberResponse,
     AdminInvoiceResponse,
     AdminMerchantResponse,
     AdminMerchantUserResponse,
@@ -1170,3 +1171,46 @@ def list_admin_inquiries(
     )
     data = [AdminInquiryResponse(**row) for row in (result.data or [])]
     return APIResponse(data=data, meta=build_page_meta(pagination, result.count or 0))
+
+
+@router.get("/team", response_model=APIResponse[list[AdminTeamMemberResponse]])
+def list_admin_team(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """The real platform_admins roster.
+
+    Read-only, deliberately. There is no product path that writes this
+    table — see docs/SUPER_ADMIN_MFA_RUNBOOK.md: a grant is made by hand,
+    with an audit entry, because an endpoint that creates super admins
+    turns any admin-session compromise into a permanent platform
+    takeover. This endpoint exists so the roster can be *seen*, which is
+    the half that was missing: the dashboard previously rendered three
+    invented people, so nobody could tell who actually holds access.
+
+    Ordered oldest first, which puts the founding account at the top and
+    makes a recently added one obvious.
+    """
+    client = get_supabase_admin()
+    rows = (
+        client.table("platform_admins")
+        .select("*")
+        .order("created_at", desc=False)
+        .execute()
+        .data
+        or []
+    )
+    profiles = batch_user_profiles(client, {row["user_id"] for row in rows})
+    return APIResponse(
+        data=[
+            AdminTeamMemberResponse(
+                id=row["id"],
+                user_id=row["user_id"],
+                email=profiles.get(row["user_id"], {}).get("email"),
+                full_name=profiles.get(row["user_id"], {}).get("full_name"),
+                role=row["role"],
+                last_sign_in_at=profiles.get(row["user_id"], {}).get("last_sign_in_at"),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+    )

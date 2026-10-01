@@ -74,16 +74,26 @@ def batch_api_key_prefixes(client: Client, api_key_ids: set[str]) -> dict[str, s
 
 def best_effort_user_profile(client: Client, user_id: str | uuid.UUID | None) -> dict:
     if not user_id:
-        return {"full_name": None, "email": None}
+        return {"full_name": None, "email": None, "last_sign_in_at": None}
     try:
         result = client.auth.admin.get_user_by_id(str(user_id))
         user = result.user
         full_name = (user.user_metadata or {}).get("full_name") if user.user_metadata else None
-        return {"full_name": full_name, "email": user.email}
+        # last_sign_in_at answers the question the Super Admin roster
+        # exists to answer: whether a backup admin has ever actually been
+        # used. An account that has never signed in satisfies "two admins
+        # exist" on paper while being unproven in practice, which is the
+        # failure docs/SUPER_ADMIN_MFA_RUNBOOK.md's precondition is for.
+        last_sign_in = getattr(user, "last_sign_in_at", None)
+        return {
+            "full_name": full_name,
+            "email": user.email,
+            "last_sign_in_at": str(last_sign_in) if last_sign_in else None,
+        }
     except Exception:  # noqa: BLE001 - deliberately broad: a deleted user, a
         # network hiccup, or malformed metadata should all degrade to "no
         # name" rather than break the enclosing admin list request.
-        return {"full_name": None, "email": None}
+        return {"full_name": None, "email": None, "last_sign_in_at": None}
 
 
 def batch_user_profiles(client: Client, user_ids: set[str]) -> dict[str, dict]:
