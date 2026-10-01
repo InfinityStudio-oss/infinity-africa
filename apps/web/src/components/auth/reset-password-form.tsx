@@ -30,35 +30,22 @@ export function ResetPasswordForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
-  // ONE client for the whole page. This form used to build three --
-  // one inside the hook that establishes the session, one to verify a
-  // typed code, and one to set the password. Each is its own session
-  // store, so the session was established on one client and
-  // updateUser() ran on another that could not see it. It failed with
-  // "Auth session missing!", which this form's own error mapping turned
-  // into "this reset link is invalid or has expired" -- blaming the link
-  // for a session we had thrown away ourselves.
+  // One client for the whole page, shared with the hook that establishes
+  // the recovery session, so the session and the password change are
+  // never on different instances.
   const supabase = useMemo(() => createClient(), []);
   const linkSession = useRecoveryLinkSession(["recovery"], supabase);
-  // The typed way in, for when the emailed link arrives with nothing in
-  // it. Same single-use token as the link carries, just not routed
-  // through anything that can rewrite a URL.
-  const [codeEmail, setCodeEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [codeErrors, setCodeErrors] = useState<string[]>([]);
-  const [codeStatus, setCodeStatus] = useState<"idle" | "loading">("idle");
-  const [codeAccepted, setCodeAccepted] = useState(false);
-  // Second factor, for an account that has TOTP enrolled. Supabase refuses
-  // a password change from an aal1 session when MFA is on, and a recovery
-  // session is always aal1 -- so without this step the reset reaches the
-  // password form and then fails at the last moment.
+  // Second factor, for an account with TOTP enrolled. Supabase refuses a
+  // password change from an aal1 session when MFA is on, and a recovery
+  // session is always aal1 -- so this has to come before the password
+  // fields, not after.
   const [totp, setTotp] = useState("");
   const [mfaErrors, setMfaErrors] = useState<string[]>([]);
   const [mfaStatus, setMfaStatus] = useState<"idle" | "loading">("idle");
   const [mfaSatisfied, setMfaSatisfied] = useState(false);
   const [mfaRequired, setMfaRequired] = useState<boolean | null>(null);
 
-  const sessionReady = linkSession.status === "ready" || codeAccepted;
+  const sessionReady = linkSession.status === "ready";
 
   useEffect(() => {
     if (!sessionReady || mfaRequired !== null) return;
@@ -126,38 +113,6 @@ export function ResetPasswordForm({
     }
   }
 
-  async function handleCodeSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setCodeErrors([]);
-    setCodeStatus("loading");
-
-    const { error } = await supabase.auth.verifyOtp({
-      email: codeEmail.trim(),
-      token: code.trim(),
-      type: "recovery",
-    });
-
-    setCodeStatus("idle");
-    if (error) {
-      setCodeErrors([error.message]);
-      return;
-    }
-
-    // Checked, not assumed. verifyOtp can return without an error and
-    // still leave no usable session, and the previous version simply
-    // declared one existed -- so the failure surfaced one screen later,
-    // after the person had typed a new password, as a message blaming
-    // the link.
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) {
-      setCodeErrors([
-        "That code was accepted but no session was created. Request a new link and try again.",
-      ]);
-      return;
-    }
-    setCodeAccepted(true);
-  }
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
@@ -194,7 +149,7 @@ export function ResetPasswordForm({
     return <p className="text-sm text-on-surface-variant">Verifying your reset link…</p>;
   }
 
-  if (linkSession.status === "invalid" && !codeAccepted) {
+  if (linkSession.status === "invalid") {
     // Two different failures wore the same sentence. A token the provider
     // rejected is expired or already used — asking for a new link fixes
     // it. A link that arrived with nothing in it was never a valid link
@@ -224,59 +179,6 @@ export function ResetPasswordForm({
             </p>
           </div>
         )}
-        <form onSubmit={handleCodeSubmit} className="space-y-4 rounded-lg border border-outline-variant p-4">
-          <div>
-            <p className="text-sm font-semibold text-on-surface">Use the code from your email instead</p>
-            <p className="mt-1 text-xs text-on-surface-variant">
-              The same email contains a code. Typing it works even when the link does not.
-            </p>
-          </div>
-          {codeErrors.length > 0 && (
-            <ul className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error space-y-1">
-              {codeErrors.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
-          )}
-          <div>
-            <label htmlFor="code-email" className={labelClass}>
-              Email Address
-            </label>
-            <input
-              id="code-email"
-              type="email"
-              autoComplete="username"
-              value={codeEmail}
-              onChange={(event) => setCodeEmail(event.target.value)}
-              className={inputClass}
-              placeholder="you@business.co.tz"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="code" className={labelClass}>
-              Verification Code
-            </label>
-            <input
-              id="code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              className={inputClass}
-              placeholder="Code from your email"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={codeStatus === "loading"}
-            className="w-full bg-primary text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
-          >
-            {codeStatus === "loading" ? "Checking…" : "Continue"}
-          </button>
-        </form>
         <a
           href={forgotPasswordPath}
           className="block w-full text-center bg-primary-container text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity"

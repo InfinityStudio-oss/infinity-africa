@@ -186,79 +186,11 @@ describe("ResetPasswordForm", () => {
     expect(setSession).toHaveBeenCalledTimes(1);
   });
 
-  // --- the typed way in, for when the link arrives empty -------------------
 
-  it("offers the emailed code when the link carried no token", async () => {
-    window.history.replaceState(null, "", "/dashboard/reset-password");
-    const { ResetPasswordForm } = await import("./reset-password-form");
-    render(<ResetPasswordForm />);
 
-    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
-    expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
-  });
 
-  it("a correct code reaches the password form, the same as a working link would", async () => {
-    window.history.replaceState(null, "", "/dashboard/reset-password");
-    const { ResetPasswordForm } = await import("./reset-password-form");
-    render(<ResetPasswordForm />);
 
-    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
-    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "75456908" } });
-    fireEvent.click(screen.getByText("Continue"));
 
-    await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
-    expect(verifyOtp).toHaveBeenCalledWith({
-      email: "ceo@infinitypay.me",
-      token: "75456908",
-      type: "recovery",
-    });
-  });
-
-  it("a rejected code says why and does not open the password form", async () => {
-    verifyOtp.mockResolvedValue({ error: { message: "Token has expired or is invalid" } });
-    window.history.replaceState(null, "", "/dashboard/reset-password");
-    const { ResetPasswordForm } = await import("./reset-password-form");
-    render(<ResetPasswordForm />);
-
-    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
-    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "00000000" } });
-    fireEvent.click(screen.getByText("Continue"));
-
-    await waitFor(() => expect(screen.getByText("Token has expired or is invalid")).toBeInTheDocument());
-    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
-  });
-
-  it("does not offer the code form when the link worked", async () => {
-    // It is a fallback, not a second front door sitting on every reset.
-    setValidRecoveryLinkUrl();
-    const { ResetPasswordForm } = await import("./reset-password-form");
-    render(<ResetPasswordForm />);
-
-    await waitFor(() => expect(screen.getByLabelText("New Password")).toBeInTheDocument());
-    expect(screen.queryByLabelText("Verification Code")).not.toBeInTheDocument();
-  });
-
-  it("does not reach the password form when the code leaves no session behind", async () => {
-    // The bug this form actually had: verifyOtp returned no error, the
-    // form declared a session existed, and the failure surfaced one
-    // screen later as "this reset link is invalid or has expired" --
-    // after the person had typed a new password, blaming the link for a
-    // session we never had.
-    getSession.mockResolvedValue({ data: { session: null } });
-    window.history.replaceState(null, "", "/dashboard/reset-password");
-    const { ResetPasswordForm } = await import("./reset-password-form");
-    render(<ResetPasswordForm />);
-
-    await waitFor(() => expect(screen.getByLabelText("Verification Code")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "ceo@infinitypay.me" } });
-    fireEvent.change(screen.getByLabelText("Verification Code"), { target: { value: "75456908" } });
-    fireEvent.click(screen.getByText("Continue"));
-
-    await waitFor(() => expect(screen.getByText(/no session was created/)).toBeInTheDocument());
-    expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
-  });
 
   // --- MFA-enabled accounts ------------------------------------------------
   //
