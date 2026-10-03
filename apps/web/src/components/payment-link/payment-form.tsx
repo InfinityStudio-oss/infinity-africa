@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { Icon } from "@/components/portal/icon";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { PublicPaymentLink } from "@/lib/payment-links";
 
@@ -404,19 +403,19 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
             <p className="text-sm font-medium text-on-surface mb-3">Choose how you want to pay</p>
             <div className="space-y-2.5">
               <PaymentMethodButton
-                icon="smartphone"
+                icon={<MobileMoneyIcon />}
                 label={METHOD_LABEL.WALLET_PUSH}
                 description="Approve with your mobile money PIN"
                 onClick={() => handleChooseMethod("WALLET_PUSH")}
               />
               <PaymentMethodButton
-                icon="account_balance_wallet"
+                icon={<WalletIcon />}
                 label={METHOD_LABEL.SELCOM_PESA}
                 description="Approve in your Selcom Pesa app"
                 onClick={() => handleChooseMethod("SELCOM_PESA")}
               />
               <PaymentMethodButton
-                icon="qr_code_scanner"
+                icon={<QrIcon />}
                 label={METHOD_LABEL.TANQR}
                 description="Scan with any supported payment app"
                 onClick={() => handleChooseMethod("TANQR")}
@@ -429,13 +428,55 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
   );
 }
 
+/** Inline SVG rather than a Material Symbols ligature.
+ *
+ * A ligature IS its own name in the markup, so until the icon font loads
+ * the browser paints the word — "smartphone", "qr_code_scanner" — over
+ * the card. app/layout.tsx hides those until the font is usable, but a
+ * guard can only ever be as good as its timing, and this is the one
+ * screen where a customer is deciding whether to hand over money. An SVG
+ * has nothing to fall back to and cannot flash.
+ *
+ * aria-hidden throughout: each card already carries a readable label.
+ */
+function MobileMoneyIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="6" y="2" width="12" height="20" rx="2.5" />
+      <path d="M11 18.5h2" />
+    </svg>
+  );
+}
+
+function WalletIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a2 2 0 0 1 2 2v1" />
+      <path d="M3 7.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3" />
+      <path d="M21 10.5h-4a1.75 1.75 0 0 0 0 3.5h4z" />
+    </svg>
+  );
+}
+
+function QrIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8" />
+      <path d="M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8" />
+      <path d="M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16" />
+      <path d="M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16" />
+      <path d="M7 12h10" />
+    </svg>
+  );
+}
+
 function PaymentMethodButton({
   icon,
   label,
   description,
   onClick,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   description: string;
   onClick: () => void;
@@ -447,7 +488,7 @@ function PaymentMethodButton({
       className="w-full flex items-center gap-3.5 rounded border border-outline-variant px-4 py-3.5 text-left transition-colors hover:border-primary-container hover:bg-primary-container/5"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
-        <Icon name={icon} className="text-[22px]" />
+        {icon}
       </span>
       <span className="flex-1 min-w-0">
         <span className="block text-sm font-semibold text-on-surface">{label}</span>

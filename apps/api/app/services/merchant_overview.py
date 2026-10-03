@@ -23,6 +23,17 @@ from app.core.errors import NotFoundError
 from app.services.crud import get_by_id
 from app.services.ledger import get_wallet_balance
 
+
+def _is_today(value: str | None, now: datetime) -> bool:
+    """Calendar-day comparison in UTC, matching admin_overview's. A null
+    timestamp (a withdrawal with no completed_at) is never "today"."""
+    if not value:
+        return False
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date() == now.date()
+    except ValueError:
+        return False
+
 _PENDING_TRANSACTION_STATUSES = ("pending", "processing")
 _UNPAID_INVOICE_STATUSES = ("SENT", "PARTIALLY_PAID", "OVERDUE")
 
@@ -40,7 +51,7 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
 
     successful_collections = (
         client.table("transactions")
-        .select("gross_amount, fee_amount")
+        .select("gross_amount, fee_amount, created_at")
         .eq("merchant_id", str(merchant_id))
         .eq("type", "collection")
         .eq("status", "successful")
@@ -48,6 +59,37 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
     ).data or []
     total_collections = sum(
         (Decimal(str(row["gross_amount"])) for row in successful_collections), Decimal(0)
+    )
+    # Same definition the Super Admin dashboard uses (app/services/
+    # admin_overview.py), scoped to this merchant: gross amount of
+    # successful collections created today, and amount of withdrawals
+    # that COMPLETED today. A withdrawal requested yesterday and paid
+    # this morning counts today, because the money moved today — which is
+    # the question "withdrawals today" is asking.
+    now = datetime.now(timezone.utc)
+    collections_today = sum(
+        (
+            Decimal(str(row["gross_amount"]))
+            for row in successful_collections
+            if _is_today(row.get("created_at"), now)
+        ),
+        Decimal(0),
+    )
+
+    completed_withdrawals = (
+        client.table("disbursements")
+        .select("amount, completed_at")
+        .eq("merchant_id", str(merchant_id))
+        .eq("status", "SUCCESS")
+        .execute()
+    ).data or []
+    withdrawals_today = sum(
+        (
+            Decimal(str(row["amount"]))
+            for row in completed_withdrawals
+            if _is_today(row.get("completed_at"), now)
+        ),
+        Decimal(0),
     )
     total_fees_charged = sum(
         (Decimal(str(row["fee_amount"])) for row in successful_collections), Decimal(0)
@@ -93,6 +135,8 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
     return {
         "merchant": merchant,
         "total_collections": total_collections,
+        "collections_today": collections_today,
+        "withdrawals_today": withdrawals_today,
         "available_balance": get_wallet_balance(client, merchant_id=merchant_id, currency=currency),
         "pending_transactions": pending_transactions,
         "successful_withdrawals": successful_withdrawals,

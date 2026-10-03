@@ -66,6 +66,27 @@ describe("PaymentForm", () => {
     expect(screen.getByText("Choose how you want to pay")).toBeInTheDocument();
   });
 
+  it("never prints a raw icon name on the payment cards", () => {
+    // These were Material Symbols ligatures, where the markup IS the
+    // icon's name — so before the icon font loaded the browser painted
+    // the words "smartphone", "account_balance_wallet" and
+    // "qr_code_scanner" over the card. On the one screen where someone
+    // is deciding whether to hand over money, that reads as broken.
+    // They are inline SVG now, which has nothing to fall back to.
+    const { container } = render(<PaymentForm slug="test-slug" link={link} />);
+
+    for (const ligature of ["smartphone", "account_balance_wallet", "qr_code_scanner"]) {
+      expect(container.textContent).not.toContain(ligature);
+    }
+  });
+
+  it("draws the payment method icons as SVG, not font glyphs", () => {
+    const { container } = render(<PaymentForm slug="test-slug" link={link} />);
+
+    expect(container.querySelectorAll("svg").length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll(".material-symbols-outlined")).toHaveLength(0);
+  });
+
   it("asks for a phone number before submitting Mobile Money Push when the link has none on file", () => {
     render(<PaymentForm slug="test-slug" link={link} />);
     fireEvent.click(screen.getByRole("button", { name: /Pay by Mobile Money Push/ }));

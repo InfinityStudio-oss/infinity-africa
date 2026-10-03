@@ -34,6 +34,8 @@ from app.schemas.merchants import MerchantResponse
 class MerchantOverviewResponse(BaseModel):
     merchant: MerchantResponse
     total_collections: Decimal
+    collections_today: Decimal
+    withdrawals_today: Decimal
     available_balance: Decimal
     pending_transactions: int
     successful_withdrawals: int

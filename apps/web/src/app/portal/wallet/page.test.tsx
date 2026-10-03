@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WalletLedgerEntry } from "@/lib/portal/types";
 
-const getAvailableBalance = vi.fn();
+const getWalletTotals = vi.fn();
 const listWalletLedger = vi.fn();
 const getMyMerchant = vi.fn();
 const exportWalletLedger = vi.fn();
 
 vi.mock("@/lib/portal/api", () => ({
-  getAvailableBalance: (...args: unknown[]) => getAvailableBalance(...args),
+  getWalletTotals: (...args: unknown[]) => getWalletTotals(...args),
   listWalletLedger: (...args: unknown[]) => listWalletLedger(...args),
   getMyMerchant: (...args: unknown[]) => getMyMerchant(...args),
   exportWalletLedger: (...args: unknown[]) => exportWalletLedger(...args),
@@ -40,7 +40,11 @@ function ledgerEntry(overrides: Partial<WalletLedgerEntry> = {}): WalletLedgerEn
 describe("Merchant portal WalletPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getAvailableBalance.mockResolvedValue("2470.00");
+    getWalletTotals.mockResolvedValue({
+      available_balance: "2470.00",
+      collections_today: "3000.00",
+      withdrawals_today: "2000.00",
+    });
     getMyMerchant.mockResolvedValue({ merchant_code: "27048391" });
     listWalletLedger.mockResolvedValue([]);
   });
@@ -195,5 +199,25 @@ describe("Merchant portal WalletPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Export Excel/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't export the wallet ledger. Please try again.");
+  });
+
+  it("heads the page with today's collections and withdrawals beside the balance", async () => {
+    const { default: WalletPage } = await import("./page");
+    render(<WalletPage />);
+
+    await waitFor(() => expect(screen.getByText("TZS 2,470.00")).toBeInTheDocument());
+    expect(screen.getByText("Collections Today")).toBeInTheDocument();
+    expect(screen.getByText("TZS 3,000.00")).toBeInTheDocument();
+    expect(screen.getByText("Withdrawals Today")).toBeInTheDocument();
+    expect(screen.getByText("TZS 2,000.00")).toBeInTheDocument();
+  });
+
+  it("fetches all three figures in one request", async () => {
+    // They come off the same overview payload; three calls for one row
+    // of cards would be three round trips for nothing.
+    const { default: WalletPage } = await import("./page");
+    render(<WalletPage />);
+
+    await waitFor(() => expect(getWalletTotals).toHaveBeenCalledTimes(1));
   });
 });

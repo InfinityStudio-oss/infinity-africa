@@ -369,9 +369,29 @@ export async function listDisbursements(): Promise<Disbursement[]> {
   return (await apiGet<Disbursement[]>("/v1/merchant/withdrawals")) ?? [];
 }
 
+/** Just the balance. Kept alongside getWalletTotals for callers that
+ * need nothing else — the withdrawals screen checks it before letting a
+ * payout be requested. */
 export async function getAvailableBalance(): Promise<string> {
-  const overview = await apiGet<{ available_balance: string }>("/v1/merchant/overview");
-  return overview?.available_balance ?? "0";
+  return (await getWalletTotals()).available_balance;
+}
+
+export interface WalletTotals {
+  available_balance: string;
+  collections_today: string;
+  withdrawals_today: string;
+}
+
+/** The three figures the Wallet page heads with, from one request — they
+ * all come off the same overview payload, so fetching them separately
+ * would be three round trips for one row of cards. */
+export async function getWalletTotals(): Promise<WalletTotals> {
+  const overview = await apiGet<WalletTotals>("/v1/merchant/overview");
+  return {
+    available_balance: overview?.available_balance ?? "0",
+    collections_today: overview?.collections_today ?? "0",
+    withdrawals_today: overview?.withdrawals_today ?? "0",
+  };
 }
 
 export interface CreateDisbursementInput {

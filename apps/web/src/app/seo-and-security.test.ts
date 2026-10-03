@@ -284,7 +284,17 @@ describe("Material Symbols icon font loading", () => {
 
   it("releases the pending guard even if the font never loads", () => {
     // Otherwise a blocked font would leave every icon permanently invisible.
-    expect(layoutSource).toContain("setTimeout(show,3000)");
+    expect(layoutSource).toMatch(/Date\.now\(\)-t0>\d+/);
+    expect(layoutSource).toContain("return show()");
+  });
+
+  it("waits on document.fonts.check rather than the promise from load()", () => {
+    // load() resolves with the faces that MATCHED, and this script runs
+    // before the stylesheet below it has been parsed — so no face is
+    // declared yet, nothing matches, and the promise resolves within a
+    // frame. The guard was being dropped before the font existed, which
+    // is exactly when the ligature names show.
+    expect(layoutSource).toContain("document.fonts.check");
   });
 
   it("declares the icon font-family locally, not only via Google's stylesheet", () => {

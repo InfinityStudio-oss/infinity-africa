@@ -76,14 +76,27 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         {/* Sets .icons-pending before the body paints, so a Material Symbols
             ligature is never shown as its own name ("smartphone",
-            "qr_code_scanner") while the icon font is still loading. Removed
-            as soon as the font is usable, and on a timeout so icons can
-            never stay hidden if the font fails outright. Inline and
-            synchronous on purpose: anything deferred runs after first paint,
-            which is exactly the frame we need to cover. */}
+            "qr_code_scanner") while the icon font is still loading. Inline
+            and synchronous on purpose: anything deferred runs after first
+            paint, which is exactly the frame we need to cover.
+
+            This POLLS document.fonts.check rather than awaiting
+            document.fonts.load. load() resolves with the faces that
+            matched — and this script runs before the stylesheet below has
+            been fetched and parsed, so at that moment NO face is declared
+            for the family, nothing matches, and the promise resolves
+            immediately. The guard was being removed within a frame or two
+            of being set, which is why the names still flashed on a cold
+            load. check() instead returns false until the font is really
+            usable.
+
+            Still shows on a timeout: a font that never arrives must not
+            leave the UI permanently iconless. Five seconds rather than
+            three, since the losing case here is a slow mobile connection,
+            which is the normal case for this platform's users. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var d=document.documentElement;d.classList.add('icons-pending');function show(){d.classList.remove('icons-pending')}if(document.fonts&&document.fonts.load){document.fonts.load('24px "Material Symbols Outlined"').then(show).catch(show)}else{show()}setTimeout(show,3000)})();`,
+            __html: `(function(){var d=document.documentElement,F='24px "Material Symbols Outlined"',t0=Date.now(),done=false;d.classList.add('icons-pending');function show(){if(done)return;done=true;d.classList.remove('icons-pending')}if(!document.fonts||!document.fonts.check){show();return}try{document.fonts.load(F)}catch(e){}(function poll(){if(done)return;if(document.fonts.check(F))return show();if(Date.now()-t0>5000)return show();setTimeout(poll,100)})()})();`,
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -8,7 +8,8 @@ import { KpiCard } from "@/components/portal/kpi-card";
 import { PageHeader } from "@/components/portal/page-header";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { exportWalletLedger, getAvailableBalance, getMyMerchant, listWalletLedger } from "@/lib/portal/api";
+import { exportWalletLedger, getMyMerchant, getWalletTotals, listWalletLedger } from "@/lib/portal/api";
+import type { WalletTotals } from "@/lib/portal/api";
 import { transactionStatusBadge, transactionTypeBadge } from "@/lib/portal/status-tones";
 import type { TransactionStatus, WalletLedgerEntry } from "@/lib/portal/types";
 
@@ -77,7 +78,7 @@ const secondaryButtonClass =
   "flex items-center justify-center gap-2 bg-surface border border-outline-variant text-on-surface px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function WalletPage() {
-  const [availableBalance, setAvailableBalance] = useState<string | null>(null);
+  const [totals, setTotals] = useState<WalletTotals | null>(null);
   const [ledger, setLedger] = useState<WalletLedgerEntry[]>([]);
   const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +100,7 @@ export default function WalletPage() {
   }
 
   useEffect(() => {
-    getAvailableBalance().then(setAvailableBalance);
+    getWalletTotals().then(setTotals);
     getMyMerchant().then((merchant) => setMerchantCode(merchant?.merchant_code ?? null));
     // loading already starts true (useState(true) above) — only clear it
     // once this resolves, rather than calling setLoading synchronously
@@ -177,12 +178,24 @@ export default function WalletPage() {
         }
       />
 
-      <section className="grid grid-cols-1 sm:max-w-xs gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           variant="brand"
           icon="account_balance_wallet"
           label="Available Balance"
-          value={availableBalance !== null ? formatCurrency(availableBalance, "TZS") : "—"}
+          value={totals ? formatCurrency(totals.available_balance, "TZS") : "—"}
+        />
+        <KpiCard
+          variant="brand"
+          icon="payments"
+          label="Collections Today"
+          value={totals ? formatCurrency(totals.collections_today, "TZS") : "—"}
+        />
+        <KpiCard
+          variant="brand"
+          icon="logout"
+          label="Withdrawals Today"
+          value={totals ? formatCurrency(totals.withdrawals_today, "TZS") : "—"}
         />
       </section>
 
