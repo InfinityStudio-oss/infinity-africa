@@ -58,6 +58,41 @@ a lost authenticator leaves nobody able to recover the other — recovery
 requires a second working admin. See
 `docs/super-admin-mfa-recovery-runbook.md`.
 
+## The paid plans, and what each one actually buys
+
+Verified 2026-10-03, after the upgrade to Pro on all four.
+
+| Service | What it carries | What to confirm in its dashboard |
+|---|---|---|
+| **Resend Pro** | Every outbound email: verification, password reset, merchant approval, withdrawal OTP and approval alerts, CEO notifications, security alerts | Domain `infinitypay.me` verified (SPF + DKIM). **Suppressions list empty** — a hard-bounced address is blocked silently and our logs still say "sent" |
+| **Supabase Pro** | Auth, database, the audit trail | Backups enabled and a restore point visible. Auth URL allow-list matches `supabase-auth-settings.md` exactly. **Remove any `infinityafrica.net` entries** still in it |
+| **Railway Pro** | The API, and the three background workers | One replica. The rate limiter and webhook sweep are in-memory and per-process, so a second replica silently doubles every limit and double-sends every webhook |
+| **Vercel Pro** | The portal, admin console, public site, payment pages | `infinitypay.me` and `www` both resolve; no `infinityafrica.net` alias still serving |
+
+**Email volume is not a constraint on Pro** (50,000/month, no daily cap),
+but three flags still suppress categories if a send loop ever appears —
+`SEND_CUSTOMER_RECEIPT_EMAILS`, `SEND_WITHDRAWAL_REQUEST_EMAILS`,
+`SEND_MERCHANT_WITHDRAWAL_EMAILS`. All default off. The first is
+deliberately off in production: subscribers get Selcom's SMS, so a
+receipt email would be duplicate cost and duplicate noise.
+
+**No email can break a payment.** Every send function in
+`app/services/email.py` is documented and implemented as best-effort and
+never raises; wallet crediting and settlement do not depend on one.
+
+## The three background workers
+
+All driven by the scheduler in `app/main.py`, all on one replica:
+
+| Worker | Interval | Silent if |
+|---|---|---|
+| Checkout reconciliation | `SELCOM_CHECKOUT_RECONCILE_INTERVAL_SECONDS` | Interval is 0, or `ENABLE_AUTO_RECONCILIATION` is false |
+| Disbursement reconciliation | `SELCOM_DISBURSEMENT_RECONCILE_INTERVAL_SECONDS` | Same |
+| Webhook delivery | `WEBHOOK_DELIVERY_INTERVAL_SECONDS` | Interval is 0 — the queue fills and never sends |
+
+Collection expiry rides the checkout reconciliation tick, so the same
+flag stops both.
+
 ## During traffic: what to watch
 
 Railway logs, in rough order of how much they would cost you.
@@ -137,3 +172,4 @@ Stated plainly so nobody discovers them during an incident.
 | Pre-traffic sweep | `PRE_TRAFFIC_SECURITY_CHECK.md` |
 | Super Admin MFA recovery | `super-admin-mfa-recovery-runbook.md` |
 | Partner integration | `DIRECT_WALLET_PUSH_PARTNER_INTEGRATION.md` |
+| Launch smoke test | `PRODUCTION_LAUNCH_SMOKE_TEST.md` |
