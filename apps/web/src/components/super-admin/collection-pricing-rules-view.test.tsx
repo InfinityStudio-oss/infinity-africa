@@ -340,4 +340,54 @@ describe("CollectionPricingRulesView", () => {
     expect(screen.queryByText(/is not verified and approved yet/)).not.toBeInTheDocument();
     expect(screen.queryAllByText("Add Collection Pricing Rule")).toHaveLength(2);
   });
+
+  // --- saying which rate wins ----------------------------------------------
+  //
+  // A Super Admin changed the platform fallback and believed it had
+  // overwritten every negotiated rate. It had not — the backend stops at
+  // the first matching tier — but two near-identical tables gave no way
+  // to see that from the screen.
+
+  it("spells out the order a rate is chosen in", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId={null}
+        merchantRules={[]}
+      />,
+    );
+
+    expect(screen.getByText("How a rate is chosen")).toBeInTheDocument();
+    expect(screen.getByText(/never reaches the fallback/i)).toBeInTheDocument();
+  });
+
+  it("says editing the fallback leaves negotiated rates alone", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId={null}
+        merchantRules={[]}
+      />,
+    );
+
+    expect(screen.getByText(/does not change any negotiated rate/i)).toBeInTheDocument();
+  });
+
+  it("marks a negotiated row as overriding the fallback, on the row itself", async () => {
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId={merchant.merchant_id}
+        merchantRules={[{ ...platformRule, id: "rule-2", merchant_id: merchant.merchant_id }]}
+      />,
+    );
+
+    expect(screen.getByText("Negotiated — overrides the platform fallback")).toBeInTheDocument();
+  });
 });

@@ -183,7 +183,13 @@ function RuleAssignment({ rule, merchantsById }: { rule: CollectionPricingRuleRo
   return (
     <>
       <td className={`${tdClass} font-medium text-on-background`}>
-        {merchant?.business_name ?? "Unknown business"}
+        <span className="block">{merchant?.business_name ?? "Unknown business"}</span>
+        {/* On the row itself, not only in the section heading above it —
+            the heading scrolls away and these two tables otherwise look
+            identical. */}
+        <span className="block text-xs font-normal text-on-surface-variant">
+          Negotiated — overrides the platform fallback
+        </span>
       </td>
       <td className={`${tdClass} font-mono text-xs text-on-surface-variant whitespace-nowrap`}>
         {merchant?.merchant_code ?? rule.merchant_id.slice(0, 8)}
@@ -254,7 +260,7 @@ function RuleSection({
   blockedReason,
 }: {
   title: string;
-  description: string;
+  description: React.ReactNode;
   rules: CollectionPricingRuleRow[];
   merchantsById: Map<string, Merchant>;
   createAction: (
@@ -412,6 +418,30 @@ export function CollectionPricingRulesView({
         )}
       </Card>
 
+      {/* The page that caused a real scare: a Super Admin changed the
+          platform fallback and believed it had overwritten every
+          negotiated rate. It had not — the backend stops at the first
+          matching tier — but two near-identical tables gave no way to
+          see that. Saying the order out loud is cheaper than the phone
+          call. */}
+      <Card>
+        <h3 className="text-base font-semibold text-on-background">How a rate is chosen</h3>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          For every collection the backend takes the <span className="font-medium text-on-background">first</span>{" "}
+          rule that matches and stops there:
+        </p>
+        <ol className="mt-3 space-y-1 text-sm text-on-surface-variant list-decimal pl-5">
+          <li>That business&apos;s rule for that specific channel</li>
+          <li>That business&apos;s rule for all channels</li>
+          <li>The platform fallback for that specific channel</li>
+          <li>The platform fallback for all channels</li>
+        </ol>
+        <p className="mt-3 text-sm text-on-surface-variant">
+          So a business with its own negotiated rate never reaches the fallback. Changing the fallback moves the
+          rate only for businesses that have no rule of their own.
+        </p>
+      </Card>
+
       {selectedMerchantId && (
         <RuleSection
           title={
@@ -437,7 +467,13 @@ export function CollectionPricingRulesView({
 
       <RuleSection
         title="Platform Fallback Collection Rules"
-        description="Applied to any business with no matching business-specific rule."
+        description={
+          <>
+            Applied only to businesses with <span className="font-medium text-on-background">no</span> rule of
+            their own. Editing this does not change any negotiated rate — those take precedence and are listed
+            per business above.
+          </>
+        }
         rules={platformRules}
         merchantsById={merchantsById}
         createAction={createPlatformFallbackCollectionPricingRuleAction}
