@@ -30,7 +30,8 @@ servers and is not a merchant concern.
    before approval.**
 3. Merchant generates API credentials at `/portal/api-credentials`.
 4. Merchant pastes the **secret key** into the billing system.
-5. Merchant sets a webhook URL and generates a signing secret.
+5. Merchant sets a webhook URL. A signing secret is optional — see
+   **Proving a webhook came from us** below.
 6. Billing system initiates Direct Wallet Push.
 
 ## Authentication
@@ -134,15 +135,20 @@ every retry of that attempt. Do not reuse it for a genuinely new payment.
 
 ## Webhooks
 
-The merchant sets the URL and generates a signing secret **in the
-portal**, signed in to their own account.
+The merchant sets the URL **in the portal**, signed in to their own
+account.
 
 **Your API key cannot do this for them.** `PATCH
 /v1/merchant/webhook-config` exists but requires a dashboard session, not
 an API key, so there is no way to register a receiving URL
 programmatically. If you are a platform onboarding merchants, show each
 one the URL you expect to receive on and have them paste it in
-themselves; the signing secret comes back to you the same way, by hand.
+themselves.
+
+**A signing secret is optional.** A merchant who never generates one
+still receives every event; the delivery simply carries no
+`X-Infinity-Signature` header. Which way you prove a delivery is genuine
+is covered below.
 
 Delivery is automatic. Events relevant here:
 
@@ -176,11 +182,40 @@ Delivery is automatic. Events relevant here:
 (i.e. on success). Never present: API keys, signing secrets, Selcom
 credentials, or the provider's raw response.
 
-### Verifying
+### Proving a webhook came from us
 
-`X-Infinity-Signature` is an HMAC-SHA256 hex digest of the **exact raw
-body**, keyed with your webhook secret. Sign the bytes you received —
-parsing and re-serialising changes them.
+Your callback URL is not a secret. It appears in config screens, support
+threads, server logs and screenshots, so assume someone has it. Without a
+check, anyone who does can POST `{"event":"collection.success", ...}` and
+be believed.
+
+Two ways to close that. **Pick one** — they are equally good, and neither
+is more official than the other.
+
+#### Option A — confirm by lookup (no secret needed)
+
+Take `collection_id` from the delivery, ignore everything else it claims,
+and ask us what actually happened:
+
+```
+GET https://api.infinitypay.me/v1/collections/{collection_id}
+Authorization: Bearer sk_live_YOUR_SECRET_KEY
+```
+
+Act only on the `status` in **our** reply. A forged webhook then achieves
+nothing: it makes you ask us a question, and we answer truthfully. The
+forger cannot fake the answer without your secret key.
+
+This needs no new credential, nothing to distribute or rotate, and it is
+what InfinityPay itself does with its own provider's unsigned callbacks.
+It costs one extra HTTP call per event.
+
+#### Option B — verify the signature
+
+Generate a signing secret in the portal. Every delivery then carries
+`X-Infinity-Signature`: an HMAC-SHA256 hex digest of the **exact raw
+body**, keyed with that secret. Sign the bytes you received — parsing and
+re-serialising changes them.
 
 ```python
 import hmac, hashlib
@@ -189,9 +224,19 @@ if not hmac.compare_digest(expected, request.headers["X-Infinity-Signature"]):
     return 401
 ```
 
+No extra HTTP call, but a second credential to carry to every merchant
+and rotate when it leaks.
+
+#### Whichever you pick
+
 Also sent: `X-Infinity-Event`, `X-Infinity-Delivery` (dedupe on this), and
-`X-Infinity-Timestamp` (Unix seconds; **not** signed — verify over the body
-alone).
+`X-Infinity-Timestamp` (Unix seconds; **not** signed — verify over the
+body alone).
+
+Check the `amount` and `reference` against the order you are about to
+settle. Both options prove the event is real; neither proves it belongs to
+the invoice you had in mind, and a genuine small payment must not settle a
+large one.
 
 ### Test deliveries look like real ones — on purpose
 
@@ -351,7 +396,8 @@ change looks exactly like a compromised key.
 
 1. Merchant account created and **approved** by Super Admin.
 2. Live API key generated; secret stored server-side only.
-3. Webhook URL set and signing secret generated.
+3. Webhook URL set. Signing secret generated **only if** you intend to
+   verify signatures rather than confirm by lookup.
 4. **Send Test Webhook** from the portal; confirm your verifier accepts it.
 5. Optional: enable the IP allowlist and confirm a request still succeeds.
 6. Sandbox run with `sk_test_…` — no real money, no provider call.

@@ -79,8 +79,8 @@ export default function DirectWalletPushPage() {
           </li>
           <li>Gives you the secret key.</li>
           <li>
-            Sets a <strong>webhook URL</strong> and generates a <strong>signing secret</strong> at{" "}
-            <Code>/portal/webhooks</Code>.
+            Sets a <strong>webhook URL</strong> at <Code>/portal/webhooks</Code>. A signing secret is optional
+            — see <strong>Proving a webhook came from us</strong> below.
           </li>
         </ol>
         <Callout title="The webhook URL is not optional in practice">
@@ -90,8 +90,12 @@ export default function DirectWalletPushPage() {
         <Callout title="You cannot set the webhook URL for them">
           Steps 3 and 4 are done by hand, in the portal, by someone signed in to that business&apos;s own account.
           There is no API-key route to register a receiving URL. If you onboard businesses at scale, show each one
-          the URL you expect to receive on and have them paste it in; the signing secret comes back to you the same
-          way.
+          the URL you expect to receive on and have them paste it in.
+        </Callout>
+        <Callout title="A signing secret is optional">
+          A business that never generates one still receives every event; the delivery simply carries no{" "}
+          <Code>X-Infinity-Signature</Code> header. How you prove a delivery is genuine is your choice — both
+          options are below, and neither is more official than the other.
         </Callout>
       </section>
 
@@ -305,7 +309,51 @@ export default function DirectWalletPushPage() {
           </table>
         </div>
 
-        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Verifying the signature</h3>
+        <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Proving a webhook came from us</h3>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Your callback URL is not a secret — it appears in config screens, support threads, server logs and
+          screenshots, so assume someone has it. Without a check, anyone who does can POST{" "}
+          <Code>{`{"event":"collection.success", ...}`}</Code> and be believed. Two ways to close that; pick one,
+          neither is more official than the other.
+        </p>
+
+        <h4 className="text-sm font-semibold text-on-surface mt-6 mb-2">Option A — confirm by lookup (no secret needed)</h4>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Take <Code>collection_id</Code> from the delivery, ignore everything else it claims, and ask us what
+          actually happened. Act only on the status in <em>our</em> reply.
+        </p>
+        <CodeBlock language="python">{`def handle_webhook(request):
+    payload = request.get_json(silent=True) or {}
+    collection_id = payload.get("collection_id")
+    # Always acknowledge: a non-2xx just earns a retry of something
+    # we have decided to ignore.
+    if not collection_id:
+        return "", 200
+
+    # Ask us, over TLS, with your own secret key.
+    confirmed = requests.get(
+        f"https://api.infinitypay.me/v1/collections/{collection_id}",
+        headers={"Authorization": f"Bearer {SECRET_KEY}"},
+        timeout=10,
+    ).json().get("data")
+
+    if not confirmed or confirmed["status"] != "successful":
+        return "", 200                            # not paid, or not confirmable
+
+    fulfil(confirmed["reference"], confirmed["amount"])
+    return "", 200`}</CodeBlock>
+        <p className="text-sm text-on-surface-variant leading-relaxed mt-4">
+          A forged webhook then achieves nothing: it makes you ask us a question and we answer truthfully, and the
+          forger cannot fake that answer without your secret key. No new credential to distribute or rotate. This
+          is what InfinityPay itself does with its own provider&apos;s unsigned callbacks.
+        </p>
+
+        <h4 className="text-sm font-semibold text-on-surface mt-6 mb-2">Option B — verify the signature</h4>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Generate a signing secret in the portal. Every delivery then carries{" "}
+          <Code>X-Infinity-Signature</Code>. No extra HTTP call, but a second credential to carry to every
+          business and rotate when it leaks.
+        </p>
         <CodeBlock language="python">{`import hashlib
 import hmac
 import json
@@ -329,6 +377,10 @@ def handle_webhook(request):
           Sign the <strong>raw bytes</strong> you received. Parsing the JSON and re-serialising it changes the bytes
           and the digest will not match — this is the single most common integration mistake.
         </p>
+        <Callout title="Whichever you pick, check the amount and reference">
+          Both options prove the event is real. Neither proves it belongs to the order you had in mind, and a
+          genuine small payment must not settle a large invoice.
+        </Callout>
 
         <h3 className="text-base font-semibold text-on-surface mt-8 mb-3">Retries</h3>
         <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
@@ -498,7 +550,7 @@ def handle_webhook(request):
         <ol className="text-sm text-on-surface-variant leading-relaxed space-y-2 list-decimal pl-5">
           <li>Business account created, approved and verified.</li>
           <li>Live API key generated. Secret stored server-side only.</li>
-          <li>Webhook URL set and signing secret generated.</li>
+          <li>Webhook URL set. Signing secret generated only if you intend to verify signatures rather than confirm by lookup.</li>
           <li><strong>Send Test Webhook</strong> from the portal. Confirm your verifier accepts the signature.</li>
           <li>Sandbox run with <Code>sk_test_…</Code>, including a <Code>simulate_status: &quot;failed&quot;</Code> case.</li>
           <li>Optional: enable the IP allowlist and confirm a request still succeeds.</li>
