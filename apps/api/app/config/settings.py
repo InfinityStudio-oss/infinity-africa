@@ -147,6 +147,29 @@ class Settings(BaseSettings):
     selcom_checkout_accept_unsigned_callbacks: bool = False
     selcom_unsigned_callback_max_per_minute: int = 30
 
+    # Error monitoring (app/core/monitoring.py). Blank disables Sentry
+    # entirely — no init, no network, no behaviour change — so this ships
+    # inert and is switched on by setting the DSN in Railway.
+    #
+    # The DSN is a write-only ingest endpoint, not a credential that can
+    # read anything back, but it is still kept server-side: a public one
+    # invites anyone to forge error reports into the project.
+    sentry_dsn: str = ""
+    sentry_environment: str = ""
+    # Traces are off by default. Performance tracing samples real request
+    # paths, and a payment platform's URLs and timings are themselves
+    # information worth not exporting until someone decides to.
+    sentry_traces_sample_rate: float = 0.0
+
+    # Product analytics (PostHog), server side. Off unless a key is set.
+    #
+    # Deliberately separate from the browser key: this one is a write-only
+    # project key but still server-held, and nothing in app/core/analytics.py
+    # sends a property that identifies a person — merchant_id, a UUID we
+    # already own, is the only identity that leaves.
+    posthog_api_key: str = ""
+    posthog_host: str = "https://eu.i.posthog.com"
+
     # Mandatory TOTP for platform admins (docs/SUPER_ADMIN_MFA_RUNBOOK.md).
     # When true, require_super_admin additionally demands a Supabase `aal2`
     # session — a Super Admin holding only a password is refused with

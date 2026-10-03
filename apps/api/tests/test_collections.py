@@ -497,6 +497,54 @@ def test_resolve_via_callback_marks_successful_and_posts_ledger(fake_client):
     assert audit_events[0]["merchant_id"] == str(merchant_id)
 
 
+def test_a_broken_analytics_client_still_credits_the_wallet(fake_client, monkeypatch):
+    """The reason product analytics is safe to put on this path at all.
+
+    resolve_collection() reports a `collection_resolved` event. If PostHog
+    being down could propagate out of that call, an analytics outage would
+    become a payment outage -- the collection would not credit, and the
+    merchant would be told their customer's money had not arrived. So:
+    break the analytics client outright and assert the money still moves.
+
+    Verified to fail if the swallow in analytics.track() is removed, so
+    this is testing something real rather than passing vacuously.
+    """
+    from app.core import analytics
+
+    class ExplodingClient:
+        def capture(self, **_kwargs):
+            raise RuntimeError("posthog is down")
+
+    monkeypatch.setattr(analytics, "_client", ExplodingClient())
+
+    merchant_id, admin_id = _merchant_and_admin(fake_client)
+    initiate = client.post(
+        "/v1/collections/stk-push",
+        headers={**auth_headers(admin_id), "Idempotency-Key": str(uuid.uuid4())},
+        json={"merchant_id": str(merchant_id), "amount": "1000.00", "customer_phone": "+255700000000"},
+    ).json()["data"]
+
+    callback = _post_selcom_webhook(
+        event_type="collection.success", provider_reference=initiate["provider_reference"]
+    )
+    assert callback.status_code == 200
+
+    collection_row = next(
+        r for r in fake_client.table("collections")._table.rows if r["id"] == initiate["id"]
+    )
+    assert collection_row["status"] == "successful"
+
+    transaction = next(
+        t for t in fake_client.table("transactions")._table.rows if t["collection_id"] == initiate["id"]
+    )
+    entries = [
+        e for e in fake_client.table("ledger_entries")._table.rows if e["transaction_id"] == transaction["id"]
+    ]
+    debits = sum(Decimal(e["amount"]) for e in entries if e["direction"] == "debit")
+    credits = sum(Decimal(e["amount"]) for e in entries if e["direction"] == "credit")
+    assert debits == credits > 0
+
+
 def test_resolve_via_callback_marks_failed_without_ledger_entries(fake_client):
     merchant_id, admin_id = _merchant_and_admin(fake_client, webhook_url="https://merchant.example.com/hooks")
 

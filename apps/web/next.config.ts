@@ -11,6 +11,35 @@ const isDev = process.env.NODE_ENV === "development";
 // needing the literal URL hardcoded here.
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
+// Monitoring endpoints, added to connect-src ONLY when the matching key
+// is configured for this build. Both Sentry and PostHog report by POSTing
+// to their own host, which `connect-src 'self'` forbids — so without
+// these entries the SDKs would initialise, appear healthy, and have every
+// single event blocked by the browser. Found before shipping rather than
+// after a week of an empty dashboard.
+//
+// Gated on the env vars so a deploy with monitoring off keeps the
+// narrower policy, rather than permanently allowing two extra origins.
+const monitoringOrigins = [
+  // Sentry's ingest host is per-project and lives inside the DSN:
+  // https://<key>@<org>.ingest.<region>.sentry.io/<project>. Only the
+  // origin is taken, never the key.
+  process.env.NEXT_PUBLIC_SENTRY_DSN ? safeOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN) : "",
+  process.env.NEXT_PUBLIC_POSTHOG_KEY
+    ? safeOrigin(process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com")
+    : "",
+].filter(Boolean);
+
+/** Origin of a URL, or "" if it is unparseable — a malformed DSN must
+ * fail by leaving the CSP alone, never by breaking the build. */
+function safeOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
 // Without-nonce CSP, per node_modules/next/dist/docs/.../content-security-policy.md's
 // own "Without Nonces" example — the nonce-based approach forces every page
 // to dynamic rendering (no static optimization/ISR), which would undo Part 9's
@@ -28,7 +57,9 @@ const cspDirectives = [
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
   `img-src 'self' data: blob:`,
   `font-src 'self' https://fonts.gstatic.com`,
-  `connect-src 'self' https://*.supabase.co wss://*.supabase.co${apiUrl ? ` ${apiUrl}` : ""}`,
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co${apiUrl ? ` ${apiUrl}` : ""}${
+    monitoringOrigins.length ? ` ${monitoringOrigins.join(" ")}` : ""
+  }`,
   `object-src 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,

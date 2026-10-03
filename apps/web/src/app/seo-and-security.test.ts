@@ -15,7 +15,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import robots from "./robots";
 import sitemap from "./sitemap";
@@ -127,6 +127,66 @@ describe("next.config.ts security headers", () => {
     expect(byKey["Cross-Origin-Opener-Policy"]).toBe("same-origin");
     expect(byKey["Cross-Origin-Resource-Policy"]).toBe("same-origin");
     expect(byKey["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+  });
+});
+
+describe("next.config.ts monitoring origins in the CSP", () => {
+  /**
+   * connect-src is `'self'` plus Supabase and the API, so Sentry and
+   * PostHog — which report by POSTing to their own hosts — are blocked
+   * unless their origin is added. The failure mode is quiet: the SDKs
+   * initialise, look healthy, and have every event dropped by the
+   * browser. These tests are what stop that shipping.
+   *
+   * next.config.ts reads process.env once at module load, so each case
+   * resets the module registry to get a fresh evaluation.
+   */
+  async function connectSrc(): Promise<string> {
+    vi.resetModules();
+    const { default: nextConfig } = await import("../../next.config");
+    const rules = await nextConfig.headers!();
+    const csp = rules[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    return csp.split("; ").find((directive) => directive.startsWith("connect-src"))!;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("stays narrow when monitoring is not configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+    const directive = await connectSrc();
+    expect(directive).not.toContain("sentry.io");
+    expect(directive).not.toContain("posthog.com");
+  });
+
+  it("allows Sentry's ingest origin when a DSN is configured, and never leaks the key", async () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_SENTRY_DSN",
+      "https://examplepublickey@o4500000000000000.ingest.de.sentry.io/4500000000000001",
+    );
+    const directive = await connectSrc();
+    expect(directive).toContain("https://o4500000000000000.ingest.de.sentry.io");
+    // Only the origin is taken. The DSN's public key must not end up in a
+    // response header on every page.
+    expect(directive).not.toContain("examplepublickey");
+  });
+
+  it("allows PostHog's host when a key is configured, and never leaks the key", async () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_example");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://eu.i.posthog.com");
+    const directive = await connectSrc();
+    expect(directive).toContain("https://eu.i.posthog.com");
+    expect(directive).not.toContain("phc_");
+  });
+
+  it("leaves the policy alone rather than breaking the build on a malformed DSN", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "not-a-url");
+    const directive = await connectSrc();
+    expect(directive).toContain("'self'");
+    expect(directive).not.toContain("not-a-url");
   });
 });
 

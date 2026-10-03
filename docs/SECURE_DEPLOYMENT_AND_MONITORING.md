@@ -63,18 +63,26 @@ Then one authenticated check that exercises the real path: sign in as Super
 Admin (expect the MFA challenge), and make one API-key request and confirm
 `api_keys.last_used_ip` is a **public** address, not `100.64.x.x`.
 
-## Monitoring — the honest gap
+## Monitoring
 
-**There is no Sentry, no PostHog, no APM.** Nothing was installed here,
-because adding an error tracker is a decision with cost, data-residency and
-PII consequences that belongs to you, not to a hardening pass.
+**Sentry and PostHog are both wired in, and both ship switched off.** With
+no DSN and no API key set, no SDK initialises and nothing is sent — see
+`docs/MONITORING_AND_OBSERVABILITY.md` for the variables that turn each
+one on, what is stripped from every event before it leaves, and the
+Sentry alerts worth creating by hand.
 
-What exists instead: structured logging under the `infinity.*` logger
-namespace, an append-only `audit_logs` table, and security alert emails for
-the events worth interrupting someone over.
+This section's original note — that adding an error tracker is a decision
+with cost, data-residency and PII consequences belonging to you rather
+than to a hardening pass — is why it defaults to off rather than on.
 
-Until a tracker is added, these are the things worth watching in Railway
-logs, and what each would mean:
+Independent of either, and unchanged: structured logging under the
+`infinity.*` logger namespace, an append-only `audit_logs` table, and
+security alert emails for the events worth interrupting someone over.
+Railway logs remain the source of truth; Sentry capture happens *after*
+`logger.exception()`, never instead of it.
+
+These are the things worth watching in Railway logs, and what each would
+mean:
 
 | Signal | Likely meaning |
 |---|---|

@@ -34,6 +34,13 @@ SECRET_PATTERNS: list[tuple[str, str]] = [
     ("AWS access key id", r"\bAKIA[0-9A-Z]{16}\b"),
     ("Slack token", r"\bxox[abpr]-[0-9A-Za-z-]{10,}"),
     ("Google API key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    # Monitoring credentials (docs/MONITORING_AND_OBSERVABILITY.md). A
+    # Sentry DSN cannot read anything back out of Sentry, but a committed
+    # one lets anyone forge error reports into the project; a PostHog
+    # personal API key is a full-access credential.
+    ("Sentry DSN", r"https://[0-9a-f]{32}@[A-Za-z0-9.-]*\.ingest\.[A-Za-z0-9.-]*sentry\.io/\d+"),
+    ("PostHog project key", r"\bphc_[A-Za-z0-9]{30,}"),
+    ("PostHog personal API key", r"\bph[xps]_[A-Za-z0-9]{30,}"),
 ]
 
 # Anything containing one of these near the match is an illustration, not a

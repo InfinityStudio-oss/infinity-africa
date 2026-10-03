@@ -11,7 +11,9 @@ from app.config.production_readiness import (
     production_config_problems,
     production_config_warnings,
 )
+from app.core.analytics import init_analytics, shutdown_analytics
 from app.core.errors import register_exception_handlers
+from app.core.monitoring import capture_exception, init_sentry
 from app.database.session import get_supabase_admin
 from app.middleware.api_request_log import ApiRequestLogMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -81,6 +83,14 @@ _configure_logging(settings.log_level)
 
 logger = logging.getLogger("infinity.scheduler")
 
+# Error monitoring and product analytics. Both do nothing at all unless
+# SENTRY_DSN / POSTHOG_API_KEY are set, so these two lines are a no-op on
+# every deploy that has not opted in. Called before the app is
+# constructed because the SDK instruments Starlette as the app is built,
+# not afterwards. See docs/MONITORING_AND_OBSERVABILITY.md.
+init_sentry()
+init_analytics()
+
 if not settings.require_admin_approval_for_all_withdrawals and settings.auto_withdrawals_enabled:
     # Both flags being set is what actually enables withdrawal automation
     # — see Settings.auto_withdrawals_enabled's own docstring for the
@@ -127,8 +137,12 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
             client = get_supabase_admin()
             summary = await reconcile_pending_checkout_collections(client)
             logger.info("scheduled_checkout_reconciliation %s", summary)
-        except Exception:
+        except Exception as exc:
             logger.exception("scheduled_checkout_reconciliation_failed")
+            # A sweep that keeps failing means collections are not
+            # crediting, which no merchant-facing error ever reveals.
+            # No-op when monitoring is off.
+            capture_exception(exc)
 
         # Same tick rather than a loop of its own: expiry is the other
         # half of resolving a pending collection, it draws on the same
@@ -139,8 +153,9 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
         try:
             expiry_summary = await expire_stale_pushes(get_supabase_admin())
             logger.info("scheduled_collection_expiry %s", expiry_summary)
-        except Exception:
+        except Exception as exc:
             logger.exception("scheduled_collection_expiry_failed")
+            capture_exception(exc)
 
 
 def _start_checkout_reconciliation_task() -> asyncio.Task | None:
@@ -177,8 +192,9 @@ async def _disbursement_reconciliation_loop(interval_seconds: float) -> None:
             client = get_supabase_admin()
             summary = await reconcile_pending_disbursements(client)
             logger.info("scheduled_disbursement_reconciliation %s", summary)
-        except Exception:
+        except Exception as exc:
             logger.exception("scheduled_disbursement_reconciliation_failed")
+            capture_exception(exc)
 
 
 def _start_disbursement_reconciliation_task() -> asyncio.Task | None:
@@ -218,8 +234,9 @@ async def _webhook_delivery_loop(interval_seconds: float) -> None:
             # queue every 30s would drown the log.
             if summary["due"]:
                 logger.info("scheduled_webhook_delivery %s", summary)
-        except Exception:
+        except Exception as exc:
             logger.exception("scheduled_webhook_delivery_failed")
+            capture_exception(exc)
 
 
 def _start_webhook_delivery_task() -> asyncio.Task | None:
@@ -268,6 +285,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        # Last, so events queued by a worker's final tick are not lost.
+        shutdown_analytics()
 
 
 # See Settings.docs_enabled's own docstring for why these are conditional.

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
+import { AnalyticsProvider } from "@/components/providers/analytics-provider";
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -115,7 +117,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Renders nothing. Mounted here so a pageview is recorded on
+            every route, and no-ops entirely when NEXT_PUBLIC_POSTHOG_KEY
+            is unset. */}
+        <AnalyticsProvider />
+      </body>
     </html>
   );
 }

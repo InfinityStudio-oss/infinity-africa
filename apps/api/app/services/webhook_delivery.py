@@ -65,6 +65,8 @@ from typing import Any
 import httpx
 from supabase import Client
 
+from app.core.analytics import track
+from app.core.monitoring import capture_message
 from app.core.secret_box import decrypt_secret
 from app.core.time import utc_now_iso
 from app.services.crud import get_by_id, update_row
@@ -224,6 +226,11 @@ def deliver_event(client: Client, event: dict) -> bool:
                 "response_status_code": status_code,
             },
         )
+        track(
+            "webhook_delivered",
+            merchant_id=event["merchant_id"],
+            properties={"attempt": attempts, "http_status": status_code},
+        )
         return True
 
     # Exhausted means genuinely give up; anything else is retried later.
@@ -246,6 +253,21 @@ def deliver_event(client: Client, event: dict) -> bool:
             event["merchant_id"],
             attempts,
             status_code,
+        )
+        # A merchant will now never receive this event, and there is no
+        # replay. That is the failure this platform most wants to hear
+        # about, and a warning line in Railway is easy to miss — so it
+        # also goes to Sentry, where it can raise an alert. The target
+        # URL is merchant-controlled text and is deliberately not included.
+        capture_message(
+            "webhook delivery exhausted — merchant will not receive this event",
+            level="error",
+            tags={"merchant_id": str(event["merchant_id"]), "last_status": str(status_code)},
+        )
+        track(
+            "webhook_exhausted",
+            merchant_id=event["merchant_id"],
+            properties={"attempt": attempts, "http_status": status_code},
         )
     return False
 

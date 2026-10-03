@@ -169,6 +169,7 @@ Stated plainly so nobody discovers them during an incident.
 | Input validation | `INPUT_VALIDATION_SECURITY.md` |
 | Abuse and rate limits | `ABUSE_PROTECTION.md` |
 | Deployment and monitoring | `SECURE_DEPLOYMENT_AND_MONITORING.md` |
+| Error monitoring and analytics | `MONITORING_AND_OBSERVABILITY.md` |
 | Pre-traffic sweep | `PRE_TRAFFIC_SECURITY_CHECK.md` |
 | Super Admin MFA recovery | `super-admin-mfa-recovery-runbook.md` |
 | Partner integration | `DIRECT_WALLET_PUSH_PARTNER_INTEGRATION.md` |

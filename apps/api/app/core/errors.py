@@ -10,6 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.monitoring import capture_exception
 from app.schemas.common import ErrorDetail, ErrorResponse
 
 logger = logging.getLogger("infinity.api")
@@ -241,6 +242,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+        # After the log, never instead of it: Railway's logs stay the
+        # source of truth, and this is a no-op when monitoring is off.
+        capture_exception(exc)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=_error_content("internal_error", "An unexpected error occurred"),

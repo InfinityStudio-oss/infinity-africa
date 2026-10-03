@@ -24,6 +24,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.analytics import amount_band, track
 from app.core.errors import InsufficientBalanceError
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
@@ -462,6 +463,25 @@ def resolve_collection(client: Client, *, collection_id: uuid.UUID, result: Coll
             resource_id=collection_id,
             metadata={"reason": result.failure_reason, "provider": result.provider},
         )
+
+    # Product analytics, here for the same reason the audit log above is:
+    # every crediting path funnels through this function, so one call
+    # covers reconciliation, the provider callback and a manual refresh
+    # alike. No amount and no payer — a band and a reason code, which is
+    # what "are collections succeeding?" actually needs. track() never
+    # raises and never blocks, so this cannot affect the payment it is
+    # describing (test_a_broken_analytics_client_still_credits_the_wallet).
+    track(
+        "collection_resolved",
+        merchant_id=str(merchant_id),
+        properties={
+            "status": final_status,
+            "channel": collection.get("channel"),
+            "provider": result.provider,
+            "failure_reason_code": collection.get("failure_reason_code"),
+            "amount_band": amount_band(collection.get("amount")),
+        },
+    )
 
     return collection
 
