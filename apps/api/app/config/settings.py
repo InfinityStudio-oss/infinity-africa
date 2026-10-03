@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     # hold as before.
     #
     # 0 holds every self-payment, restoring the original behaviour.
-    self_payment_hold_above_amount: Decimal = Decimal("50000")
+    self_payment_hold_above_amount: Decimal = Decimal(50000)
 
     # Whether an UNSIGNED Selcom Checkout callback may trigger an
     # authenticated status lookup (app/routers/webhooks.py).

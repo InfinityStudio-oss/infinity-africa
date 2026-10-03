@@ -13,7 +13,12 @@ from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import app
-from tests.factories import TEST_JWT_SECRET, auth_headers, create_merchant, make_super_admin
+from tests.factories import (
+    TEST_JWT_SECRET,
+    auth_headers,
+    create_merchant,
+    make_super_admin,
+)
 
 client = TestClient(app)
 

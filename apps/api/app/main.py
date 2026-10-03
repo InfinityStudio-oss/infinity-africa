@@ -7,6 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.config.production_readiness import (
+    production_config_problems,
+    production_config_warnings,
+)
 from app.core.errors import register_exception_handlers
 from app.database.session import get_supabase_admin
 from app.middleware.api_request_log import ApiRequestLogMiddleware
@@ -232,6 +236,21 @@ def _start_webhook_delivery_task() -> asyncio.Task | None:
 
 @contextlib.asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Before anything else. Every required secret defaults to an empty
+    # string, so a missing environment variable otherwise surfaces as a
+    # 500 on a real merchant's request rather than as a failed deploy.
+    # Raising here means the platform shows it immediately and the
+    # previous release keeps serving. Development is never blocked.
+    problems = production_config_problems(settings)
+    if problems:
+        for problem in problems:
+            logger.error("production_config_problem %s", problem)
+        raise RuntimeError(
+            "Refusing to start: production configuration is incomplete — " + "; ".join(problems)
+        )
+    for warning in production_config_warnings(settings):
+        logger.warning("production_config_warning %s", warning)
+
     tasks = [
         task
         for task in (
