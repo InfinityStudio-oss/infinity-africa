@@ -14,6 +14,12 @@ import { findByEmail, verifyPassword } from "./mock-store";
 import { setMockSession } from "./mock-session";
 import { mockAuthEnabled } from "./mock-auth-enabled";
 import { isKnownAuthRejection, isSupabaseConfigured } from "./supabase-status";
+import {
+  getSuperAdminMfaState,
+  MFA_ENROLL_PATH,
+  MFA_VERIFY_PATH,
+  superAdminMfaRequired,
+} from "./super-admin-mfa";
 
 /**
  * True when a Supabase Auth sign-in was rejected specifically because the
@@ -229,6 +235,11 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
   let usedSupabase = false;
   let isPlatformAdmin = false;
   let accessToken: string | null = null;
+  // Where a platform admin should land, worked out while the Supabase
+  // client is still in scope. Stored rather than acted on immediately:
+  // redirect() throws, and the try below would swallow it as a
+  // connectivity failure and fall through to the mock store.
+  let adminLandingPath: string | null = null;
 
   if (isSupabaseConfigured()) {
     try {
@@ -246,6 +257,15 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
           .eq("user_id", userId)
           .maybeSingle();
         isPlatformAdmin = Boolean(adminRow);
+
+        if (isPlatformAdmin) {
+          adminLandingPath = "/admin";
+          if (superAdminMfaRequired()) {
+            const state = await getSuperAdminMfaState(supabase);
+            if (state === "needs-enrollment") adminLandingPath = MFA_ENROLL_PATH;
+            if (state === "needs-verification") adminLandingPath = MFA_VERIFY_PATH;
+          }
+        }
       }
     } catch (err) {
       if (isEmailNotConfirmed(err)) {
@@ -288,7 +308,22 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
   }
 
   if (isPlatformAdmin) {
-    redirect("/admin");
+    // Straight to the page they actually need, rather than to /admin so
+    // its layout can work the same thing out and redirect again.
+    //
+    // That bounce cost a whole extra page load: a fresh session is never
+    // aal2, so /admin ran requireUser, re-queried platform_admins, asked
+    // for the assurance level and listed factors, and then sent them to
+    // the MFA page — which repeated all four. Every one of those is a
+    // round trip to Supabase, and the wait between pressing Log In and
+    // seeing the code box was most of them.
+    //
+    // Deliberately only skipping the duplicate work. The /admin layout
+    // still runs requireSuperAdmin on arrival, so a session that is not
+    // really an admin, or not really aal2, is still refused there — and
+    // the backend refuses every /v1/admin call from an aal1 session
+    // whatever the portal decides.
+    redirect(adminLandingPath ?? "/admin");
   }
 
   const onboarding = accessToken ? await getOnboardingStatus(accessToken) : null;

@@ -40,6 +40,17 @@ vi.mock("@/lib/onboarding/api", () => ({
   OnboardingApiError,
 }));
 
+const superAdminMfaRequired = vi.fn(() => false);
+const getSuperAdminMfaState = vi.fn();
+vi.mock("./super-admin-mfa", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./super-admin-mfa")>();
+  return {
+    ...actual,
+    superAdminMfaRequired: () => superAdminMfaRequired(),
+    getSuperAdminMfaState: (...args: unknown[]) => getSuperAdminMfaState(...args),
+  };
+});
+
 vi.mock("next/headers", () => ({
   headers: async () => new Map([["host", "infinitypay.me"]]),
 }));
@@ -291,5 +302,81 @@ describe("resendVerificationAction", () => {
     const state = await resendVerificationAction(null, form({ email: "not-an-email" }));
     expect(resend).not.toHaveBeenCalled();
     expect(state?.formError).toMatch(/email address you signed up with/i);
+  });
+});
+
+// --- where a super admin lands after signing in --------------------------
+//
+// Logging in used to redirect to /admin and let its layout work out that
+// a second factor was needed, then redirect again. A fresh session is
+// never aal2, so that bounce always happened: a whole extra page load,
+// each step its own round trip to Supabase, between pressing Log In and
+// seeing the code box.
+
+describe("loginAction — super admin landing", () => {
+  function signedInAsAdmin() {
+    isSupabaseConfigured.mockReturnValue(true);
+    signInWithPassword.mockResolvedValue({
+      data: { user: { id: "admin-1" }, session: { access_token: "at" } },
+      error: null,
+    });
+    maybeSingle.mockResolvedValue({ data: { id: "pa-1" } });
+  }
+
+  async function landsAt(fields: Record<string, string>): Promise<string> {
+    const { loginAction } = await import("./actions");
+    try {
+      await loginAction({ errors: {} }, form(fields));
+    } catch (error) {
+      if (error instanceof RedirectError) return error.location;
+      throw error;
+    }
+    throw new Error("expected a redirect");
+  }
+
+  const credentials = { email: "ceo@infinitypay.me", password: "Sup3rSecret!" };
+
+  it("goes straight to the verify page when a factor is enrolled", async () => {
+    signedInAsAdmin();
+    superAdminMfaRequired.mockReturnValue(true);
+    getSuperAdminMfaState.mockResolvedValue("needs-verification");
+
+    expect(await landsAt(credentials)).toBe("/admin-mfa/verify");
+  });
+
+  it("goes straight to enrolment when no factor exists yet", async () => {
+    signedInAsAdmin();
+    superAdminMfaRequired.mockReturnValue(true);
+    getSuperAdminMfaState.mockResolvedValue("needs-enrollment");
+
+    expect(await landsAt(credentials)).toBe("/admin-mfa/enroll");
+  });
+
+  it("goes to the dashboard when the session already satisfies MFA", async () => {
+    signedInAsAdmin();
+    superAdminMfaRequired.mockReturnValue(true);
+    getSuperAdminMfaState.mockResolvedValue("satisfied");
+
+    expect(await landsAt(credentials)).toBe("/admin");
+  });
+
+  it("does not ask about MFA at all while enforcement is off", async () => {
+    signedInAsAdmin();
+    superAdminMfaRequired.mockReturnValue(false);
+
+    expect(await landsAt(credentials)).toBe("/admin");
+    expect(getSuperAdminMfaState).not.toHaveBeenCalled();
+  });
+
+  it("sends a non-admin nowhere near /admin", async () => {
+    isSupabaseConfigured.mockReturnValue(true);
+    signInWithPassword.mockResolvedValue({
+      data: { user: { id: "merchant-1" }, session: { access_token: "at" } },
+      error: null,
+    });
+    maybeSingle.mockResolvedValue({ data: null });
+    getOnboardingStatus.mockResolvedValue({ next_path: "/dashboard/overview" });
+
+    expect(await landsAt(credentials)).toBe("/dashboard/overview");
   });
 });
