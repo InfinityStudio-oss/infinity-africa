@@ -39,4 +39,59 @@ describe("Sidebar", () => {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
   });
+
+  // --- pages an unverified merchant cannot reach ---------------------------
+  //
+  // Pay by Link, Withdrawals and Invoices call requireVerifiedMerchant()
+  // and redirect a pending merchant back to Overview. Rendering them as
+  // ordinary links meant a click produced a blank flash and a silent
+  // bounce, which reads as the portal being broken rather than the
+  // account not being approved yet.
+
+  const LOCKED = ["Pay by Link", "Withdrawals", "Invoices"];
+
+  it.each(LOCKED)("offers no link to %s while the account is unverified", async (label) => {
+    const { Sidebar } = await import("./sidebar");
+    render(<Sidebar open onClose={() => {}} verified={false} />);
+
+    expect(screen.queryByRole("link", { name: new RegExp(label, "i") })).not.toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("says why those items are unavailable", async () => {
+    const { Sidebar } = await import("./sidebar");
+    render(<Sidebar open onClose={() => {}} verified={false} />);
+
+    expect(screen.getByText("Withdrawals").closest("div")).toHaveAttribute(
+      "title",
+      "Available once your account is verified",
+    );
+  });
+
+  it("still links the pages a pending merchant can actually use", async () => {
+    // Wallet, Collections and Transactions have no verification guard —
+    // locking them would invent a restriction the backend does not have.
+    const { Sidebar } = await import("./sidebar");
+    render(<Sidebar open onClose={() => {}} verified={false} />);
+
+    for (const label of ["Wallet", "Collections", "Transactions", "Overview"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label, "i") })).toBeInTheDocument();
+    }
+  });
+
+  it("links everything once the account is verified", async () => {
+    const { Sidebar } = await import("./sidebar");
+    render(<Sidebar open onClose={() => {}} verified />);
+
+    for (const label of LOCKED) {
+      expect(screen.getByRole("link", { name: new RegExp(label, "i") })).toBeInTheDocument();
+    }
+  });
+
+  it("defaults to verified, so a caller that does not know locks nothing", async () => {
+    const { Sidebar } = await import("./sidebar");
+    render(<Sidebar open onClose={() => {}} />);
+
+    expect(screen.getByRole("link", { name: /Withdrawals/i })).toBeInTheDocument();
+  });
 });

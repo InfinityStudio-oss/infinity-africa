@@ -9,7 +9,18 @@ import { Icon } from "./icon";
 import { PORTAL_NAV_ITEMS } from "./nav-items";
 import { useRole } from "./role-context";
 
-export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function Sidebar({
+  open,
+  onClose,
+  verified = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Defaults to true so every existing caller behaves exactly as before;
+   * only the portal layout, which knows the onboarding status, passes
+   * false. */
+  verified?: boolean;
+}) {
   const pathname = usePathname();
   const { role } = useRole();
   const visibleNavItems = PORTAL_NAV_ITEMS.filter((item) => isPathAllowedForRole(role, item.href));
@@ -39,6 +50,27 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {visibleNavItems.map((item) => {
             const isActive =
               item.href === "/dashboard/overview" ? pathname === "/dashboard/overview" : pathname.startsWith(item.href);
+
+            // These pages call requireVerifiedMerchant() and redirect an
+            // unverified merchant back to Overview. Rendering them as
+            // links anyway meant a click produced a blank flash and a
+            // silent bounce, which reads as the portal being broken
+            // rather than the account not being approved yet. Say so
+            // instead, and do not navigate at all.
+            if (item.requiresVerification && !verified) {
+              return (
+                <div
+                  key={item.href}
+                  title="Available once your account is verified"
+                  className="flex items-center gap-2.5 px-4 py-2 rounded-lg text-sidebar-text/40 text-sm font-medium cursor-not-allowed"
+                >
+                  <Icon name={item.icon} className="shrink-0" />
+                  <span className="truncate flex-1">{item.label}</span>
+                  <Icon name="lock" className="shrink-0 text-[16px]" />
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={item.href}

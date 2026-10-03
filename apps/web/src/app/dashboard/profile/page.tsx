@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
 import { PageHeader } from "@/components/portal/page-header";
+import { AccountStatus } from "@infinity/shared";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ProfileView } from "@/components/merchant/profile-view";
 
@@ -19,7 +20,7 @@ export default async function MerchantProfilePage() {
   }
 
   return (
-    <PortalShell>
+    <PortalShell verified={onboarding.account_status === AccountStatus.VERIFIED}>
       <div className="space-y-8">
         <PageHeader title="Profile" description="Your account and business details." />
         <ProfileView email={user.email} />

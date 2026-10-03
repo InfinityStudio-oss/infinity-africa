@@ -29,7 +29,7 @@ export default async function MerchantOverviewPage() {
   const isPending = onboarding.account_status === AccountStatus.PENDING_VERIFICATION;
 
   return (
-    <PortalShell banner={isPending ? <PendingVerificationBanner /> : null}>
+    <PortalShell banner={isPending ? <PendingVerificationBanner /> : null} verified={onboarding.account_status === AccountStatus.VERIFIED}>
       {overview ? (
         <OverviewDashboard overview={overview} />
       ) : (

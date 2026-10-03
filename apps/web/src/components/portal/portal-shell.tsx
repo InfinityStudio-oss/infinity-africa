@@ -39,7 +39,18 @@ function RoleGuard({ children }: { children: React.ReactNode }) {
 // nests the whole shell, sidebar, topbar, and auth checks included.
 const FULL_WIDTH_PATHS = ["/portal/api-credentials"];
 
-export function PortalShell({ children, banner }: { children: React.ReactNode; banner?: React.ReactNode }) {
+export function PortalShell({
+  children,
+  banner,
+  verified = true,
+}: {
+  children: React.ReactNode;
+  banner?: React.ReactNode;
+  /** Whether this merchant has been approved. Defaults to true so a
+   * caller that does not know (and therefore shows no pending banner
+   * either) behaves exactly as before. */
+  verified?: boolean;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const fullWidth = FULL_WIDTH_PATHS.some((path) => pathname.startsWith(path));
@@ -55,7 +66,7 @@ export function PortalShell({ children, banner }: { children: React.ReactNode; b
   return (
     <RoleProvider>
       <div className="portal-shell-scope min-h-screen bg-background text-on-background">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} verified={verified} />
         <Topbar onOpenSidebar={() => setSidebarOpen(true)} />
         <main className={mainClassName}>
           {banner}

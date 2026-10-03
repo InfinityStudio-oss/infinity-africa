@@ -25,6 +25,7 @@ export default async function PortalLayout({
     return (
       <PortalShell
         banner={onboarding.account_status === AccountStatus.PENDING_VERIFICATION ? <PendingVerificationBanner /> : null}
+        verified={onboarding.account_status === AccountStatus.VERIFIED}
       >
         {children}
       </PortalShell>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
 import { PageHeader } from "@/components/portal/page-header";
+import { AccountStatus } from "@infinity/shared";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { UpdatePasswordForm } from "@/components/auth/update-password-form";
 import { NotificationSettingsCard } from "@/components/merchant/notification-settings-card";
@@ -20,7 +21,7 @@ export default async function MerchantSettingsPage() {
   }
 
   return (
-    <PortalShell>
+    <PortalShell verified={onboarding.account_status === AccountStatus.VERIFIED}>
       <div className="space-y-8">
         <PageHeader title="Settings" description="Manage your account security and notifications." />
         <NotificationSettingsCard />
