@@ -13,7 +13,6 @@ const labelClass = "block text-sm font-medium text-on-surface-variant mb-1.5";
 export function NotificationSettingsCard() {
   const [loading, setLoading] = useState(true);
   const [primary, setPrimary] = useState("");
-  const [secondary, setSecondary] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -33,7 +32,6 @@ export function NotificationSettingsCard() {
 
   function applySettings(settings: NotificationSettings | null) {
     setPrimary(settings?.primary_notification_email ?? "");
-    setSecondary(settings?.secondary_notification_email ?? "");
     setEnabled(settings?.collection_notifications_enabled ?? true);
   }
 
@@ -44,7 +42,10 @@ export function NotificationSettingsCard() {
     try {
       const updated = await updateMyNotificationSettings({
         primary_notification_email: primary.trim() || null,
-        secondary_notification_email: secondary.trim() || null,
+        // Always cleared: the field is gone from the portal, and a
+        // leftover address would keep receiving email the merchant can
+        // no longer see or remove.
+        secondary_notification_email: null,
         collection_notifications_enabled: enabled,
       });
       applySettings(updated);
@@ -108,19 +109,7 @@ export function NotificationSettingsCard() {
             onChange={(event) => setPrimary(event.target.value)}
           />
         </div>
-        <div>
-          <label className={labelClass}>Secondary notification email (optional)</label>
-          <input
-            className={inputClass}
-            type="email"
-            placeholder="e.g. finance@yourbusiness.com"
-            value={secondary}
-            onChange={(event) => setSecondary(event.target.value)}
-          />
-          <p className="mt-1.5 text-xs text-on-surface-variant">You can add up to 2 notification emails.</p>
-        </div>
-
-        {enabled && !primary.trim() && !secondary.trim() && accountEmail && (
+        {enabled && !primary.trim() && accountEmail && (
           <p className="rounded-lg bg-primary-container/10 px-4 py-3 text-sm text-on-surface">
             No address set, so confirmations go to your account email,{" "}
             <span className="font-medium">{accountEmail}</span>. Add an address above to send them

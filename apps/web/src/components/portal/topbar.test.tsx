@@ -16,6 +16,11 @@ const membership: MerchantUser = {
   updated_at: "2026-08-01T10:00:00Z",
 };
 
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 vi.mock("@/lib/portal/api", () => ({
   getMyMembership: vi.fn().mockResolvedValue(membership),
 }));

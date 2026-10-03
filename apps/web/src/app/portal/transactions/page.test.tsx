@@ -6,6 +6,13 @@ import type { Transaction } from "@/lib/portal/types";
 const listTransactions = vi.fn();
 const listMyRiskAlerts = vi.fn();
 
+// The page reads ?search= so the topbar's search box can narrow the
+// list server-side.
+const searchParams = new URLSearchParams();
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParams,
+}));
+
 vi.mock("@/lib/portal/api", () => ({
   listTransactions: (...args: unknown[]) => listTransactions(...args),
   listMyRiskAlerts: (...args: unknown[]) => listMyRiskAlerts(...args),
@@ -168,5 +175,20 @@ describe("Merchant portal TransactionsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Transaction detail" });
     expect(within(dialog).getByText("Customer Phone")).toBeInTheDocument();
     expect(within(dialog).getByText("+255712345678")).toBeInTheDocument();
+  });
+
+
+  it("passes the search term to the API rather than filtering what is already loaded", async () => {
+    // This endpoint is paginated, so narrowing the rows already fetched
+    // would report "no results" for a transaction sitting on page two.
+    searchParams.set("search", "TXN-FINDME");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      await waitFor(() => expect(listTransactions).toHaveBeenCalledWith("TXN-FINDME"));
+    } finally {
+      searchParams.delete("search");
+    }
   });
 });

@@ -25,7 +25,10 @@ from supabase import Client
 from app.config import get_settings
 from app.core.errors import EmailDeliveryError
 from app.services.crud import execute_maybe_single, insert_row
-from app.services.merchant_notifications import get_notification_settings
+from app.services.merchant_notifications import (
+    get_notification_settings,
+    notification_recipient,
+)
 from app.services.payment_links import build_public_url
 
 logger = logging.getLogger("infinity.email")
@@ -1102,7 +1105,12 @@ def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursemen
     in try/except there for defense in depth. Never called for
     PENDING_ADMIN_APPROVAL/PROCESSING/REJECTED/FAILED/REVERSED/etc — those
     statuses never reach this function."""
-    recipient = merchant.get("contact_email")
+    # The merchant's configured notification address, the same one
+    # collection confirmations use, falling back to contact_email. This
+    # used to read contact_email directly, so a business that set a
+    # finance address got its collection emails there and its payout
+    # confirmations somewhere else.
+    recipient = notification_recipient(client, merchant)
     if not recipient:
         return None
 
@@ -1374,14 +1382,11 @@ def send_merchant_collection_notification_email(
         return []
 
     settings_row = notification_settings or {}
-    recipients = [
-        email
-        for email in (
-            settings_row.get("primary_notification_email"),
-            settings_row.get("secondary_notification_email"),
-        )
-        if email
-    ]
+    # Primary only. A secondary address used to be configurable; it was
+    # removed from the portal, and reading it here would keep emailing
+    # somewhere the merchant can no longer see or change.
+    primary = (settings_row.get("primary_notification_email") or "").strip()
+    recipients = [primary] if primary else []
     if not recipients:
         # Enabled but no address configured. That is the state every
         # merchant starts in — the toggle defaults on and both fields

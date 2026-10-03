@@ -1781,3 +1781,74 @@ def test_get_transaction_by_reference_cross_tenant_not_leaked(fake_client):
     _my_merchant_id, my_user_id = _merchant_and_member(fake_client)
     response = client.get("/v1/merchant/transactions/TXN-SHARED-REF", headers=auth_headers(my_user_id))
     assert response.status_code == 404
+
+
+# --- transaction search (the portal's search box) ---------------------------
+#
+# Filtered server-side because this endpoint is paginated: filtering the
+# page the client already holds would report "not found" for a
+# transaction that exists on page two, which is worse than no search.
+
+
+def _seed_transaction(fake_client, merchant_id, reference):
+    fake_client.seed(
+        "transactions",
+        {
+            "merchant_id": str(merchant_id),
+            "reference": reference,
+            "type": "collection",
+            "method": "STK_PUSH",
+            "gross_amount": "1000",
+            "fee_amount": "0",
+            "net_amount": "1000",
+            "currency": "TZS",
+            "status": "successful",
+            "metadata": {},
+        },
+    )
+
+
+def test_transaction_search_matches_a_reference(fake_client):
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    _seed_transaction(fake_client, merchant_id, "TXN-FINDME-01")
+    _seed_transaction(fake_client, merchant_id, "TXN-SOMETHING-ELSE")
+
+    response = client.get("/v1/merchant/transactions?search=FINDME", headers=auth_headers(user_id))
+
+    assert response.status_code == 200, response.text
+    references = [row["reference"] for row in response.json()["data"]]
+    assert references == ["TXN-FINDME-01"]
+
+
+def test_transaction_search_ignores_case(fake_client):
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    _seed_transaction(fake_client, merchant_id, "TXN-FINDME-01")
+
+    response = client.get("/v1/merchant/transactions?search=findme", headers=auth_headers(user_id))
+
+    assert [row["reference"] for row in response.json()["data"]] == ["TXN-FINDME-01"]
+
+
+def test_an_empty_search_returns_everything(fake_client):
+    """A blank box must not look like zero results."""
+    merchant_id, user_id = _merchant_and_member(fake_client)
+    _seed_transaction(fake_client, merchant_id, "TXN-A")
+    _seed_transaction(fake_client, merchant_id, "TXN-B")
+
+    response = client.get("/v1/merchant/transactions?search=%20%20", headers=auth_headers(user_id))
+
+    assert len(response.json()["data"]) == 2
+
+
+def test_search_never_crosses_into_another_merchant(fake_client):
+    """The search filter must narrow within the caller's own rows, never
+    widen past the merchant scope."""
+    mine_id, my_user_id = _merchant_and_member(fake_client)
+    theirs_id, _ = _merchant_and_member(fake_client)
+    _seed_transaction(fake_client, mine_id, "TXN-SHARED-TERM-MINE")
+    _seed_transaction(fake_client, theirs_id, "TXN-SHARED-TERM-THEIRS")
+
+    response = client.get("/v1/merchant/transactions?search=SHARED-TERM", headers=auth_headers(my_user_id))
+
+    references = [row["reference"] for row in response.json()["data"]]
+    assert references == ["TXN-SHARED-TERM-MINE"]

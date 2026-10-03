@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
@@ -74,14 +75,19 @@ export default function TransactionsPage() {
   const [flaggedTransactionIds, setFlaggedTransactionIds] = useState<Set<string>>(new Set());
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
+  // Set by the topbar search box, which navigates here with the term
+  // rather than filtering rows this page already holds — the endpoint is
+  // paginated, so that would miss anything past the first page.
+  const search = useSearchParams().get("search") ?? "";
+
   useEffect(() => {
-    listTransactions().then(setTransactions);
+    listTransactions(search).then(setTransactions);
     listMyRiskAlerts().then((alerts) => {
       setFlaggedTransactionIds(
         new Set(alerts.filter((a) => a.transaction_id && OPEN_ALERT_STATUSES.has(a.status)).map((a) => a.transaction_id as string)),
       );
     });
-  }, []);
+  }, [search]);
 
   function handleExportCsv() {
     const blob = new Blob([transactionsToCsv(transactions)], { type: "text/csv;charset=utf-8;" });

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { LogOutButton } from "@/components/auth/log-out-button";
@@ -27,6 +28,8 @@ function initials(name: string | null, email: string | null): string {
 const SUPPORT_EMAIL = "info@infinitypay.me";
 
 export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
@@ -58,14 +61,30 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         >
           <Icon name="menu" />
         </button>
-        <div className="relative w-full max-w-md hidden sm:block">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const term = search.trim();
+            // Empty submit clears the filter rather than searching for
+            // nothing, which would read as "no transactions".
+            router.push(term ? `/portal/transactions?search=${encodeURIComponent(term)}` : "/portal/transactions");
+          }}
+          className="relative w-full max-w-md hidden sm:block"
+          role="search"
+        >
           <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
           <input
             className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface placeholder-outline transition-all"
-            placeholder="Search transactions, invoices, payment links..."
-            type="text"
+            // Names only what it actually searches. It previously
+            // promised invoices and payment links too, and searched
+            // nothing at all — the input had no handler.
+            placeholder="Search transactions by reference..."
+            type="search"
+            aria-label="Search transactions by reference"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
-        </div>
+        </form>
       </div>
       <div className="flex items-center gap-2 md:gap-4">
         <label className="hidden md:flex items-center gap-2 text-xs font-semibold text-on-surface-variant">

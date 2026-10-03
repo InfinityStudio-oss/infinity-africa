@@ -42,7 +42,19 @@ describe("NotificationSettingsCard", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Receive collection transaction notifications by email.")).toBeInTheDocument();
-    expect(screen.getByText("You can add up to 2 notification emails.")).toBeInTheDocument();
+  });
+
+  it("offers one address, not two", async () => {
+    // A secondary address used to be configurable here. One recipient
+    // the merchant can see beats two they have to remember, and a
+    // forwarding rule does the rest.
+    getMyNotificationSettings.mockResolvedValue(settings);
+    const { NotificationSettingsCard } = await import("./notification-settings-card");
+    render(<NotificationSettingsCard />);
+
+    await waitFor(() => expect(screen.getByDisplayValue("owner@example.com")).toBeInTheDocument());
+    expect(screen.queryByText(/Secondary notification email/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/up to 2 notification emails/i)).not.toBeInTheDocument();
   });
 
   it("defaults to enabled with empty fields when nothing is configured yet", async () => {

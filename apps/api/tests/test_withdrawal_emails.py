@@ -395,3 +395,55 @@ def test_super_admin_sees_zero_balance_for_a_merchant_with_no_wallet_account_yet
     response = client.get("/v1/admin/withdrawals", headers=auth_headers(super_admin_id))
     row = next(r for r in response.json()["data"] if r["withdrawal_id"] == body["id"])
     assert row["available_balance"] == "0"
+
+
+# --- where the success email goes -------------------------------------------
+#
+# This used to read contact_email directly, so a business could set a
+# finance address in Notification Settings, receive its collection
+# confirmations there, and still have payout confirmations arrive at the
+# address it registered with years earlier.
+
+
+def _configure_notification_email(fake_client, merchant_id, email):
+    fake_client.seed(
+        "merchant_notification_settings",
+        {
+            "merchant_id": str(merchant_id),
+            "primary_notification_email": email,
+            "secondary_notification_email": None,
+            "collection_notifications_enabled": True,
+        },
+    )
+
+
+def test_success_email_goes_to_the_configured_notification_address(fake_client, fake_resend):
+    merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _configure_notification_email(fake_client, merchant_id, "finance@shop.co.tz")
+    _fund_wallet(fake_client, merchant_id, "1000000.00")
+    body = _request_withdrawal(merchant_id, admin_id, "50000.00")
+    fake_resend.calls.clear()
+
+    super_admin_id = uuid.uuid4()
+    make_super_admin(fake_client, super_admin_id)
+    _approve(body["id"], super_admin_id)
+
+    recipients = [addr for call in fake_resend.calls for addr in call["to"]]
+    assert "finance@shop.co.tz" in recipients
+    assert "owner@shop.co.tz" not in recipients
+
+
+def test_success_email_falls_back_to_the_account_email(fake_client, fake_resend):
+    """A merchant who has never opened Notification Settings must still be
+    told their payout landed."""
+    merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
+    _fund_wallet(fake_client, merchant_id, "1000000.00")
+    body = _request_withdrawal(merchant_id, admin_id, "50000.00")
+    fake_resend.calls.clear()
+
+    super_admin_id = uuid.uuid4()
+    make_super_admin(fake_client, super_admin_id)
+    _approve(body["id"], super_admin_id)
+
+    recipients = [addr for call in fake_resend.calls for addr in call["to"]]
+    assert "owner@shop.co.tz" in recipients

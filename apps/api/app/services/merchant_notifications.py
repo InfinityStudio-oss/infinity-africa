@@ -128,3 +128,30 @@ def notification_delivery_summary(client: Client, merchant_id: uuid.UUID) -> dic
         "failed_notification_count": failed_count,
         "recent_deliveries": rows[:20],
     }
+
+
+def notification_recipient(client: Client, merchant: dict) -> str | None:
+    """The one address a merchant wants operational email sent to.
+
+    Used by collection confirmations and withdrawal-success emails alike,
+    so "where do my transaction emails go" has a single answer the
+    merchant can see and change in one place. Withdrawal success used to
+    ignore this entirely and go to contact_email, which meant a business
+    could set a finance address, receive collection emails there, and
+    still have payout confirmations arrive somewhere else.
+
+    Falls back to the account's own contact_email: that is the address
+    they registered, it is shown on the settings page as the effective
+    recipient, and sending nowhere would be worse than sending there.
+
+    Deliberately singular. A second address used to be configurable and
+    was removed — one recipient the merchant can see beats two they have
+    to remember, and a forwarding rule does the rest.
+    """
+    merchant_id = merchant.get("id")
+    if merchant_id:
+        settings_row = get_notification_settings(client, uuid.UUID(merchant_id)) or {}
+        primary = (settings_row.get("primary_notification_email") or "").strip()
+        if primary:
+            return primary
+    return (merchant.get("contact_email") or "").strip() or None

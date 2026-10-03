@@ -28,10 +28,23 @@ def list_for_merchant(
     order_by: str = "created_at",
     ascending: bool = False,
     filters: dict[str, Any] | None = None,
+    search: tuple[str, str] | None = None,
 ) -> tuple[list[dict], int]:
+    """`search` is an optional (column, term) pair matched case-insensitively
+    as a substring. Deliberately one column rather than an OR across
+    several: PostgREST's or_() has syntax the in-memory test client does
+    not model, and a search that passes its tests while behaving
+    differently against the real database is worse than a narrower one
+    that does not.
+
+    Applied before the range, so paging reflects the filtered total rather
+    than the filtered slice of one page."""
     query = client.table(table).select("*", count="exact").eq("merchant_id", str(merchant_id))
     for column, value in (filters or {}).items():
         query = query.eq(column, value)
+    if search:
+        column, term = search
+        query = query.ilike(column, f"%{term}%")
     query = query.order(order_by, desc=not ascending).range(pagination.start, pagination.end)
 
     result = query.execute()

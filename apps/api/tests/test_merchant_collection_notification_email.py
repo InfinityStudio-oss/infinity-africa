@@ -175,23 +175,26 @@ def test_notification_sent_to_primary_configured_email_for_request_collection(fa
     assert notification_calls[0]["subject"].startswith("Collection payment received - ")
 
 
-def test_notification_sent_to_both_primary_and_secondary(fake_client, fake_resend):
+def test_only_the_primary_address_is_notified(fake_client, fake_resend):
+    """A secondary address used to be configurable and was removed from
+    the portal. A value left in that column must not keep receiving mail
+    the merchant can no longer see or delete."""
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
     recipients = {c["to"][0] for c in fake_resend.calls}
-    assert recipients == {"owner@example.com", "finance@example.com"}
+    assert recipients == {"owner@example.com"}
 
 
-def test_no_more_than_two_notification_emails_are_sent(fake_client, fake_resend):
+def test_exactly_one_notification_email_is_sent(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
-    assert len(fake_resend.calls) == 2
+    assert len(fake_resend.calls) == 1
 
 
 def test_an_unconfigured_merchant_is_notified_at_their_account_email(fake_client, fake_resend):
@@ -259,7 +262,7 @@ def test_no_notification_email_for_a_failed_collection(fake_client, fake_resend)
     assert fake_resend.calls == []
 
 
-def test_delivery_log_created_per_recipient(fake_client, fake_resend):
+def test_delivery_log_created_for_the_recipient(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
 
@@ -270,8 +273,8 @@ def test_delivery_log_created_per_recipient(fake_client, fake_resend):
         for d in fake_client.table("email_deliveries")._table.rows
         if d["email_type"] == "merchant_collection_notification"
     ]
-    assert len(deliveries) == 2
-    assert {d["recipient_email"] for d in deliveries} == {"owner@example.com", "finance@example.com"}
+    assert len(deliveries) == 1
+    assert {d["recipient_email"] for d in deliveries} == {"owner@example.com"}
     assert all(d["status"] == "sent" and d["merchant_id"] == str(merchant_id) for d in deliveries)
 
 

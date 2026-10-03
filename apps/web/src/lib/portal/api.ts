@@ -441,8 +441,15 @@ export async function calculateWithdrawalCharges(input: QuoteWithdrawalChargesIn
 
 // --- Transactions (LIVE) ----------------------------------------------------
 
-export async function listTransactions(): Promise<Transaction[]> {
-  return (await apiGet<Transaction[]>("/v1/merchant/transactions")) ?? [];
+export async function listTransactions(search?: string): Promise<Transaction[]> {
+  // Filtered server-side: this endpoint is paginated, so narrowing the
+  // page already fetched would report "not found" for a transaction
+  // sitting on page two.
+  const term = search?.trim();
+  const path = term
+    ? `/v1/merchant/transactions?search=${encodeURIComponent(term)}`
+    : "/v1/merchant/transactions";
+  return (await apiGet<Transaction[]>(path)) ?? [];
 }
 
 // --- API Keys (LIVE) ---------------------------------------------------------

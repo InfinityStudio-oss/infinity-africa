@@ -1435,9 +1435,22 @@ async def resend_my_withdrawal_otp(
 def list_my_transactions(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    search: Annotated[str | None, Query(max_length=100)] = None,
 ):
+    """`search` matches the transaction reference, case-insensitively, as
+    a substring — the portal's search box. Filtered server-side on
+    purpose: this endpoint is paginated, so filtering the page the client
+    already holds would report "not found" for a transaction that exists
+    on page two."""
     client = get_supabase_admin()
-    rows, total = list_for_merchant(client, "transactions", merchant_id=membership.merchant_id, pagination=pagination)
+    term = (search or "").strip()
+    rows, total = list_for_merchant(
+        client,
+        "transactions",
+        merchant_id=membership.merchant_id,
+        pagination=pagination,
+        search=("reference", term) if term else None,
+    )
     # One batched lookup for the whole page, not one per row.
     phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})
     data = [
