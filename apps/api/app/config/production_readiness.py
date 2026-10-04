@@ -58,6 +58,26 @@ def production_config_problems(settings: Settings) -> list[str]:
     if insecure:
         problems.append(f"CORS_ORIGINS contains non-HTTPS origins: {', '.join(insecure)}")
 
+    # The worst failure this platform has available to it: MockSelcomClient
+    # resolves a collection to "successful" most of the time, and
+    # execute_collection() resolves one the moment it is created — so a
+    # production deploy left on the default mock would credit real merchant
+    # wallets for money nobody ever paid. SELCOM_MODE is anything-but-"live"
+    # by default, which makes forgetting it the easy mistake rather than the
+    # hard one.
+    #
+    # The disbursement client already refuses mock outside development, but
+    # it refuses at construction time — the first real withdrawal 502s. This
+    # catches both at deploy time instead, which is the cheapest moment to
+    # find out. A failed Railway deploy keeps the previous release serving.
+    if settings.selcom_mode != "live":
+        problems.append(
+            f"SELCOM_MODE is '{settings.selcom_mode}', not 'live' — collections would be simulated "
+            "and could credit merchant wallets for payments that never happened"
+        )
+    if settings.selcom_business_mode == "mock":
+        problems.append("SELCOM_BUSINESS_MODE is 'mock' — withdrawals would not reach the provider")
+
     return problems
 
 

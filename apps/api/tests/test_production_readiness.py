@@ -29,6 +29,10 @@ def prod(monkeypatch):
             "SUPABASE_JWT_SECRET": "jwt-secret-value",
             "SUPABASE_JWKS_URL": "",
             "CORS_ORIGINS": "https://infinitypay.me",
+            # Both default to a simulated provider, so a correctly
+            # configured production has to say so explicitly.
+            "SELCOM_MODE": "live",
+            "SELCOM_BUSINESS_MODE": "live",
         }
         base.update(overrides)
         for key, value in base.items():
@@ -182,6 +186,10 @@ def test_a_correctly_configured_app_starts(monkeypatch):
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-value")
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "jwt-secret-value")
     monkeypatch.setenv("CORS_ORIGINS", "https://infinitypay.me")
+    # Both providers default to simulated, so a production deploy has to
+    # name them explicitly — see test_simulated_collections_block_startup.
+    monkeypatch.setenv("SELCOM_MODE", "live")
+    monkeypatch.setenv("SELCOM_BUSINESS_MODE", "live")
     get_settings.cache_clear()
 
     import app.main
@@ -193,3 +201,40 @@ def test_a_correctly_configured_app_starts(monkeypatch):
     finally:
         get_settings.cache_clear()
         importlib.reload(app.main)
+
+
+def test_simulated_collections_block_startup(prod):
+    """The worst failure available to this platform.
+
+    MockSelcomClient resolves a collection to "successful" most of the
+    time, and execute_collection() resolves one the moment it is created
+    — so a production deploy left on the default would credit real
+    merchant wallets for money nobody ever paid. SELCOM_MODE is not
+    "live" unless someone says so, which makes forgetting it the easy
+    mistake.
+    """
+    problems = production_config_problems(prod(SELCOM_MODE="mock"))
+    assert any("SELCOM_MODE" in p for p in problems)
+    assert any("never happened" in p for p in problems)
+
+
+def test_an_unset_selcom_mode_blocks_startup(prod):
+    """Not just the literal string "mock" — anything that is not "live"
+    gets the mock client, including a typo and an empty value."""
+    for value in ("", "sandbox", "Live", "LIVE", "liv"):
+        assert any("SELCOM_MODE" in p for p in production_config_problems(prod(SELCOM_MODE=value))), value
+
+
+def test_simulated_withdrawals_block_startup(prod):
+    """The disbursement client refuses mock on its own, but only when it
+    is constructed — the first real withdrawal 502s. This catches it at
+    the deploy instead."""
+    problems = production_config_problems(prod(SELCOM_BUSINESS_MODE="mock"))
+    assert any("SELCOM_BUSINESS_MODE" in p for p in problems)
+
+
+def test_sandbox_withdrawals_are_allowed(prod):
+    """Deliberately not blocked: a sandbox payout provider is a normal
+    way to run a pilot where collections are live but payouts are still
+    being proven. Only a fake one is refused."""
+    assert production_config_problems(prod(SELCOM_BUSINESS_MODE="sandbox")) == []
