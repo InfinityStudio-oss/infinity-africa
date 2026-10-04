@@ -26,6 +26,7 @@ from supabase import Client
 
 from app.core.analytics import amount_band, track
 from app.core.errors import InsufficientBalanceError
+from app.core.payment_minimums import assert_amount_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.schemas.enums import CollectionMethod, NotificationType
@@ -108,6 +109,13 @@ async def create_processing_collection(
     # first place (app/services/merchant_gate.py is enforced there too), so
     # there's never an active one for a customer to pay.
     require_approved_merchant(client, merchant_id)
+
+    # Baseline floor for every collection, however it was started.
+    # Deliberately without customer_phone: a Dynamic QR also lands here
+    # and its payer chooses a network when they scan, so the number on
+    # file is not necessarily the one that will pay. The push paths
+    # apply the network-specific rule themselves, before this.
+    assert_amount_allowed(amount)
 
     if source is None:
         if invoice_id:
@@ -266,6 +274,11 @@ async def initiate_collection(
     anything is resolved. `transaction_reference` and `message` are added
     onto the returned dict (not collections table columns) so the router
     can build a response without a second lookup."""
+    # Before the collection row and before the provider call: a push below
+    # the customer's own network floor can only come back failed. See
+    # app/core/payment_minimums.py.
+    assert_amount_allowed(amount, customer_phone=customer_phone)
+
     collection = await create_processing_collection(
         client,
         merchant_id=merchant_id,

@@ -10,3 +10,4 @@ export * from "./disbursement-status";
 export * from "./destination-code";
 export * from "./service-needed";
 export * from "./webhook-events";
+export * from "./payment-minimums";

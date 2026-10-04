@@ -43,6 +43,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.payment_minimums import assert_amount_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.services.checkout_orders import (
@@ -85,6 +86,12 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
     double-credit" — the task's own requirement). buyer_phone must
     already be normalized to "255XXXXXXXXX" by the caller.
     """
+    # Before the Selcom order and before any collection row: a push
+    # below the network's own floor can only come back as a failed
+    # payment, so it is refused here rather than spending a provider
+    # attempt on it. See app/core/payment_minimums.py.
+    assert_amount_allowed(Decimal(str(payment_link["amount"])), customer_phone=buyer_phone)
+
     payment_link_id = payment_link["id"]
 
     existing_collection = execute_maybe_single(
@@ -228,6 +235,12 @@ async def execute_wallet_push_collection(
     authenticated with one) and the legacy Merchant Portal dashboard
     push endpoint (source defaults to DASHBOARD_REQUEST) — `source`
     always reflects which one actually called this, never guessed here."""
+    # Before the Selcom order and before any collection row: a push
+    # below the network's own floor can only come back as a failed
+    # payment, so it is refused here rather than spending a provider
+    # attempt on it. See app/core/payment_minimums.py.
+    assert_amount_allowed(amount, customer_phone=customer_phone)
+
     buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 

@@ -22,6 +22,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.payment_minimums import assert_amount_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.services.checkout_orders import (
@@ -58,6 +59,12 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
     instead of triggering a second real push. buyer_phone must already
     be normalized to "255XXXXXXXXX" by the caller.
     """
+    # Before the Selcom order and before any collection row: a push
+    # below the network's own floor can only come back as a failed
+    # payment, so it is refused here rather than spending a provider
+    # attempt on it. See app/core/payment_minimums.py.
+    assert_amount_allowed(Decimal(str(payment_link["amount"])), customer_phone=buyer_phone)
+
     payment_link_id = payment_link["id"]
 
     existing_collection = execute_maybe_single(
@@ -174,6 +181,12 @@ async def execute_selcompesa_push_collection(
     reuse against here, only the router's own Idempotency-Key replay.
 
     customer_phone is required — a push has nowhere to go without one."""
+    # Before the Selcom order and before any collection row: a push
+    # below the network's own floor can only come back as a failed
+    # payment, so it is refused here rather than spending a provider
+    # attempt on it. See app/core/payment_minimums.py.
+    assert_amount_allowed(amount, customer_phone=customer_phone)
+
     buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"
 

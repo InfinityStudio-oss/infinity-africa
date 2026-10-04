@@ -15,7 +15,16 @@ function Code({ children }: { children: React.ReactNode }) {
 }
 
 const REQUEST_FIELDS: Array<{ field: string; required: string; notes: React.ReactNode }> = [
-  { field: "amount", required: "Yes", notes: "Decimal string, e.g. \"5000.00\"." },
+  {
+    field: "amount",
+    required: "Yes",
+    notes: (
+      <>
+        Decimal string, e.g. <Code>&quot;5000.00&quot;</Code>. Minimums are set by the customer&apos;s own
+        network — see Minimum amounts below.
+      </>
+    ),
+  },
   { field: "phone", required: "Yes", notes: "The customer's mobile money number." },
   { field: "currency", required: "No", notes: <>Defaults to <Code>TZS</Code>.</> },
   { field: "customer_name", required: "No", notes: "Shown on the business's records." },
@@ -229,6 +238,61 @@ export default function DirectWalletPushPage() {
         <Callout title="202 means the prompt was sent, not that payment succeeded">
           Never mark an order paid from this response. Wait for the <Code>collection.success</Code> webhook, or poll{" "}
           <Code>GET /v1/collections/{"{collection_id}"}</Code>.
+        </Callout>
+      </section>
+
+      <section className="mb-12">
+        <h2 className="text-xl font-semibold text-on-surface mb-3">Minimum amounts</h2>
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Mobile money networks set their own floor, and a push below it is refused by the network itself — not by us.
+          We check before sending, so a request under the minimum is rejected immediately and the customer is never
+          shown a prompt that cannot work.
+        </p>
+
+        <div className="overflow-x-auto mb-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-outline-variant text-left">
+                <th className="py-2 pr-4 font-semibold text-on-surface">Network</th>
+                <th className="py-2 pr-4 font-semibold text-on-surface">Minimum</th>
+                <th className="py-2 font-semibold text-on-surface">Prefixes</th>
+              </tr>
+            </thead>
+            <tbody className="text-on-surface-variant">
+              <tr className="border-b border-outline-variant">
+                <td className="py-2 pr-4">Tigo / Mixx by Yas</td>
+                <td className="py-2 pr-4 font-semibold text-on-surface">TZS 1,000</td>
+                <td className="py-2 font-mono text-xs">065, 067, 071, 077</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4">M-Pesa, Airtel Money, HaloPesa, TTCL Pesa</td>
+                <td className="py-2 pr-4 font-semibold text-on-surface">TZS 100</td>
+                <td className="py-2 font-mono text-xs">all others</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-sm text-on-surface-variant leading-relaxed mb-4">
+          Below the minimum you get a <Code>400</Code> with the code <Code>AMOUNT_BELOW_OPERATOR_MINIMUM</Code>. No
+          collection is created and no prompt is sent, so there is nothing to cancel and nothing to reconcile — fix the
+          amount and send a new request.
+        </p>
+
+        <div className="mb-4">
+          <CodeBlock language="json">{`{
+  "success": false,
+  "error": {
+    "code": "AMOUNT_BELOW_OPERATOR_MINIMUM",
+    "message": "Minimum amount for Tigo / Mixx by Yas is TZS 1,000. Please enter TZS 1,000 or more, or use another mobile money network.",
+    "details": null
+  }
+}`}</CodeBlock>
+        </div>
+
+        <Callout title="Check this before you send">
+          The <Code>message</Code> is written for your customer and is safe to show them as-is. Checking the prefix on
+          your side first saves them a round trip and lets you offer another network before they commit to paying.
         </Callout>
       </section>
 

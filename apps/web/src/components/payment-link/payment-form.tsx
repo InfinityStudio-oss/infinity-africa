@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { minimumAmountError } from "@infinity/shared";
+
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { PublicPaymentLink } from "@/lib/payment-links";
 
@@ -215,9 +217,14 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
     // Otherwise move to a dedicated phone_entry phase — a stable state,
     // not re-derived from the live `phone` value, so typing into the
     // field doesn't flip the UI back to the chooser mid-entry.
-    if (chosenMethod === "TANQR" || phone.trim()) {
-      submitPay(chosenMethod, chosenMethod === "TANQR" ? "" : phone);
+    if (chosenMethod === "TANQR") {
+      submitPay(chosenMethod, "");
+    } else if (phone.trim() && !minimumAmountError(link.amount, phone)) {
+      submitPay(chosenMethod, phone);
     } else {
+      // Either no number yet, or the one on file cannot pay this amount
+      // on its own network — both need the entry step, which is where
+      // the explanation is shown.
       setState("phone_entry");
     }
   }
@@ -225,6 +232,10 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
   function handlePhoneSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!method || !phone.trim()) return;
+    // Belt and braces with the disabled button: a form can still be
+    // submitted by keyboard while the button is disabled in some
+    // browsers, and this must not reach the API.
+    if (minimumAmountError(link.amount, phone)) return;
     submitPay(method, phone);
   }
 
@@ -342,6 +353,13 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
   // state === "choose" | "phone_entry"
   const needsPhoneStep = state === "phone_entry";
 
+  // Mixx by Yas (Tigo) refuses a push below TZS 1,000. Catching it here
+  // means the customer is told while they are still typing, instead of
+  // watching a prompt that was never going to arrive. Null until the
+  // number is complete enough to name a network — warning someone
+  // mid-entry is noise. The API enforces the same rule regardless.
+  const minimumError = minimumAmountError(link.amount, phone);
+
   return (
     <div>
       <div className="bg-primary p-6 text-on-primary sm:p-8">
@@ -380,9 +398,14 @@ export function PaymentForm({ slug, link }: { slug: string; link: PublicPaymentL
               placeholder="e.g. 0700 000 000"
               className="mt-1 w-full rounded border border-outline-variant px-3 py-2 text-sm text-on-surface focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container"
             />
+            {minimumError && (
+              <p role="alert" className="mt-2 text-sm text-error">
+                {minimumError}
+              </p>
+            )}
             <button
               type="submit"
-              disabled={!phone.trim()}
+              disabled={!phone.trim() || Boolean(minimumError)}
               className="mt-4 w-full rounded bg-primary-container px-4 py-3 text-sm font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {method === "SELCOM_PESA" ? "Send Selcom Pesa prompt" : method ? METHOD_LABEL[method] : "Continue"}

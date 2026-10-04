@@ -22,6 +22,7 @@ from decimal import Decimal
 from supabase import Client
 
 from app.config import get_settings
+from app.core.payment_minimums import assert_amount_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.services.crud import execute_maybe_single, insert_row
@@ -65,6 +66,12 @@ async def create_checkout_order_minimal(
     buyer_phone must already be normalized to "255XXXXXXXXX" by the
     caller's request schema (see CreateOrderMinimalRequest) — this
     function trusts it's already in that shape."""
+    # Baseline floor, applied where every Selcom Checkout path
+    # converges. The push services apply the network-specific rule
+    # before this; this catches hosted checkout and QR, where no
+    # network has been chosen yet. See app/core/payment_minimums.py.
+    assert_amount_allowed(Decimal(str(amount)))
+
     order_id = generate_reference("ORD")
     settings = get_settings()
 
@@ -123,6 +130,12 @@ async def get_or_create_checkout_order_for_payment_link(client: Client, *, payme
 
     buyer_phone must already be normalized to "255XXXXXXXXX" by the
     caller."""
+    # Baseline floor, applied where every Selcom Checkout path
+    # converges. The push services apply the network-specific rule
+    # before this; this catches hosted checkout and QR, where no
+    # network has been chosen yet. See app/core/payment_minimums.py.
+    assert_amount_allowed(Decimal(str(payment_link["amount"])))
+
     existing = execute_maybe_single(
         client.table("checkout_orders")
         .select("*")

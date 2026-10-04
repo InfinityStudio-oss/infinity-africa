@@ -502,3 +502,93 @@ describe("PaymentForm", () => {
     }
   });
 });
+
+describe("PaymentForm network minimum", () => {
+  /**
+   * Mixx by Yas (Tigo) refuses a push below TZS 1,000. The page catches
+   * it so the customer is told while they are typing, rather than
+   * watching a prompt that was never going to arrive. The API enforces
+   * the same rule — this is convenience, not the control.
+   */
+  const lowAmountLink: PublicPaymentLink = { ...link, amount: "500.00" };
+  const TIGO = "0713000000";
+  const VODACOM = "0754000000";
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function openPhoneStep(target: PublicPaymentLink) {
+    render(<PaymentForm slug="test-slug" link={target} />);
+    fireEvent.click(screen.getByRole("button", { name: /Pay by Mobile Money Push/ }));
+  }
+
+  it("explains the Tigo minimum in the customer's own words", () => {
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: TIGO } });
+
+    expect(
+      screen.getByText(
+        "Minimum amount for Tigo / Mixx by Yas is TZS 1,000. " +
+          "Please enter TZS 1,000 or more, or use another mobile money network.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("blocks the submit button for a Tigo number below the minimum", () => {
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: TIGO } });
+
+    expect(screen.getByRole("button", { name: /Pay by Mobile Money Push/ })).toBeDisabled();
+  });
+
+  it("never calls the API for an amount the network would refuse", () => {
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: TIGO } });
+    fireEvent.submit(screen.getByLabelText("Phone number").closest("form")!);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows the same amount on a network that accepts it", () => {
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: VODACOM } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pay by Mobile Money Push/ })).toBeEnabled();
+  });
+
+  it("says nothing while the number is still being typed", () => {
+    // Warning someone before they have finished entering their number is
+    // noise, not help.
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: "071" } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("lets a Tigo number through once the amount clears the minimum", () => {
+    openPhoneStep({ ...link, amount: "1000.00" });
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: TIGO } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pay by Mobile Money Push/ })).toBeEnabled();
+  });
+
+  it("shows no provider wording to the customer", () => {
+    openPhoneStep(lowAmountLink);
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: TIGO } });
+
+    const alertText = screen.getByRole("alert").textContent ?? "";
+    expect(alertText.toLowerCase()).not.toContain("selcom");
+    expect(alertText.toLowerCase()).not.toContain("error");
+    expect(alertText.toLowerCase()).not.toContain("operator_minimum");
+  });
+});
