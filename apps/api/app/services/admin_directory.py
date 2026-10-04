@@ -11,6 +11,7 @@ a cosmetic gap, not a reason to break a dashboard page.
 """
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from supabase import Client
 
@@ -96,5 +97,41 @@ def best_effort_user_profile(client: Client, user_id: str | uuid.UUID | None) ->
         return {"full_name": None, "email": None, "last_sign_in_at": None}
 
 
+# Supabase Auth has no "get these N users" call, so a display name costs
+# one request per user. Twelve at a time turns a 100-row admin page from a
+# hundred round trips end to end into about nine, which is the difference
+# between a page that feels broken and one that does not. Higher is not
+# obviously better: these all hit the same Auth endpoint, and the ceiling
+# is there to stay a good citizen of it rather than to pace this process.
+_PROFILE_FETCH_WORKERS = 12
+
+
 def batch_user_profiles(client: Client, user_ids: set[str]) -> dict[str, dict]:
-    return {user_id: best_effort_user_profile(client, user_id) for user_id in user_ids}
+    """user_id -> profile, for joining display names onto an admin list.
+
+    This used to be a dict comprehension calling best_effort_user_profile
+    once per id, which read as a batch helper but was a plain N+1: every
+    Super Admin list page paid one sequential network round trip per row
+    it displayed. At a hundred rows that was most of a page load, and it
+    got worse as the platform grew — the Business Users page was the one
+    where it showed first.
+
+    Threads rather than async because the Supabase client is synchronous
+    and these call sites are sync FastAPI routes; making them async would
+    mean changing every caller. The work is pure network wait, so threads
+    cost nothing to have and the GIL is not involved.
+
+    Failure is still per-user and still silent: best_effort_user_profile
+    swallows its own errors, so one deleted account cannot fail the list
+    or poison the pool.
+    """
+    ids = [str(user_id) for user_id in user_ids if user_id]
+    if not ids:
+        return {}
+    if len(ids) == 1:
+        # Not worth a pool, and keeps the common single-row path identical.
+        return {ids[0]: best_effort_user_profile(client, ids[0])}
+
+    with ThreadPoolExecutor(max_workers=min(_PROFILE_FETCH_WORKERS, len(ids))) as pool:
+        profiles = pool.map(lambda user_id: best_effort_user_profile(client, user_id), ids)
+        return dict(zip(ids, profiles, strict=True))
