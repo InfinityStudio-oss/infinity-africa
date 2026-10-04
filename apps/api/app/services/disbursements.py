@@ -19,6 +19,14 @@ Every withdrawal is created PENDING_ADMIN_APPROVAL with its fee breakdown
 approving it later uses that stored snapshot, never recalculates. Rejecting
 one never reserved anything, so there's nothing to reverse.
 
+A payout that failed for a reason an operator has since fixed — most
+often an empty Selcom disbursement float, which rejects the call with
+HTTP 400 — is re-attempted with retry_disbursement_payout. FAILED,
+BLOCKED_IP_WHITELIST and NEEDS_ADMIN_ATTENTION were all dead ends
+before it, and the latter two held the merchant's money while being
+dead ends. Retry refuses unless it can prove the first attempt did not
+pay out; see _assert_provider_did_not_already_pay.
+
 TODO(balance reservation): a PENDING_ADMIN_APPROVAL withdrawal does not
 formally reserve/lock any balance — get_wallet_balance() at request time
 is only a friendly up-front check (see its own docstring). Two merchants
@@ -440,6 +448,158 @@ async def approve_disbursement(
     return await _reserve_and_run_disbursement_provider(client, disbursement)
 
 
+# Statuses a payout can be retried from, split by what happened to the
+# merchant's money — because that decides whether a retry must reserve it
+# again or must deliberately not.
+#
+# FAILED reversed the reservation (_fail_and_reverse), so the money is
+# back in the wallet and a retry has to take it again. The other two left
+# it reserved on purpose, so taking it again would debit the merchant
+# twice for one withdrawal.
+_RETRY_NEEDS_RESERVATION = ("FAILED",)
+_RETRY_ALREADY_RESERVED = ("BLOCKED_IP_WHITELIST", "NEEDS_ADMIN_ATTENTION")
+_RETRYABLE_STATUSES = _RETRY_NEEDS_RESERVATION + _RETRY_ALREADY_RESERVED
+
+
+async def _assert_provider_did_not_already_pay(disbursement: dict) -> None:
+    """Refuses a retry unless we can prove the first attempt did not pay.
+
+    This is the guard that makes retrying a payout safe at all. Paying a
+    merchant's withdrawal twice is not recoverable by us — the second
+    payment is gone to a customer-controlled account — so the rule is to
+    retry only on positive evidence of failure, never on the absence of
+    evidence of success.
+
+    A withdrawal with no provider_reference never reached Selcom. That is
+    the common case here and it is provably safe: when Selcom rejects the
+    call outright (HTTP 400 for an empty disbursement float, HTTP 403 for
+    a non-whitelisted IP) nothing is created on their side, and
+    _fail_and_reverse/_block_ip_whitelist record no reference.
+
+    Anything else gets asked. Only an explicit "failed" from Selcom
+    permits the retry; successful, still-processing, ambiguous, or an
+    error we could not interpret all refuse it and say what to do
+    instead.
+    """
+    provider_reference = disbursement.get("provider_reference")
+    if not provider_reference:
+        return
+
+    provider = get_selcom_business_client()
+    try:
+        result = await provider.query_transaction(trans_id=provider_reference)
+    except SelcomAPIError as exc:
+        raise ConflictError(
+            "Couldn't confirm with Selcom whether the first attempt paid out, so this "
+            "withdrawal can't be retried yet. Check "
+            f"{provider_reference} in the Selcom portal first."
+        ) from exc
+
+    if result.status == "successful":
+        # The record and the provider disagree about real money. Say so
+        # plainly rather than quietly retrying and paying twice.
+        logger.error(
+            "disbursement_retry_refused_already_paid disbursement_id=%s provider_reference=%s",
+            disbursement["id"],
+            provider_reference,
+        )
+        raise ConflictError(
+            "Selcom reports this payout already succeeded, so retrying would pay the "
+            f"merchant twice. Reconcile {provider_reference} instead — the withdrawal "
+            "record and Selcom disagree."
+        )
+
+    if result.status != "failed":
+        raise ConflictError(
+            f"Selcom still reports this payout as {result.status}, so it can't be retried "
+            "yet. Use Refresh Status to resolve it first."
+        )
+
+
+async def retry_disbursement_payout(
+    client: Client, *, disbursement_id: uuid.UUID, approver_id: uuid.UUID
+) -> dict:
+    """Re-attempts a payout that failed for a reason an operator has since
+    fixed — most often an empty Selcom disbursement float, which rejects
+    the call with HTTP 400 and leaves the withdrawal FAILED with the money
+    back in the merchant's wallet.
+
+    Before this existed, FAILED was terminal: the only way forward was to
+    ask the merchant to request the whole withdrawal again, and the two
+    reserved-but-stuck states (BLOCKED_IP_WHITELIST, NEEDS_ADMIN_ATTENTION)
+    had no way forward at all — the merchant's wallet stayed debited
+    indefinitely.
+
+    This is a Super Admin action and is deliberately not automatic. It
+    re-runs every gate a fresh approval would, so a merchant who has since
+    been suspended or had a high-risk alert raised is not paid out just
+    because their withdrawal predates the problem.
+    """
+    disbursement = get_by_id(client, "disbursements", disbursement_id)
+    if not disbursement:
+        raise NotFoundError("Disbursement not found")
+
+    status = disbursement["status"]
+    if status not in _RETRYABLE_STATUSES:
+        raise ConflictError("This withdrawal isn't in a state that can be retried")
+
+    merchant_id = uuid.UUID(disbursement["merchant_id"])
+    # Same gates as approve_disbursement, for the same reason: time has
+    # passed since the original approval, and a retry is a fresh decision
+    # to move money.
+    _check_merchant_is_verified(client, merchant_id=merchant_id)
+    _check_no_open_high_risk_alerts(client, merchant_id=merchant_id)
+
+    await _assert_provider_did_not_already_pay(disbursement)
+
+    if status in _RETRY_NEEDS_RESERVATION:
+        # The reversal gave the money back, so take it again — atomically,
+        # against the balance as it is now. A merchant who has since spent
+        # it gets InsufficientBalanceError here rather than an overdrawn
+        # wallet.
+        transaction = _reserve_funds_for_disbursement(client, disbursement)
+    else:
+        transaction = _find_transaction_for_disbursement(client, disbursement_id)
+        if not transaction:
+            # Funds are recorded as reserved but the transaction holding
+            # them is missing. Reserving again would debit twice; refuse.
+            raise ConflictError(
+                "This withdrawal's reserved funds can't be located, so it can't be "
+                "retried automatically. It needs manual reconciliation."
+            )
+
+    write_audit_log(
+        client,
+        action="disbursement.payout_retried",
+        resource_type="disbursement",
+        resource_id=disbursement_id,
+        actor_type="user",
+        actor_id=approver_id,
+        merchant_id=merchant_id,
+        metadata={
+            "previous_status": status,
+            "previous_reason": disbursement.get("admin_status_reason"),
+            "previous_provider_reference": disbursement.get("provider_reference"),
+        },
+    )
+
+    disbursement = update_row(
+        client,
+        "disbursements",
+        disbursement_id,
+        {
+            "status": "PROCESSING",
+            "approved_by": str(approver_id),
+            "approved_at": utc_now_iso(),
+            # Cleared so the row does not keep explaining a failure it has
+            # moved on from; the old reason is preserved in the audit log.
+            "admin_status_reason": None,
+            "completed_at": None,
+        },
+    )
+    return await _run_disbursement_provider(client, disbursement, transaction)
+
+
 def reject_disbursement(
     client: Client, *, disbursement_id: uuid.UUID, approver_id: uuid.UUID, rejection_reason: str
 ) -> dict:
@@ -677,11 +837,37 @@ def _block_ip_whitelist(
     return disbursement
 
 
-async def _reserve_and_run_disbursement_provider(client: Client, disbursement: dict) -> dict:
-    merchant_id = uuid.UUID(disbursement["merchant_id"])
+def _disbursement_money(disbursement: dict) -> tuple[Decimal, Decimal, Decimal]:
+    """The three amounts every payout path needs, read the same way in
+    each: what the recipient gets, what we charged, and what the wallet
+    has to give up for both."""
     amount = Decimal(str(disbursement["recipient_net_amount"] or disbursement["amount"]))
     fee_amount = Decimal(str(disbursement.get("total_charges") or "0"))
     total_reserved = Decimal(str(disbursement.get("total_reserved_amount") or disbursement["amount"]))
+    return amount, fee_amount, total_reserved
+
+
+async def _reserve_and_run_disbursement_provider(client: Client, disbursement: dict) -> dict:
+    """Approval path: take the money, then pay it out.
+
+    Split into its two halves so a retry can reuse whichever one it
+    needs — a retry after a reversal has to reserve again, while a retry
+    of a withdrawal whose funds were never released must not reserve
+    twice. See retry_disbursement_payout.
+    """
+    transaction = _reserve_funds_for_disbursement(client, disbursement)
+    disbursement = update_row(
+        client, "disbursements", uuid.UUID(disbursement["id"]), {"status": "PROCESSING"}
+    )
+    return await _run_disbursement_provider(client, disbursement, transaction)
+
+
+def _reserve_funds_for_disbursement(client: Client, disbursement: dict) -> dict:
+    """Opens a transaction row and atomically moves the merchant's money
+    into reservation. Raises InsufficientBalanceError if the wallet can't
+    cover it, having posted nothing."""
+    merchant_id = uuid.UUID(disbursement["merchant_id"])
+    amount, fee_amount, total_reserved = _disbursement_money(disbursement)
     currency = disbursement["currency"]
     disbursement_id = uuid.UUID(disbursement["id"])
 
@@ -703,8 +889,6 @@ async def _reserve_and_run_disbursement_provider(client: Client, disbursement: d
     )
     transaction_id = uuid.UUID(transaction["id"])
 
-    disbursement = update_row(client, "disbursements", disbursement_id, {"status": "PROCESSING"})
-
     try:
         post_disbursement_entries(
             client,
@@ -722,6 +906,19 @@ async def _reserve_and_run_disbursement_provider(client: Client, disbursement: d
         update_row(client, "transactions", transaction_id, {"status": "failed"})
         update_row(client, "disbursements", disbursement_id, {"status": "FAILED", "completed_at": utc_now_iso()})
         raise
+
+    return transaction
+
+
+async def _run_disbursement_provider(client: Client, disbursement: dict, transaction: dict) -> dict:
+    """Calls Selcom for an already-reserved disbursement and applies the
+    outcome. Assumes the money is held: every branch below either keeps it
+    held, releases it to the recipient, or reverses it."""
+    merchant_id = uuid.UUID(disbursement["merchant_id"])
+    amount, fee_amount, _total_reserved = _disbursement_money(disbursement)
+    currency = disbursement["currency"]
+    disbursement_id = uuid.UUID(disbursement["id"])
+    transaction_id = uuid.UUID(transaction["id"])
 
     provider = get_selcom_business_client()
 

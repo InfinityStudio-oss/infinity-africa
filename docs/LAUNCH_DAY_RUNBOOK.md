@@ -133,6 +133,30 @@ trips after repeated provider failures and closes itself after the
 cooldown. If it is flapping, the provider is the problem; do not restart
 the API in a loop.
 
+**A payout failed and the Selcom float was empty.** Top the disbursement
+account up, then use **Retry Payout** on the withdrawal in Super Admin →
+Withdrawals. It is offered on `Failed`, `Blocked (IP Whitelist)` and
+`Needs Admin Attention`, and it re-runs the same merchant checks a fresh
+approval would.
+
+Retry refuses rather than risks paying twice. If the first attempt
+reached Selcom at all, it asks Selcom how that attempt ended and only
+proceeds on an explicit failure — "already succeeded", "still
+processing" and "couldn't reach Selcom to check" all block it and name
+the reference to reconcile by hand. A withdrawal that never reached
+Selcom (an HTTP 400 for an empty float is one) has no reference and
+retries immediately.
+
+What the money does differs by state, and the confirmation step says
+which: a `Failed` withdrawal was reversed, so retrying takes the amount
+from the merchant's wallet again; the other two never released it, so
+retrying reuses the funds already held.
+
+The float balance now sits above the approval queue, with a warning when
+it is below the total awaiting approval. It needs
+`SELCOM_BUSINESS_ACCOUNT_NUMBER` set in Railway, or it reads "not
+configured". It never shows a figure it isn't sure of.
+
 **A merchant API key leaks.** Revoke it in their portal under API
 Credentials — it stops working immediately, no deploy needed. Issue a new
 one; the old key's transactions remain attributed to it in the logs.

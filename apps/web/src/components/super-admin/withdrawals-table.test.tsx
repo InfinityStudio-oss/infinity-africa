@@ -8,6 +8,7 @@ const rejectWithdrawalAction = vi.fn();
 const requestInfoWithdrawalAction = vi.fn();
 const refreshWithdrawalStatusAction = vi.fn();
 const reconcilePendingWithdrawalsAction = vi.fn();
+const retryWithdrawalPayoutAction = vi.fn();
 
 vi.mock("@/lib/admin/live-actions", () => ({
   approveWithdrawalAction: (...args: unknown[]) => approveWithdrawalAction(...args),
@@ -15,6 +16,7 @@ vi.mock("@/lib/admin/live-actions", () => ({
   requestInfoWithdrawalAction: (...args: unknown[]) => requestInfoWithdrawalAction(...args),
   refreshWithdrawalStatusAction: (...args: unknown[]) => refreshWithdrawalStatusAction(...args),
   reconcilePendingWithdrawalsAction: (...args: unknown[]) => reconcilePendingWithdrawalsAction(...args),
+  retryWithdrawalPayoutAction: (...args: unknown[]) => retryWithdrawalPayoutAction(...args),
 }));
 
 const pendingRow: AdminWithdrawalRow = {
@@ -138,5 +140,80 @@ describe("WithdrawalsTable", () => {
     const table = within(screen.getByRole("table"));
     expect(table.getByText("Processing")).toBeInTheDocument();
     expect(table.queryByText("Auto-Processing")).not.toBeInTheDocument();
+  });
+});
+
+describe("retrying a payout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    retryWithdrawalPayoutAction.mockResolvedValue({ error: null, ok: true, message: "Retried." });
+  });
+
+  function rowWithStatus(status: AdminWithdrawalRow["status"]): AdminWithdrawalRow {
+    return { ...pendingRow, withdrawal_id: "wd-retry", status, requires_approval: false };
+  }
+
+  it("offers a retry on a failed withdrawal, which previously had no way forward", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("FAILED")]} queue={[]} />);
+    expect(screen.getByRole("button", { name: "Retry Payout" })).toBeInTheDocument();
+  });
+
+  it.each(["BLOCKED_IP_WHITELIST", "NEEDS_ADMIN_ATTENTION"] as const)(
+    "offers a retry on %s, where the merchant's funds are still held",
+    async (status) => {
+      const { WithdrawalsTable } = await import("./withdrawals-table");
+      render(<WithdrawalsTable rows={[rowWithStatus(status)]} queue={[]} />);
+      expect(screen.getByRole("button", { name: "Retry Payout" })).toBeInTheDocument();
+    },
+  );
+
+  it.each(["SUCCESS", "PROCESSING", "REJECTED", "PENDING_ADMIN_APPROVAL"] as const)(
+    "offers no retry on %s",
+    async (status) => {
+      const { WithdrawalsTable } = await import("./withdrawals-table");
+      render(<WithdrawalsTable rows={[rowWithStatus(status)]} queue={[]} />);
+      expect(screen.queryByRole("button", { name: "Retry Payout" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not fire the action on the first click — a payout needs confirming", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("FAILED")]} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Payout" }));
+    expect(retryWithdrawalPayoutAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirm Retry" })).toBeInTheDocument();
+  });
+
+  it("says the money comes out of the wallet again when the withdrawal was reversed", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("FAILED")]} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Payout" }));
+    expect(screen.getByText(/taking the amount from the merchant's wallet/i)).toBeInTheDocument();
+  });
+
+  it("says the funds are already reserved when they were never released", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("BLOCKED_IP_WHITELIST")]} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Payout" }));
+    expect(screen.getByText(/already reserved for this withdrawal/i)).toBeInTheDocument();
+  });
+
+  it("can be backed out of without retrying", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("FAILED")]} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Payout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Confirm Retry" })).not.toBeInTheDocument();
+    expect(retryWithdrawalPayoutAction).not.toHaveBeenCalled();
+  });
+
+  it("retries the withdrawal that was confirmed, once", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(<WithdrawalsTable rows={[rowWithStatus("FAILED")]} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Payout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Retry" }));
+    await waitFor(() => expect(retryWithdrawalPayoutAction).toHaveBeenCalledTimes(1));
+    expect(retryWithdrawalPayoutAction.mock.calls[0][0]).toBe("wd-retry");
   });
 });

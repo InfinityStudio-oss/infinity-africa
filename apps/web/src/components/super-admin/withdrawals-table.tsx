@@ -12,6 +12,7 @@ import {
   approveWithdrawalAction,
   reconcilePendingWithdrawalsAction,
   refreshWithdrawalStatusAction,
+  retryWithdrawalPayoutAction,
   rejectWithdrawalAction,
   requestInfoWithdrawalAction,
   type WithdrawalActionState,
@@ -172,6 +173,23 @@ function RequestInfoForm({ id }: { id: string }) {
   );
 }
 
+function RetryPayoutForm({ id }: { id: string }) {
+  const [state, formAction] = useActionState<WithdrawalActionState, FormData>(
+    retryWithdrawalPayoutAction.bind(null, id),
+    WITHDRAWAL_ACTION_IDLE,
+  );
+  return (
+    <form action={formAction} className="inline-flex flex-wrap items-center justify-end gap-2">
+      <SubmitButton
+        className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-semibold shrink-0"
+        idleLabel="Confirm Retry"
+        pendingLabel="Retrying…"
+      />
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
 function RefreshStatusForm({ id }: { id: string }) {
   const [state, formAction] = useActionState<WithdrawalActionState, FormData>(
     refreshWithdrawalStatusAction.bind(null, id),
@@ -192,6 +210,7 @@ function RefreshStatusForm({ id }: { id: string }) {
 export function WithdrawalsTable({ rows, queue }: { rows: AdminWithdrawalRow[]; queue: AdminWithdrawalRow[] }) {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("All");
   const [expandedRejectId, setExpandedRejectId] = useState<string | null>(null);
+  const [expandedRetryId, setExpandedRetryId] = useState<string | null>(null);
   const [expandedInfoId, setExpandedInfoId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -343,6 +362,14 @@ export function WithdrawalsTable({ rows, queue }: { rows: AdminWithdrawalRow[]; 
               <tbody className="text-sm">
                 {filtered.map((row) => {
                   const needsRefresh = row.status === "PROCESSING" || row.status === "NEEDS_RECONCILIATION";
+                  // Mirrors _RETRYABLE_STATUSES in
+                  // apps/api/app/services/disbursements.py. FAILED returned the
+                  // money to the merchant's wallet; the other two still hold it,
+                  // which is why they had no way forward until retry existed.
+                  const canRetry =
+                    row.status === "FAILED" ||
+                    row.status === "BLOCKED_IP_WHITELIST" ||
+                    row.status === "NEEDS_ADMIN_ATTENTION";
                   return (
                     <tr key={row.withdrawal_id} className="border-t border-surface-container-highest">
                       <td className={`${tdClass} text-on-surface-variant text-xs`}>{formatDateTime(row.created_at)}</td>
@@ -385,6 +412,38 @@ export function WithdrawalsTable({ rows, queue }: { rows: AdminWithdrawalRow[]; 
                       </td>
                       <td className={`${tdClass} text-right`}>
                         {needsRefresh && <RefreshStatusForm id={row.withdrawal_id} />}
+                        {canRetry &&
+                          (expandedRetryId === row.withdrawal_id ? (
+                            <div className="flex flex-col items-end gap-1">
+                              {/* Says plainly what the money does, because the two
+                                  cases differ: a failed withdrawal takes the amount
+                                  out of the wallet again, a stuck one is already
+                                  holding it. */}
+                              <p className="text-[11px] text-on-surface-variant max-w-[15rem] text-right">
+                                {row.status === "FAILED"
+                                  ? "Pays out again, taking the amount from the merchant's wallet."
+                                  : "Pays out using the funds already reserved for this withdrawal."}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <RetryPayoutForm id={row.withdrawal_id} />
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedRetryId(null)}
+                                  className="text-xs text-on-surface-variant hover:underline"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRetryId(row.withdrawal_id)}
+                              className="px-3 py-1.5 rounded-lg border border-outline-variant text-on-surface-variant text-xs font-semibold hover:bg-surface-container-low"
+                            >
+                              Retry Payout
+                            </button>
+                          ))}
                       </td>
                     </tr>
                   );

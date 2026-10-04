@@ -10,12 +10,14 @@ _reserve_and_run_disbursement_provider) — every route here is
 these paths. See app/services/disbursements.py for the state machine.
 """
 
+import logging
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
 from app.auth import require_super_admin
+from app.config import get_settings
 from app.core.rate_limit import rate_limit
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
@@ -33,8 +35,13 @@ from app.services.disbursements import (
     refresh_disbursement_status,
     reject_disbursement,
     request_more_info,
+    retry_disbursement_payout,
 )
 from app.services.security_alerts import notify_security_event
+from app.services.selcom_business.client import get_selcom_business_client
+from app.services.selcom_business.parsing import parse_float_balance
+
+logger = logging.getLogger("infinity.admin.withdrawals")
 
 router = APIRouter(prefix="/admin/withdrawals", tags=["admin-withdrawals"])
 
@@ -171,6 +178,75 @@ async def refresh_withdrawal_status(
     )
 
     return APIResponse(data=DisbursementResponse(**disbursement))
+
+
+@router.post("/{disbursement_id}/retry", response_model=APIResponse[DisbursementResponse])
+async def retry_withdrawal_payout(
+    disbursement_id: uuid.UUID,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """Re-attempt a payout that failed for a reason since fixed — most
+    often an empty Selcom disbursement float.
+
+    The service refuses unless it can prove the first attempt did not pay
+    out, so this cannot be used to pay a merchant twice. retry_payout is
+    audited separately from the original approval, with the old status and
+    reason preserved.
+    """
+    client = get_supabase_admin()
+    disbursement = await retry_disbursement_payout(
+        client, disbursement_id=disbursement_id, approver_id=admin.id
+    )
+
+    write_audit_log(
+        client,
+        actor_id=admin.id,
+        merchant_id=uuid.UUID(disbursement["merchant_id"]),
+        action="disbursement.retry_requested",
+        resource_type="disbursement",
+        resource_id=disbursement_id,
+        metadata={"status": disbursement["status"]},
+    )
+
+    return APIResponse(data=DisbursementResponse(**disbursement))
+
+
+@router.get("/float-balance", response_model=APIResponse[dict])
+async def read_disbursement_float_balance(
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """The platform's own Selcom disbursement float.
+
+    This is the number that decides whether an approval can actually pay
+    out: an empty float rejects the call with HTTP 400 and the withdrawal
+    fails, which is invisible until it happens. Showing it next to the
+    approve button turns that into something an operator can see first.
+
+    Never raises for the caller. A provider outage or an unrecognised
+    response shape returns `available: null` and the UI says the balance
+    is unavailable, rather than blocking the withdrawals page or — worse —
+    showing a number we are not sure of.
+    """
+    settings = get_settings()
+    account_number = settings.selcom_business_account_number
+    if not account_number:
+        return APIResponse(data={"available": None, "currency": "TZS", "reason": "not_configured"})
+
+    try:
+        response = await get_selcom_business_client().balance(account_number=account_number)
+    except Exception:  # Provider down, misconfigured, or timing out.
+        logger.warning("selcom_float_balance_unavailable", exc_info=True)
+        return APIResponse(data={"available": None, "currency": "TZS", "reason": "provider_unavailable"})
+
+    balance = parse_float_balance(response)
+    if balance is None:
+        # The call worked but the figure was not where we expected it.
+        # Reported as unavailable rather than guessed at — see
+        # parse_float_balance.
+        logger.warning("selcom_float_balance_unparsed")
+        return APIResponse(data={"available": None, "currency": "TZS", "reason": "unrecognised_response"})
+
+    return APIResponse(data={"available": str(balance), "currency": "TZS", "reason": None})
 
 
 @router.post("/reconcile-pending", response_model=APIResponse[dict])

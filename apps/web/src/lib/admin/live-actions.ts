@@ -17,6 +17,7 @@ import {
   deactivatePricingRule,
   reconcilePendingWithdrawals,
   refreshWithdrawalStatus,
+  retryWithdrawalPayout,
   reinstateMerchantApiAccess,
   rejectDocumentRequest,
   rejectIpAllowlistEntry,
@@ -144,6 +145,13 @@ export async function refreshWithdrawalStatusAction(withdrawalId: string): Promi
   return runWithdrawalAction(async () => {
     await refreshWithdrawalStatus(withdrawalId);
     return "Status refreshed.";
+  });
+}
+
+export async function retryWithdrawalPayoutAction(withdrawalId: string): Promise<WithdrawalActionState> {
+  return runWithdrawalAction(async () => {
+    await retryWithdrawalPayout(withdrawalId);
+    return "Retried — sent to the provider again.";
   });
 }
 

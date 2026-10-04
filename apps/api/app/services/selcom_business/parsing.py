@@ -44,6 +44,8 @@ for. `_extract_transaction_id`/`_extract_receipt` check both casings, both
 nesting levels.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from app.services.selcom_business.schemas import (
     SelcomBusinessResult,
     SelcomBusinessStatus,
@@ -206,3 +208,43 @@ def unrecognised_lookup_shape(response: dict) -> list[str]:
     keys = sorted(str(k) for k in response)
     data = _response_data(response)
     return keys + sorted(f"data.{k}" for k in data)
+
+
+# Candidate keys for the float figure on POST /balance.
+#
+# NOT verified against a real response — same caveat as _ACCOUNT_NAME_KEYS
+# above. Selcom's docs show the request but no example body, and no
+# balance call has been round-tripped yet. The ordering follows the shapes
+# Selcom does use elsewhere: a nested `data` object, snake_case in the
+# sandbox and camelCase in production, so both are checked at both levels.
+#
+# If none match this returns None and the caller shows "unavailable". It
+# never falls back to some other number in the payload: a wrong float
+# balance would be worse than no balance, because it is the number an
+# operator would decide to approve a payout on.
+_BALANCE_KEYS = (
+    "balance",
+    "available_balance",
+    "availableBalance",
+    "current_balance",
+    "currentBalance",
+    "amount",
+)
+
+
+def parse_float_balance(response: dict) -> Decimal | None:
+    """The disbursement account's available float, or None if this
+    response doesn't carry one in a shape we recognise."""
+    if not isinstance(response, dict):
+        return None
+
+    for source in (_response_data(response), response):
+        for key in _BALANCE_KEYS:
+            value = source.get(key)
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                return Decimal(str(value).replace(",", "").strip())
+            except (InvalidOperation, ValueError):
+                continue
+    return None

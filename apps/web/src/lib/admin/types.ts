@@ -193,6 +193,19 @@ export interface AdminWithdrawalRow {
   success_email_status: "sent" | "failed" | null;
 }
 
+/** The platform's own Selcom disbursement float — the money payouts are
+ * actually made from, which is separate from any merchant's wallet.
+ *
+ * `available` is null when it could not be established, and `reason`
+ * says why. It is deliberately never a guess: this is the figure an
+ * operator decides to approve a payout on, so a wrong number would be
+ * worse than no number. */
+export interface DisbursementFloatBalance {
+  available: string | null;
+  currency: string;
+  reason: "not_configured" | "provider_unavailable" | "unrecognised_response" | null;
+}
+
 export interface PricingRuleRow {
   id: string;
   merchant_id: string | null;

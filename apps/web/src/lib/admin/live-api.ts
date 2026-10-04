@@ -24,6 +24,7 @@ import type {
   AdminTransactionRow,
   AdminWebhookEventRow,
   AdminWithdrawalRow,
+  DisbursementFloatBalance,
   AuditLogRow,
   CollectionPricingRuleRow,
   Merchant,
@@ -313,6 +314,24 @@ export async function requestInfoWithdrawal(
 
 export async function refreshWithdrawalStatus(disbursementId: string): Promise<void> {
   await apiWrite(`/v1/admin/withdrawals/${disbursementId}/refresh-status`, "POST");
+}
+
+export async function retryWithdrawalPayout(disbursementId: string): Promise<void> {
+  await apiWrite(`/v1/admin/withdrawals/${disbursementId}/retry`, "POST");
+}
+
+/** The platform's own Selcom disbursement float. Never throws for a
+ * caller: the endpoint reports `available: null` with a reason rather
+ * than failing, so a provider outage cannot take the withdrawals page
+ * down with it. */
+export async function getDisbursementFloatBalance(): Promise<DisbursementFloatBalance> {
+  return (
+    (await apiGet<DisbursementFloatBalance>(`/v1/admin/withdrawals/float-balance`)) ?? {
+      available: null,
+      currency: "TZS",
+      reason: "provider_unavailable",
+    }
+  );
 }
 
 export async function reconcilePendingWithdrawals(): Promise<{ checked: number; resolved: number; still_pending: number }> {

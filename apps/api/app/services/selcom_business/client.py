@@ -67,6 +67,8 @@ class SelcomBusinessProvider(Protocol):
         amount: str | None = None,
     ) -> dict: ...
 
+    async def balance(self, *, account_number: str) -> dict: ...
+
 
 @lru_cache
 def get_selcom_business_client() -> SelcomBusinessProvider:

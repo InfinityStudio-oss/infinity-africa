@@ -54,6 +54,21 @@ class MockSelcomBusinessClient:
         await asyncio.sleep(self.latency_seconds)
         return SelcomBusinessResult(provider=_PROVIDER_NAME, transaction_id=trans_id, status="successful")
 
+    async def balance(self, *, account_number: str) -> dict:
+        """A fixed, obviously-round float figure.
+
+        Deliberately large enough that mock payouts are never blocked by
+        it, and deliberately not a number anyone would mistake for a real
+        balance. Only reachable when SELCOM_BUSINESS_MODE=mock.
+        """
+        await asyncio.sleep(self.latency_seconds)
+        return {
+            "success": True,
+            "result": "SUCCESS",
+            "resultcode": "000",
+            "data": {"account_number": account_number, "balance": "1000000.00", "currency": "TZS"},
+        }
+
     async def account_lookup(
         self,
         *,
