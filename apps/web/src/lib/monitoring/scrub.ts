@@ -29,6 +29,11 @@ const SECRET_PATTERNS: RegExp[] = [
   /(?:\+?255|\b0)\d{9}\b/g,
   // NIDA: 20 digits, separated or not.
   /\b\d{8}[\s-]?\d{5}[\s-]?\d{5}[\s-]?\d{2}\b/g,
+  // A one-time code named in free text, e.g. "OTP 482915 did not match".
+  // Anchored on the label, never on the digits: a bare six-digit number
+  // is indistinguishable from an amount or a status code, and redacting
+  // those would gut the diagnostics this exists to provide.
+  /\b(?:otp|one[\s-]?time(?:\s+(?:code|password|pin))?|verification\s+code)\b[^0-9\n]{0,12}\d{4,8}/gi,
 ];
 
 /** Query and hash are dropped wholesale: a reset token, an OTP and a
@@ -55,6 +60,10 @@ const SENSITIVE_KEY_PARTS = [
   "authorization",
   "cookie",
   "pin",
+  // Withdrawal OTPs — the key name is the only dependable handle on a
+  // six-digit code. See the pattern note above.
+  "otp",
+  "verification_code",
   "nida",
   "phone",
   "msisdn",

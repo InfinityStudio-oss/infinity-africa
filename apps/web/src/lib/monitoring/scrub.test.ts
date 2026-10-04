@@ -11,7 +11,7 @@ import { REDACTED, redactText, scrubEvent, scrubUrl } from "./scrub";
 
 describe("redactText", () => {
   it.each([
-    "sk_live_9f2bc4d1e8a7b3c6",
+    "sk_live_examplekey",
     "pk_test_9f2bc4d1e8a7b3c6",
     "re_AbCdEf123456789",
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.dBjftJeZ4CVPmB92K27u",
@@ -26,6 +26,25 @@ describe("redactText", () => {
       expect(redactText(`payer ${value} declined`)).not.toContain(value);
     },
   );
+
+  it.each([
+    ["OTP 482915 did not match", "482915"],
+    ["Your one-time code is 4829", "4829"],
+    ["verification code 123456 expired", "123456"],
+    ["otp: 998877", "998877"],
+  ])("redacts the one-time code in %s", (message, digits) => {
+    expect(redactText(message)).not.toContain(digits);
+  });
+
+  it("does not eat amounts or status codes while doing it", () => {
+    // The OTP rule is anchored on the label, never on bare digits. If it
+    // ever starts matching numbers on their own this fails — a scrubber
+    // that destroys every number makes error reports useless.
+    const kept = redactText("amount 50000 status 502 attempt 3 ref ORD-991");
+    expect(kept).toContain("50000");
+    expect(kept).toContain("502");
+    expect(kept).toContain("ORD-991");
+  });
 
   it("keeps the rest of the message readable", () => {
     const out = redactText("Request to /v1/collections failed for +255712345678 with HTTP 502");
@@ -102,12 +121,21 @@ describe("scrubEvent", () => {
 
   it("drops the value of any sensitive key, whatever it looks like", () => {
     const event = scrubEvent({
-      extra: { webhook_secret: "1234", customer_phone: "x", api_key: "short", other: "kept" },
+      extra: {
+        webhook_secret: "1234",
+        customer_phone: "x",
+        api_key: "short",
+        otp: "482915",
+        verification_code: "1234",
+        other: "kept",
+      },
     })!;
     const extra = event.extra as Record<string, unknown>;
     expect(extra.webhook_secret).toBe(REDACTED);
     expect(extra.customer_phone).toBe(REDACTED);
     expect(extra.api_key).toBe(REDACTED);
+    expect(extra.otp).toBe(REDACTED);
+    expect(extra.verification_code).toBe(REDACTED);
     expect(extra.other).toBe("kept");
   });
 

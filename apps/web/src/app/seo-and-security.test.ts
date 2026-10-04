@@ -128,6 +128,83 @@ describe("next.config.ts security headers", () => {
     expect(byKey["Cross-Origin-Resource-Policy"]).toBe("same-origin");
     expect(byKey["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
   });
+
+  it("never advertises the framework in a response header", async () => {
+    const { default: nextConfig } = await import("../../next.config");
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
+  it("keeps connect-src scoped — no bare wildcard, ever", async () => {
+    const { default: nextConfig } = await import("../../next.config");
+    const rules = await nextConfig.headers!();
+    const csp = rules[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    const connectSrc = csp.split("; ").find((d) => d.startsWith("connect-src"))!;
+    const sources = connectSrc.replace("connect-src", "").trim().split(/\s+/);
+
+    // A bare `*` or `https://*` would let a compromised script exfiltrate
+    // to anywhere, which is the whole thing connect-src exists to stop.
+    expect(sources).not.toContain("*");
+    expect(sources).not.toContain("https://*");
+    expect(sources).not.toContain("https:");
+
+    // `https://*.supabase.co` is allowed and deliberate — the project
+    // subdomain varies per deployment. Every wildcard must be scoped to a
+    // concrete domain like that, never left open-ended.
+    for (const src of sources.filter((s) => s.includes("*"))) {
+      expect(src).toMatch(/^(https|wss):\/\/\*\.[a-z0-9-]+(\.[a-z0-9-]+)+$/);
+    }
+  });
+});
+
+describe("monitoring code never reads a server secret in the browser", () => {
+  /**
+   * Next.js inlines only NEXT_PUBLIC_* into the client bundle, so a
+   * server-only variable read from code that ships to the browser is
+   * silently undefined at best and a leak at worst. These assertions are
+   * on the source text because that is the thing a future edit changes.
+   */
+  const webRoot = join(appDir, "..", "..");
+
+  function read(relative: string): string {
+    return readFileSync(join(webRoot, relative), "utf8");
+  }
+
+  const browserFiles = [
+    "instrumentation-client.ts",
+    "src/components/providers/analytics-provider.tsx",
+    "src/lib/monitoring/scrub.ts",
+    "src/lib/monitoring/sentry-privacy.ts",
+  ];
+
+  it.each(browserFiles)("%s reads only NEXT_PUBLIC_ and NODE_ENV", (relative) => {
+    const envReads = read(relative).match(/process\.env\.([A-Z0-9_]+)/g) ?? [];
+    const names = envReads.map((raw) => raw.replace("process.env.", ""));
+    for (const name of names) {
+      expect(name === "NODE_ENV" || name.startsWith("NEXT_PUBLIC_")).toBe(true);
+    }
+  });
+
+  it.each(browserFiles)("%s contains no hardcoded DSN or project key", (relative) => {
+    const text = read(relative);
+    expect(text).not.toMatch(/https:\/\/[0-9a-f]{8,}@/);
+    expect(text).not.toMatch(/\bphc_[A-Za-z0-9]{10,}/);
+    expect(text).not.toMatch(/\bsk_(?:live|test)_[A-Za-z0-9]{10,}/);
+  });
+
+  it("keeps the server-only Sentry DSN out of every browser file", () => {
+    // SENTRY_DSN (no NEXT_PUBLIC_ prefix) is legitimate in the Node and
+    // edge configs, which instrumentation.ts loads per runtime. It must
+    // never appear in anything the browser receives.
+    for (const relative of browserFiles) {
+      expect(read(relative)).not.toContain("process.env.SENTRY_DSN");
+    }
+  });
+
+  it("loads the server and edge Sentry configs only under their own runtime", () => {
+    const instrumentation = read("instrumentation.ts");
+    expect(instrumentation).toMatch(/NEXT_RUNTIME === "nodejs"[\s\S]*sentry\.server\.config/);
+    expect(instrumentation).toMatch(/NEXT_RUNTIME === "edge"[\s\S]*sentry\.edge\.config/);
+  });
 });
 
 describe("next.config.ts monitoring origins in the CSP", () => {

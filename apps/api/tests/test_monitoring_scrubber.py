@@ -60,6 +60,40 @@ def test_personal_data_is_redacted(personal):
     assert personal not in redact_text(f"collection for {personal} failed")
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "OTP 482915 did not match",
+        "Your one-time code is 4829",
+        "verification code 123456 expired",
+        "otp: 998877",
+    ],
+)
+def test_a_one_time_code_named_in_free_text_is_redacted(message):
+    """Withdrawal OTPs authorise money leaving a merchant's wallet. They
+    reach a log line far more often than a structured field."""
+    scrubbed = redact_text(message)
+    for digits in ("482915", "4829", "123456", "998877"):
+        assert digits not in scrubbed
+
+
+@pytest.mark.parametrize("key", ["otp", "withdrawal_otp", "otp_hash", "verification_code"])
+def test_a_one_time_code_field_is_dropped(key):
+    assert scrub_event({"extra": {key: "482915"}})["extra"][key] == REDACTED
+
+
+def test_the_otp_rule_does_not_eat_amounts_or_status_codes():
+    """A six-digit number is indistinguishable from an amount, so the rule
+    is anchored on the label. If it ever starts matching bare digits, this
+    fails — which is the point: a scrubber that destroys every number
+    makes error reports useless."""
+    kept = redact_text("amount 50000 status 502 attempt 3 ref ORD-991 fee 1800")
+    assert "50000" in kept
+    assert "502" in kept
+    assert "ORD-991" in kept
+    assert "1800" in kept
+
+
 def test_redaction_leaves_the_rest_of_the_message_readable():
     """A scrubber that destroys the message defeats the point of having
     error reporting at all."""
@@ -167,7 +201,7 @@ def test_nested_structures_are_scrubbed_all_the_way_down():
             "extra": {
                 "provider": {
                     "attempts": [
-                        {"note": "retried with sk_live_abcdefgh12345678"},
+                        {"note": "retried with sk_live_examplekey"},
                     ]
                 }
             }

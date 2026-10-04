@@ -88,6 +88,13 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@infinity/shared"],
+  // Next sends `X-Powered-By: Next.js` unless told not to. Vercel happens
+  // to strip it today, so the live site is already clean — this makes that
+  // a property of the app rather than of where it is hosted, which is the
+  // difference between "clean" and "guaranteed clean" if it is ever served
+  // from anywhere else. Naming the framework and version to an attacker
+  // buys them a CVE list for free.
+  poweredByHeader: false,
   experimental: {
     serverActions: {
       // Onboarding submission (app/onboarding/page.tsx ->

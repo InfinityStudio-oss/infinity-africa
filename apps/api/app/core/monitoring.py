@@ -67,6 +67,14 @@ _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:\+?255|\b0)\d{9}\b"),
     # NIDA: 20 digits, with or without separators.
     re.compile(r"\b\d{8}[\s\-]?\d{5}[\s\-]?\d{5}[\s\-]?\d{2}\b"),
+    # A one-time code named in free text, e.g. "OTP 482915 did not match".
+    # Anchored on the label rather than on the digits, because a bare
+    # six-digit number is indistinguishable from an amount, a status code
+    # or part of a reference — redacting those would gut the diagnostics
+    # this exists to provide.
+    re.compile(
+        r"(?i)\b(?:otp|one[\s\-]?time(?:\s+(?:code|password|pin))?|verification\s+code)\b[^0-9\n]{0,12}\d{4,8}"
+    ),
 )
 
 # Key names whose VALUE is always dropped, whatever it looks like —
@@ -81,6 +89,11 @@ _SENSITIVE_KEY_PARTS = (
     "authorization",
     "cookie",
     "pin",
+    # Withdrawal OTPs. The key name is the only dependable handle on a
+    # six-digit code — see the pattern note above for why the digits
+    # themselves cannot be matched on their own.
+    "otp",
+    "verification_code",
     "nida",
     "phone",
     "msisdn",
