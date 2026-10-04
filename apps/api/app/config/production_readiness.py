@@ -58,25 +58,24 @@ def production_config_problems(settings: Settings) -> list[str]:
     if insecure:
         problems.append(f"CORS_ORIGINS contains non-HTTPS origins: {', '.join(insecure)}")
 
-    # The worst failure this platform has available to it: MockSelcomClient
-    # resolves a collection to "successful" most of the time, and
-    # execute_collection() resolves one the moment it is created — so a
-    # production deploy left on the default mock would credit real merchant
-    # wallets for money nobody ever paid. SELCOM_MODE is anything-but-"live"
-    # by default, which makes forgetting it the easy mistake rather than the
-    # hard one.
+    # Provider mode is deliberately NOT checked here. It was, briefly, and
+    # it took the production API down: SELCOM_MODE was 'mock', the deploy
+    # refused to boot, and Railway had nothing to fall back to because the
+    # container never became healthy. The frontend stayed up and could not
+    # reach its backend.
     #
-    # The disbursement client already refuses mock outside development, but
-    # it refuses at construction time — the first real withdrawal 502s. This
-    # catches both at deploy time instead, which is the cheapest moment to
-    # find out. A failed Railway deploy keeps the previous release serving.
-    if settings.selcom_mode != "live":
-        problems.append(
-            f"SELCOM_MODE is '{settings.selcom_mode}', not 'live' — collections would be simulated "
-            "and could credit merchant wallets for payments that never happened"
-        )
-    if settings.selcom_business_mode == "mock":
-        problems.append("SELCOM_BUSINESS_MODE is 'mock' — withdrawals would not reach the provider")
+    # The failure it was guarding against is real — MockSelcomClient
+    # resolves a collection to "successful" most of the time, so a mocked
+    # production would credit merchant wallets for money nobody paid. But
+    # the right place to refuse is where the mock would be handed out, not
+    # at boot: get_selcom_client() now raises in production exactly as
+    # get_selcom_business_client() already did. A misconfigured deploy then
+    # keeps serving health, auth, dashboards and the Checkout money path,
+    # and fails loudly only on the paths that would have been simulated.
+    #
+    # The rule this draws: a config problem blocks startup only when it
+    # makes the whole service unable to work. Anything narrower fails at
+    # the point of use, where it costs one request instead of the platform.
 
     return problems
 

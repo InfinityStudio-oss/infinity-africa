@@ -203,38 +203,59 @@ def test_a_correctly_configured_app_starts(monkeypatch):
         importlib.reload(app.main)
 
 
-def test_simulated_collections_block_startup(prod):
-    """The worst failure available to this platform.
+def test_a_simulated_provider_does_not_block_startup(prod):
+    """Regression: this check used to live in production_config_problems
+    and took the live API down. SELCOM_MODE was 'mock', the deploy refused
+    to boot, and Railway had nothing healthy to fall back to — the
+    frontend stayed up with no backend to talk to.
+
+    The danger it guarded against is real, so it did not go away: it moved
+    to get_selcom_client(), which refuses to hand out a simulated client
+    outside development. A misconfigured deploy now keeps serving health,
+    auth, dashboards and the Checkout money path, and fails only where it
+    would have faked a payment.
+    """
+    assert production_config_problems(prod(SELCOM_MODE="mock")) == []
+    assert production_config_problems(prod(SELCOM_BUSINESS_MODE="mock")) == []
+
+
+def test_the_collection_client_refuses_to_simulate_outside_development(prod):
+    """Where the refusal actually lives now.
 
     MockSelcomClient resolves a collection to "successful" most of the
-    time, and execute_collection() resolves one the moment it is created
-    — so a production deploy left on the default would credit real
-    merchant wallets for money nobody ever paid. SELCOM_MODE is not
-    "live" unless someone says so, which makes forgetting it the easy
-    mistake.
+    time, and execute_collection() resolves one the moment it is created,
+    so a simulated collection credits a real merchant wallet for money
+    nobody paid.
     """
-    problems = production_config_problems(prod(SELCOM_MODE="mock"))
-    assert any("SELCOM_MODE" in p for p in problems)
-    assert any("never happened" in p for p in problems)
+    from app.services.selcom.client import SelcomMisconfiguredError, get_selcom_client
+
+    prod(SELCOM_MODE="mock")
+    get_selcom_client.cache_clear()
+    try:
+        with pytest.raises(SelcomMisconfiguredError, match="SELCOM_MODE"):
+            get_selcom_client()
+    finally:
+        get_selcom_client.cache_clear()
 
 
-def test_an_unset_selcom_mode_blocks_startup(prod):
-    """Not just the literal string "mock" — anything that is not "live"
-    gets the mock client, including a typo and an empty value."""
-    for value in ("", "sandbox", "Live", "LIVE", "liv"):
-        assert any("SELCOM_MODE" in p for p in production_config_problems(prod(SELCOM_MODE=value))), value
+def test_the_collection_client_is_live_when_configured(prod):
+    from app.services.selcom.client import get_selcom_client
+
+    prod(SELCOM_MODE="live")
+    get_selcom_client.cache_clear()
+    try:
+        assert type(get_selcom_client()).__name__ == "LiveSelcomClient"
+    finally:
+        get_selcom_client.cache_clear()
 
 
-def test_simulated_withdrawals_block_startup(prod):
-    """The disbursement client refuses mock on its own, but only when it
-    is constructed — the first real withdrawal 502s. This catches it at
-    the deploy instead."""
-    problems = production_config_problems(prod(SELCOM_BUSINESS_MODE="mock"))
-    assert any("SELCOM_BUSINESS_MODE" in p for p in problems)
+def test_development_may_still_simulate(prod):
+    """Local work and the test suite depend on it."""
+    from app.services.selcom.client import get_selcom_client
 
-
-def test_sandbox_withdrawals_are_allowed(prod):
-    """Deliberately not blocked: a sandbox payout provider is a normal
-    way to run a pilot where collections are live but payouts are still
-    being proven. Only a fake one is refused."""
-    assert production_config_problems(prod(SELCOM_BUSINESS_MODE="sandbox")) == []
+    prod(ENVIRONMENT="development", SELCOM_MODE="mock")
+    get_selcom_client.cache_clear()
+    try:
+        assert type(get_selcom_client()).__name__ == "MockSelcomClient"
+    finally:
+        get_selcom_client.cache_clear()

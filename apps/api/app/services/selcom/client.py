@@ -65,6 +65,18 @@ class PaymentProvider(Protocol):
         a push (check_collection_status / callback)."""
         ...
 
+class SelcomMisconfiguredError(RuntimeError):
+    """SELCOM_MODE would hand out a simulated collection client somewhere
+    that is not development. Deliberately a RuntimeError rather than an
+    APIError: this is a deployment mistake, not something a caller did,
+    and it should reach the logs and Sentry as an unhandled 500 rather
+    than being dressed up as a tidy 4xx the caller might retry.
+
+    Named and raised to match SelcomBusinessMisconfiguredError on the
+    payouts side, which has always refused the same way.
+    """
+
+
 @lru_cache
 def get_selcom_client() -> PaymentProvider:
     """FastAPI-callable (and plain function) returning the active Selcom
@@ -87,6 +99,23 @@ def get_selcom_client() -> PaymentProvider:
             )
         )
 
+    # Mirrors get_selcom_business_client()'s refusal, for the reason that
+    # matters more on this side: MockSelcomClient resolves a collection to
+    # "successful" most of the time, and execute_collection() resolves one
+    # the moment it is created — so a mocked production credits merchant
+    # wallets for money nobody ever paid, silently, with no error anywhere.
+    #
+    # Raised here rather than blocking startup. Refusing to boot took the
+    # whole API down once already; this costs only the requests that would
+    # have been simulated, and leaves health, auth, dashboards and the
+    # Checkout money path serving normally.
+    if settings.environment != "development":
+        raise SelcomMisconfiguredError(
+            f"SELCOM_MODE={settings.selcom_mode!r} is only allowed when ENVIRONMENT=development — "
+            f"refusing to simulate collections in a '{settings.environment}' environment, because a "
+            "simulated collection credits a real merchant wallet. Set SELCOM_MODE=live."
+        )
+
     from app.services.selcom.mock_client import MockSelcomClient
 
     return MockSelcomClient(
@@ -96,4 +125,10 @@ def get_selcom_client() -> PaymentProvider:
     )
 
 
-__all__ = ["CollectionResult", "DynamicQrResult", "PaymentProvider", "get_selcom_client"]
+__all__ = [
+    "CollectionResult",
+    "DynamicQrResult",
+    "PaymentProvider",
+    "SelcomMisconfiguredError",
+    "get_selcom_client",
+]
