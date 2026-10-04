@@ -16,11 +16,13 @@ One module on purpose. The same numbers are needed by the public API, the
 customer payment page, payment links and invoices, and a rule duplicated
 across four call sites is a rule that drifts.
 
-**The prefix table is the one thing here worth re-checking against
-reality.** It follows the TCRA allocations as they stand, including 077
-(originally Zantel, merged into Tigo and now sold as Mixx by Yas). If an
-operator is ever reassigned a range, correcting it here corrects it
-everywhere.
+The prefix table follows the TCRA allocations and was **confirmed by the
+platform owner on 2026-10-04**, including the one entry worth doubting:
+077, originally Zantel, merged into Tigo and now sold as Mixx by Yas, so
+it carries the 1,000 floor like the rest of that network. Treat it as
+settled rather than re-deriving it; if an operator is ever reassigned a
+range, correcting it here corrects it everywhere, including the browser
+copy, which test_payment_minimums_sync.py holds to this one.
 """
 
 from __future__ import annotations
