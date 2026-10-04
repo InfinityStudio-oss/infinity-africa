@@ -62,22 +62,22 @@ def infinity_request(method: str, path: str, *, body: dict | None = None, idempo
 
 from infinity_client import infinity_request, InfinityAPIError
 
-def collect_from_customer(merchant_id: str, phone: str, amount: str, reference: str) -> dict:
+def collect_from_customer(phone: str, amount: str, reference: str) -> dict:
+    # merchant_id is optional for an API-key caller: the key already says
+    # which business this is.
     return infinity_request(
         "POST",
-        "/v1/collections/stk-push",
+        "/v1/collections/wallet-push",
         idempotency_key=str(uuid.uuid4()),
         body={
-            "merchant_id": merchant_id,
             "amount": amount,
-            "customer_phone": phone,
-            "merchant_reference": reference,
+            "phone": phone,
+            "reference": reference,
         },
     )
 
 try:
     collection = collect_from_customer(
-        merchant_id="5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71",
         phone="+255712345678",
         amount="25000.00",
         reference="ORDER-4821",

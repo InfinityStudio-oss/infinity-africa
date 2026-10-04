@@ -32,16 +32,15 @@ export default function CurlExamplesPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-on-surface mb-3">Push an STK collection</h2>
-        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/collections/stk-push \\
+        <h2 className="text-xl font-semibold text-on-surface mb-3">Push a mobile money prompt</h2>
+        <CodeBlock language="bash">{`curl -X POST https://api.infinitypay.me/v1/collections/wallet-push \\
   -H "X-API-Key: $INFINITY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: $(uuidgen)" \\
   -d '{
-    "merchant_id": "5c1f0b2a-3e21-4b9a-9c33-2f6a1d0e8b71",
     "amount": "25000.00",
-    "customer_phone": "255712345678",
-    "merchant_reference": "ORDER-4821"
+    "phone": "255712345678",
+    "reference": "ORDER-4821"
   }'`}</CodeBlock>
       </section>
 
