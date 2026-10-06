@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from supabase import Client
 
+from app.core.monitoring import capture_exception
+
 logger = logging.getLogger("infinity.audit")
 
 
@@ -54,5 +56,9 @@ def write_audit_log_best_effort(client: Client, **kwargs: Any) -> None:
     """
     try:
         write_audit_log(client, **kwargs)
-    except Exception:  # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover - defensive
         logger.exception("audit log write failed (action=%s)", kwargs.get("action"))
+        # Still alerts, now that a logged error no longer does on its own.
+        # An audit row is the compliance record of who moved money; losing
+        # one silently is not something to discover months later.
+        capture_exception(exc)

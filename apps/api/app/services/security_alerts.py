@@ -32,6 +32,7 @@ from supabase import Client
 
 from app.config import get_settings
 from app.core.errors import EmailDeliveryError
+from app.core.monitoring import capture_exception
 from app.services.email import _email_shell, _log_delivery, _mask_identifier, send_email
 
 logger = logging.getLogger("infinity.security_alerts")
@@ -186,8 +187,11 @@ def notify_security_event(
 
         _safe_log_delivery(client, recipient, subject, status="sent", message_id=message_id)
         return True
-    except Exception:
+    except Exception as exc:
         logger.exception("security_alert_unexpected_failure event=%s", event)
+        # Still alerts. If security alert emails are failing, every other
+        # alert this platform leans on is going unseen too.
+        capture_exception(exc)
         return False
 
 

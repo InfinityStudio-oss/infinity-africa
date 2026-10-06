@@ -92,6 +92,37 @@ event dropped by the browser. If a dashboard stays empty after setup,
 check the browser console for a CSP violation before anything else — and
 check that the deploy happened *after* the variable was set.
 
+## What creates an alert, and what does not
+
+Sentry's default turns every `logger.error()` and `logger.exception()`
+into its own alert. That is wrong for this codebase, where catching an
+error and carrying on is the design rather than an accident. Twenty-odd
+such sites existed — a reconciliation sweep logging one bad row and
+continuing, a provider returning 502 on a call the next tick will redo —
+and each one paged on something already handled. On the first day of real
+traffic the signal drowned.
+
+So `init_sentry()` sets `LoggingIntegration(event_level=CRITICAL)`.
+Breadcrumbs stay at INFO, so a real error still arrives with the log trail
+that led to it.
+
+| Situation | Alerts? | Why |
+|---|---|---|
+| `logger.error` / `logger.exception` | No | Already handled; the code carried on deliberately |
+| Client error — 400, 404, 409, 422 | No | The API correctly told a caller they were wrong |
+| Unhandled exception (500) | Yes | A merchant's request failed and nobody caught it |
+| Provider 5xx reaching a merchant | Yes | Selcom down mid-payment is worth knowing |
+| Worker sweep failing outright | Yes | Explicit `capture_exception` in the scheduler loops |
+| Webhook delivery exhausted | Yes | A merchant will never receive that event; no replay |
+| Audit log write failed | Yes | The compliance record of who moved money |
+| Security alert email failed | Yes | Every other alert is going unseen too |
+| `logger.critical` | Yes | Unused today; left as the escape hatch |
+
+The last two are explicit `capture_exception()` calls, added precisely
+because raising the log threshold would otherwise have silenced them.
+`apps/api/tests/test_monitoring_alert_policy.py` pins the whole table, and
+was verified to fail if the noisy default comes back.
+
 ## What is never sent
 
 The part worth reviewing properly. An error report is a payload leaving

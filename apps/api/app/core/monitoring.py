@@ -197,6 +197,7 @@ def init_sentry() -> bool:
 
     try:
         import sentry_sdk
+        from sentry_sdk.integrations.logging import LoggingIntegration
     except ImportError:
         logger.warning("sentry_dsn_set_but_sdk_not_installed")
         return False
@@ -207,6 +208,23 @@ def init_sentry() -> bool:
             environment=settings.sentry_environment or settings.environment,
             traces_sample_rate=settings.sentry_traces_sample_rate,
             before_send=scrub_event,
+            # Sentry's default turns every logger.error() and
+            # logger.exception() into its own alert. That is wrong for this
+            # codebase, where catching an error and carrying on is the
+            # design, not an accident: a reconciliation sweep that logs one
+            # bad row and continues, a provider returning 502 on a retry
+            # that the next tick will redo, an audit write that must never
+            # fail the request it describes. Twenty-odd such sites existed,
+            # and each one paged on something already handled.
+            #
+            # Alerts now come only from deliberate capture_exception() and
+            # capture_message() calls — unhandled 500s, worker sweeps
+            # failing outright, a webhook a merchant will never receive.
+            # Breadcrumbs stay at INFO, so when a real error is captured it
+            # still arrives with the log trail that led to it.
+            integrations=[
+                LoggingIntegration(level=logging.INFO, event_level=logging.CRITICAL)
+            ],
             # Local variables in a stack frame are the richest accidental
             # leak there is: a frame mid-payment holds the phone, the
             # amount, often the provider credentials.
