@@ -112,3 +112,35 @@ def message_for(reason_code: str | None) -> str:
 def all_reason_codes() -> list[str]:
     """Every code a partner may receive — the list the API docs publish."""
     return sorted(_MESSAGES)
+
+
+def failure_columns(
+    *,
+    payment_status: str | None = None,
+    resultcode: str | None = None,
+    internal_reason: str | None = None,
+) -> dict[str, str]:
+    """The columns to write when a collection fails, as one dict.
+
+    Every Selcom Checkout push path used to insert a bare free-text
+    `failure_reason` and no code at all — so a third of real failures
+    arrived with `failure_reason_code` null, which is the one field the
+    public API tells a partner to switch on. Some of them put the
+    provider's own `message` straight into the column this module exists
+    to keep provider text out of.
+
+    Spread this into the row instead (`**failure_columns(...)`) so all
+    four paths record the same shape and the legacy `failure_reason`
+    column carries the merchant-safe sentence rather than provider prose.
+    """
+    code, message = normalize_failure_reason(
+        payment_status=payment_status, resultcode=resultcode, internal_reason=internal_reason
+    )
+    return {
+        "failure_reason_code": code,
+        "failure_reason_message": message,
+        # Kept in step deliberately: this column is already read by the
+        # merchant ledger and the public payment page, and it is what the
+        # customer sees today.
+        "failure_reason": message,
+    }

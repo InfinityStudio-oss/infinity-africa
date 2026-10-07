@@ -35,6 +35,7 @@ from app.services.collection_source import (
 )
 from app.services.collections import create_processing_transaction
 from app.services.crud import execute_maybe_single, insert_row
+from app.services.failure_reasons import failure_columns
 
 # collections.method must be one of USSD_PUSH/STK_PUSH/SELCOM_PESA_PUSH/
 # DYNAMIC_QR (DB CHECK constraint) — DYNAMIC_QR is the correct, literal
@@ -106,7 +107,7 @@ async def execute_dynamic_qr_for_payment_link(client: Client, *, payment_link: d
             {
                 **base_row,
                 "status": "failed",
-                "failure_reason": "Could not create the payment order with the provider",
+                **failure_columns(internal_reason="provider_unavailable"),
                 "provider_resultcode": order.get("provider_result_code"),
                 "provider_result": order.get("provider_result"),
                 "provider_message": order.get("provider_message"),
@@ -217,7 +218,7 @@ async def execute_qr_collection(
             {
                 **base_row,
                 "status": "failed",
-                "failure_reason": "Could not create the payment order with the provider",
+                **failure_columns(internal_reason="provider_unavailable"),
                 "provider_resultcode": order.get("provider_result_code"),
                 "provider_result": order.get("provider_result"),
                 "provider_message": order.get("provider_message"),

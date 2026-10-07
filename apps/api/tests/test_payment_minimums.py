@@ -293,3 +293,49 @@ def test_another_network_below_one_hundred_is_refused_by_the_api(fake_client):
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "AMOUNT_BELOW_OPERATOR_MINIMUM"
     assert response.json()["error"]["message"] == "Minimum payment amount is TZS 100."
+
+
+# --- every failed collection must say why, in a code a partner can read ---
+
+
+def test_a_failed_push_records_a_machine_readable_reason(fake_client, monkeypatch):
+    """A third of real production failures arrived with
+    failure_reason_code null — the one field the public API tells a
+    partner to switch on — because the Selcom Checkout push paths wrote
+    only free text. Some wrote the provider's own message, which is
+    exactly what app/services/failure_reasons.py exists to keep out of
+    merchant-facing columns.
+    """
+    import app.services.wallet_push as wallet_push
+    from app.services.failure_reasons import all_reason_codes
+
+    class _RejectingClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def create_order_minimal(self, **kwargs):
+            from app.services.selcom_checkout.parsing import parse_create_order_minimal_response
+
+            return parse_create_order_minimal_response(
+                {"resultcode": "038", "result": "FAIL", "message": "SELCOM SAYS: vendor not permitted", "data": []}
+            )
+
+    monkeypatch.setattr(wallet_push, "SelcomCheckoutHTTPClient", _RejectingClient)
+    import app.services.checkout_orders as checkout_orders
+
+    monkeypatch.setattr(checkout_orders, "SelcomCheckoutHTTPClient", _RejectingClient)
+
+    merchant_id, raw_key = _merchant_with_key(fake_client)
+    response = _wallet_push(raw_key, merchant_id, "5000.00", VODACOM_PHONE)
+    assert response.status_code == 202, response.text
+
+    collection = fake_client.table("collections")._table.rows[0]
+    assert collection["status"] == "failed"
+
+    code = collection.get("failure_reason_code")
+    assert code is not None, "a failed collection with no reason code is what this fixes"
+    assert code in all_reason_codes(), f"{code!r} is outside the published vocabulary"
+
+    # And the merchant-facing text is ours, not Selcom's.
+    for field in ("failure_reason", "failure_reason_message"):
+        assert "SELCOM SAYS" not in (collection.get(field) or ""), f"provider text leaked via {field}"

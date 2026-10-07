@@ -36,6 +36,7 @@ from app.services.collection_source import (
 from app.services.collections import create_processing_transaction
 from app.services.crud import execute_maybe_single
 from app.services.crud import insert_row as _insert_row
+from app.services.failure_reasons import failure_columns
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
     get_selcom_checkout_credentials,
@@ -107,7 +108,7 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
             {
                 **base_row,
                 "status": "failed",
-                "failure_reason": "Could not create the payment order with the provider",
+                **failure_columns(internal_reason="provider_unavailable"),
                 "checkout_order_id": order["id"],
                 "provider_resultcode": order.get("provider_result_code"),
                 "provider_result": order.get("provider_result"),
@@ -131,7 +132,11 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
         {
             **base_row,
             "status": collection_status,
-            "failure_reason": result.message if collection_status == "failed" else None,
+            **(
+                failure_columns(payment_status=result.result, resultcode=result.resultcode)
+                if collection_status == "failed"
+                else {}
+            ),
             "provider_reference": result.reference or None,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
@@ -225,7 +230,7 @@ async def execute_selcompesa_push_collection(
             {
                 **base_row,
                 "status": "failed",
-                "failure_reason": "Could not create the payment order with the provider",
+                **failure_columns(internal_reason="provider_unavailable"),
                 "provider_resultcode": order.get("provider_result_code"),
                 "provider_result": order.get("provider_result"),
                 "provider_message": order.get("provider_message"),
@@ -245,7 +250,11 @@ async def execute_selcompesa_push_collection(
         {
             **base_row,
             "status": collection_status,
-            "failure_reason": result.message if collection_status == "failed" else None,
+            **(
+                failure_columns(payment_status=result.result, resultcode=result.resultcode)
+                if collection_status == "failed"
+                else {}
+            ),
             "provider_reference": result.reference or None,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,

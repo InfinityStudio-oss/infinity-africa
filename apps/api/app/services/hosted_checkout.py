@@ -45,6 +45,7 @@ from app.services.collection_source import (
 )
 from app.services.collections import create_processing_transaction
 from app.services.crud import execute_maybe_single, insert_row
+from app.services.failure_reasons import failure_columns
 
 _METHOD_LABEL = "HOSTED_CHECKOUT"
 
@@ -64,7 +65,7 @@ def _insert_failed_order_collection(client: Client, base_row: dict, order: dict)
         {
             **base_row,
             "status": "failed",
-            "failure_reason": "Could not create the payment order with the provider",
+            **failure_columns(internal_reason="provider_unavailable"),
             "provider_resultcode": order.get("provider_result_code"),
             "provider_result": order.get("provider_result"),
             "provider_message": order.get("provider_message"),
