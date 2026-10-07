@@ -154,6 +154,13 @@ class Settings(BaseSettings):
     # The DSN is a write-only ingest endpoint, not a credential that can
     # read anything back, but it is still kept server-side: a public one
     # invites anyone to forge error reports into the project.
+    # Matches supabase-py's own postgrest default. Named here because
+    # app/database/session.py passes its own httpx client (to retry a read
+    # whose connection died), and doing so replaces the library's
+    # construction of it — leaving this unset would silently fall back to
+    # httpx's 5s and start failing slow-but-fine queries.
+    supabase_client_timeout_seconds: int = 120
+
     sentry_dsn: str = ""
     sentry_environment: str = ""
     # Traces are off by default. Performance tracing samples real request
