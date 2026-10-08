@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 
 import { Card } from "@/components/portal/card";
-import type { Merchant } from "@/lib/admin/types";
+import type { MerchantOption } from "@/lib/admin/types";
 
-export function CustomersFilters({ merchants, selectedMerchantId }: { merchants: Merchant[]; selectedMerchantId?: string }) {
+export function CustomersFilters({ merchants, selectedMerchantId }: { merchants: MerchantOption[]; selectedMerchantId?: string }) {
   const router = useRouter();
 
   return (

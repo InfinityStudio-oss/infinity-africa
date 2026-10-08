@@ -30,6 +30,7 @@ from app.schemas.admin import (
     AdminCustomerResponse,
     AdminInquiryResponse,
     AdminInvoiceResponse,
+    AdminMerchantOptionResponse,
     AdminMerchantResponse,
     AdminMerchantUserResponse,
     AdminOverviewResponse,
@@ -150,6 +151,44 @@ def list_admin_merchants(
             )
         )
     return APIResponse(data=data, meta=build_page_meta(pagination, result.count or 0))
+
+
+# Registered before /merchants/{merchant_id} deliberately: FastAPI matches
+# in declaration order, and the other way round "directory" is parsed as a
+# merchant id and 422s.
+@router.get("/merchants/directory", response_model=APIResponse[list[AdminMerchantOptionResponse]])
+def list_admin_merchant_directory(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """Just enough to fill a "filter by business" dropdown: id, name, code.
+
+    GET /merchants exists for the Businesses page, which shows an owner's
+    name — and paying for that means an onboarding query, a memberships
+    query, and one Supabase Auth call per merchant owner. Four other admin
+    pages were calling it purely to list names in a select, so every one of
+    them waited on owner lookups it never rendered. That cost grew with the
+    merchant count rather than with anything on screen.
+
+    One query, no joins, no Auth. Sorted by name because this is read by a
+    human scanning a list, not by a machine.
+    """
+    client = get_supabase_admin()
+    rows = (
+        client.table("merchants")
+        .select("id, business_name, merchant_code")
+        .order("business_name")
+        .execute()
+    ).data or []
+    return APIResponse(
+        data=[
+            AdminMerchantOptionResponse(
+                merchant_id=row["id"],
+                business_name=row["business_name"],
+                merchant_code=row.get("merchant_code"),
+            )
+            for row in rows
+        ]
+    )
 
 
 @router.get("/merchants/{merchant_id}", response_model=APIResponse[AdminMerchantResponse])

@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { CollectionsFilters } from "@/components/super-admin/collections-filters";
 import { CollectionsTable } from "@/components/super-admin/collections-table";
 import { formatCurrency } from "@/lib/format";
-import { getAdminOverview, listAdminCollections, listAdminMerchants } from "@/lib/admin/live-api";
+import { getAdminOverview, listAdminCollections, listAdminMerchantOptions } from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Collections | InfinityPay Super Admin",
@@ -33,7 +33,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
       dateTo: filters.date_to,
     }),
     getAdminOverview(),
-    listAdminMerchants(),
+    listAdminMerchantOptions(),
   ]);
   const successful = collections.filter((c) => c.status === "successful").length;
   const pending = collections.filter((c) => c.status === "pending" || c.status === "processing").length;

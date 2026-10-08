@@ -666,3 +666,12 @@ export interface AdminTeamMember {
   last_sign_in_at: string | null;
   created_at: string;
 }
+
+/** A merchant as a dropdown entry. Mirrors the backend's
+ * AdminMerchantOptionResponse — deliberately a subset of Merchant, so a
+ * filter list never pulls owner details it does not show. */
+export interface MerchantOption {
+  merchant_id: string;
+  business_name: string;
+  merchant_code: string | null;
+}

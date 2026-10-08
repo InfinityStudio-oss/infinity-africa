@@ -25,6 +25,7 @@ import type {
   AdminWebhookEventRow,
   AdminWithdrawalRow,
   DisbursementFloatBalance,
+  MerchantOption,
   AuditLogRow,
   CollectionPricingRuleRow,
   Merchant,
@@ -116,6 +117,17 @@ export async function getAdminOverview(): Promise<AdminOverview | null> {
 }
 
 // --- Merchants -----------------------------------------------------------
+
+/** Just enough to fill a "filter by business" dropdown.
+ *
+ * listAdminMerchants() below is for the Businesses page, which shows an
+ * owner's name — and paying for that costs one Supabase Auth call per
+ * merchant owner on the backend. Four pages were calling it only to list
+ * names in a select, so each one waited on owner lookups it never
+ * rendered, and the wait grew with the merchant count. */
+export async function listAdminMerchantOptions(): Promise<MerchantOption[]> {
+  return apiList<MerchantOption>(`/v1/admin/merchants/directory`);
+}
 
 export async function listAdminMerchants(): Promise<Merchant[]> {
   return apiList<Merchant>(`/v1/admin/merchants?${LIST_ALL_PARAMS}`);

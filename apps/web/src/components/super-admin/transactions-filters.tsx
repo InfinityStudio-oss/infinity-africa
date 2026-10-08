@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Card } from "@/components/portal/card";
-import type { Merchant } from "@/lib/admin/types";
+import type { MerchantOption } from "@/lib/admin/types";
 
 const inputClass = "px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm";
 
@@ -18,7 +18,7 @@ export interface TransactionsFilterValues {
   dateTo?: string;
 }
 
-export function TransactionsFilters({ merchants, initial }: { merchants: Merchant[]; initial: TransactionsFilterValues }) {
+export function TransactionsFilters({ merchants, initial }: { merchants: MerchantOption[]; initial: TransactionsFilterValues }) {
   const router = useRouter();
   const [values, setValues] = useState<TransactionsFilterValues>(initial);
 

@@ -2,7 +2,7 @@ import { AdminKpiCard } from "@/components/admin/kpi-card";
 import { PageHeader } from "@/components/portal/page-header";
 import { CustomersFilters } from "@/components/super-admin/customers-filters";
 import { CustomersTable } from "@/components/super-admin/customers-table";
-import { listAdminCustomers, listAdminMerchants } from "@/lib/admin/live-api";
+import { listAdminCustomers, listAdminMerchantOptions } from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Customers | InfinityPay Super Admin",
@@ -17,7 +17,7 @@ export default async function SuperAdminCustomersPage({ searchParams }: SuperAdm
 
   const [customers, merchants] = await Promise.all([
     listAdminCustomers({ merchantId }),
-    listAdminMerchants(),
+    listAdminMerchantOptions(),
   ]);
 
   const now = new Date();

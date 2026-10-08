@@ -5,7 +5,7 @@ import { useState } from "react";
 import { COLLECTION_METHOD_LABELS, COLLECTION_SOURCE_LABELS, CollectionMethod, CollectionSource } from "@infinity/shared";
 
 import { Card } from "@/components/portal/card";
-import type { Merchant } from "@/lib/admin/types";
+import type { MerchantOption } from "@/lib/admin/types";
 
 const selectClass = "px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm";
 
@@ -18,7 +18,7 @@ export interface CollectionsFilterValues {
   dateTo?: string;
 }
 
-export function CollectionsFilters({ merchants, initial }: { merchants: Merchant[]; initial: CollectionsFilterValues }) {
+export function CollectionsFilters({ merchants, initial }: { merchants: MerchantOption[]; initial: CollectionsFilterValues }) {
   const router = useRouter();
   const [values, setValues] = useState<CollectionsFilterValues>(initial);
 

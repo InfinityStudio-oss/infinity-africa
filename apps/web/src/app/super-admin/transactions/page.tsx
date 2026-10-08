@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { ExportTransactionsCsvButton } from "@/components/super-admin/export-transactions-csv-button";
 import { TransactionsFilters } from "@/components/super-admin/transactions-filters";
 import { TransactionsTable } from "@/components/super-admin/transactions-table";
-import { listAdminMerchants, listAdminTransactions } from "@/lib/admin/live-api";
+import { listAdminMerchantOptions, listAdminTransactions } from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Transactions | InfinityPay Super Admin",
@@ -33,7 +33,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
     }),
-    listAdminMerchants(),
+    listAdminMerchantOptions(),
   ]);
 
   return (

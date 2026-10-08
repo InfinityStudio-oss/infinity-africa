@@ -62,6 +62,22 @@ class AdminApiKeyResponse(BaseModel):
     created_at: datetime
 
 
+class AdminMerchantOptionResponse(BaseModel):
+    """A merchant as a dropdown entry and nothing more.
+
+    Deliberately separate from AdminMerchantResponse: that one carries the
+    owner's name, which costs a Supabase Auth call per merchant to
+    resolve. A filter list needs none of it.
+    """
+
+    # Named merchant_id, not id, to match AdminMerchantResponse — the
+    # dropdowns already read merchant_id, and a second spelling for the
+    # same thing is a trap for whoever swaps one list for the other.
+    merchant_id: uuid.UUID
+    business_name: str
+    merchant_code: str | None = None
+
+
 class AdminMerchantResponse(BaseModel):
     merchant_id: uuid.UUID
     merchant_code: str | None = None

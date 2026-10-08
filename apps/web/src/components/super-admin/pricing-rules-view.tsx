@@ -15,7 +15,7 @@ import {
   updatePricingRuleAction,
   type PricingRuleActionState,
 } from "@/lib/admin/live-actions";
-import type { Merchant, PricingRuleRow } from "@/lib/admin/types";
+import type { MerchantOption, PricingRuleRow } from "@/lib/admin/types";
 
 const inputClass =
   "w-full px-3 py-2 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary";
@@ -279,7 +279,7 @@ export function PricingRulesView({
   selectedMerchantId,
   merchantRules,
 }: {
-  merchants: Merchant[];
+  merchants: MerchantOption[];
   platformRules: PricingRuleRow[];
   selectedMerchantId: string | null;
   merchantRules: PricingRuleRow[];
