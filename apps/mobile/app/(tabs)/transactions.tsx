@@ -7,10 +7,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput } from "react-native";
+import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Transaction, api } from "../../src/api/client";
 import { useApi } from "../../src/api/useApi";
+import { ExportError, exportFilename, shareCsv, transactionsToCsv } from "../../src/export/csv";
 import {
   AppCard,
   AppScreen,
@@ -18,6 +19,7 @@ import {
   ErrorState,
   ListRow,
   LoadingState,
+  PrimaryButton,
   StatusBadge,
   formatDate,
   humanise,
@@ -39,18 +41,52 @@ export default function TransactionsScreen() {
     [search],
   );
 
+  const [exporting, setExporting] = useState(false);
+
+  /** Exports the rows this screen is holding, not the whole account. The
+   * share dialog names the count so a page is never mistaken for a full
+   * statement; the emailed PDF report on the Reports screen covers a date
+   * range properly. */
+  async function exportCsv() {
+    if (!data || data.length === 0) return;
+    setExporting(true);
+    try {
+      await shareCsv(
+        exportFilename("transactions"),
+        transactionsToCsv(data),
+        `InfinityPay transactions (${data.length} rows)`,
+      );
+    } catch (err) {
+      Alert.alert(
+        "Couldn’t export",
+        err instanceof ExportError ? err.message : "Something went wrong writing the file.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <AppScreen refreshing={refreshing} onRefresh={refresh}>
-      <TextInput
-        style={s.search}
-        value={term}
-        onChangeText={setTerm}
-        placeholder="Search by reference"
-        placeholderTextColor={colors.outline}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        returnKeyType="search"
-      />
+      <View style={s.toolbar}>
+        <TextInput
+          style={s.search}
+          value={term}
+          onChangeText={setTerm}
+          placeholder="Search by reference"
+          placeholderTextColor={colors.outline}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        <PrimaryButton
+          label="Export CSV"
+          variant="outline"
+          onPress={() => void exportCsv()}
+          loading={exporting}
+          disabled={!data || data.length === 0}
+        />
+      </View>
 
       {loading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
@@ -90,6 +126,7 @@ export default function TransactionsScreen() {
 }
 
 const s = StyleSheet.create({
+  toolbar: { gap: spacing.sm },
   search: {
     ...typography.body,
     fontSize: 16,

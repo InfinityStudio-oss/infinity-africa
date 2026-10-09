@@ -14,7 +14,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#04332a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "me.infinitypay.merchant"
@@ -29,7 +31,12 @@
       },
       "edgeToEdgeEnabled": true
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-status-bar"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-sharing"
+    ],
     "experiments": {
       "typedRoutes": true
     },

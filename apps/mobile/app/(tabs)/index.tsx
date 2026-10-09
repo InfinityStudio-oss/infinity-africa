@@ -66,7 +66,7 @@ export default function HomeScreen() {
           label="Withdraw funds"
           variant="outline"
           disabled={notActive}
-          onPress={() => router.push("/withdrawals")}
+          onPress={() => router.push("/withdrawals/new")}
         />
         <PrimaryButton
           label="API credentials"

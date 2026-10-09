@@ -57,6 +57,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/forgot-password" options={{ title: "Reset password" }} />
+        <Stack.Screen name="withdrawals/new" options={{ title: "New Withdrawal" }} />
         <Stack.Screen name="more/api-credentials" options={{ title: "API Credentials" }} />
         <Stack.Screen name="more/webhooks" options={{ title: "Webhooks" }} />
         <Stack.Screen name="more/ip-allowlist" options={{ title: "IP Allowlist" }} />

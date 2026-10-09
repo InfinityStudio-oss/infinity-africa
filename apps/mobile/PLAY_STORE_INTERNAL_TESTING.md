@@ -183,11 +183,21 @@ Play requires this before any release. What is true of this app:
   InfinityPay email and password through Supabase Auth. The app has no
   separate account system and no sign-up flow.
 - **Financial information is displayed.** Wallet balance, transaction
-  history, the wallet ledger, withdrawal status and fee quotes. All of it
-  is fetched for display; the app computes no balances or fees.
+  history, the wallet ledger and withdrawal status. All of it is fetched
+  for display; the app computes no balances and no fees.
+- **Financial actions.** A merchant admin can raise a withdrawal from
+  their own InfinityPay balance to their own destination. It requires a
+  code emailed to the account address, and an InfinityPay administrator
+  still approves it before any money moves. The app never reaches a
+  payment provider.
 - **Collected vs. displayed.** The app itself collects nothing beyond the
-  credentials needed to sign in. Everything else is read from a merchant's
+  credentials needed to sign in, and the withdrawal details a merchant
+  types about their own payout. Everything else is read from a merchant's
   own InfinityPay account.
+- **Files the app writes.** CSV exports are written to the app's own cache
+  directory and handed straight to the OS share sheet. Nothing is written
+  to shared storage, which is why no storage permission is requested, and
+  the OS reclaims the cache on its own.
 - **No data is shared with third parties** by the app. No analytics or
   crash-reporting SDK is installed (Sentry and PostHog are on the backend
   and the web portal, not here).
@@ -281,13 +291,19 @@ Internal testing can start without these. A public release cannot.
 - [ ] Google Play **Data Safety** form completed (notes above)
 
 ### Product decisions
-- [ ] **Withdrawal creation** — the app quotes charges but cannot request a
-      payout. Deciding to add it means porting the one-time-code step; the
-      Super Admin approval stays server-side either way.
-- [ ] **CSV report export** — Reports shows totals only; the portal has the
-      downloads.
+- [x] **Withdrawal creation** — done. Same three steps as the portal
+      (check balance → review → emailed code), created as
+      PENDING_ADMIN_APPROVAL, no charges shown because merchant
+      withdrawals are not charged. Admin-only, matching the backend gate.
+- [x] **CSV export** — done. Transactions and Wallet export the rows on
+      screen via the share sheet; Reports emails the PDF statement, which
+      is what the portal's Reports page produces.
+- [ ] Decide what a **pending or suspended** account should see beyond the
+      notice Home shows today
 - [ ] A test merchant account prepared for reviewers and testers, with
       realistic but non-sensitive data
+- [ ] Walk one real withdrawal through the app end to end on the internal
+      track, including the Super Admin approval, before a public release
 
 ### Verification
 - [ ] `npx tsc --noEmit` clean

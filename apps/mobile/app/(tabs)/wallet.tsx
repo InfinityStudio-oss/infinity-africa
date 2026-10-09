@@ -5,10 +5,12 @@
  * that disagreed with the ledger would be worse than no total at all.
  */
 
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { api, LedgerEntry } from "../../src/api/client";
 import { useApi } from "../../src/api/useApi";
+import { ExportError, exportFilename, ledgerToCsv, shareCsv } from "../../src/export/csv";
 import {
   AppCard,
   AppScreen,
@@ -16,6 +18,7 @@ import {
   ErrorState,
   ListRow,
   LoadingState,
+  PrimaryButton,
   SectionHeader,
   StatCard,
   StatusBadge,
@@ -33,6 +36,33 @@ export default function WalletScreen() {
     void overview.refresh();
     void ledger.refresh();
   };
+
+  const [exporting, setExporting] = useState(false);
+
+  /** Exports the ledger page on screen. The web portal exports the ledger
+   * as Excel from the backend over a date range; CSV built here is the
+   * equivalent a phone can actually hand to another app, and the share
+   * dialog states the row count so a page is not mistaken for a
+   * statement. */
+  async function exportCsv() {
+    const entries = ledger.data;
+    if (!entries || entries.length === 0) return;
+    setExporting(true);
+    try {
+      await shareCsv(
+        exportFilename("wallet-ledger"),
+        ledgerToCsv(entries),
+        `InfinityPay wallet ledger (${entries.length} rows)`,
+      );
+    } catch (err) {
+      Alert.alert(
+        "Couldn’t export",
+        err instanceof ExportError ? err.message : "Something went wrong writing the file.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (overview.loading) return <AppScreen><LoadingState /></AppScreen>;
   if (overview.error)
@@ -52,6 +82,13 @@ export default function WalletScreen() {
       </View>
 
       <SectionHeader title="Wallet ledger" />
+      <PrimaryButton
+        label="Export CSV"
+        variant="outline"
+        onPress={() => void exportCsv()}
+        loading={exporting}
+        disabled={!ledger.data || ledger.data.length === 0}
+      />
       {ledger.loading ? <LoadingState /> : null}
       {ledger.error ? <ErrorState message={ledger.error} onRetry={ledger.reload} /> : null}
 

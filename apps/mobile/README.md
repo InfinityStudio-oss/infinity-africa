@@ -53,11 +53,13 @@ npm run lint
 app/                        expo-router: the file tree is the navigation
   _layout.tsx               session gate — signed in, or the login screen
   (tabs)/                   Home · Transactions · Wallet · Withdrawals · More
+  withdrawals/new.tsx       raising one: check balance → review → emailed code
   more/                     API credentials, webhooks, IP allowlist,
                             reports, support, settings
   auth/                     login, forgot password
 src/
   api/client.ts             every call to /v1/merchant/*; the only network layer
+  export/csv.ts             CSV built on the device, handed to the share sheet
   api/useApi.ts             loading / error / refreshing, for each screen
   auth/session.ts           Supabase auth, session stored in the keychain
   components/index.tsx      the shared pieces screens are built from
@@ -96,6 +98,25 @@ Two things worth knowing before you read it:
   build wants 1024×1024 before a public release — see
   [assets/README.md](assets/README.md).
 
+## Withdrawals and exports
+
+Raising a withdrawal follows the portal exactly: check balance → review →
+a code emailed to the account address → created as
+`PENDING_ADMIN_APPROVAL`. An InfinityPay administrator still approves it
+on the web, and the app never reaches a payment provider. It is
+admin-only, matching the backend gate.
+
+**No charges are shown, because merchant withdrawals are not charged.**
+The quote endpoint is still called — it is the server's own validation of
+the amount and destination, and it reports what the wallet must cover —
+but what the merchant is told is that they receive the full amount, which
+is the line the portal shows too.
+
+Transactions and Wallet export the rows on screen as CSV through the OS
+share sheet, with the same columns as the portal's export. Reports emails
+the PDF statement over a date range, which is what the portal's Reports
+page produces; it is deliberately not a CSV, and the account email always
+receives it.
+
 Still open as a product decision: what the app should do on a pending or
-suspended account beyond the notice Home shows today, and whether
-withdrawal *creation* belongs here at all.
+suspended account beyond the notice Home shows today.
