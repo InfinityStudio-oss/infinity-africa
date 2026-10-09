@@ -12,6 +12,13 @@ import { getWebhookConfig, listWebhookEvents, sendTestWebhook, updateWebhookConf
 import { webhookDeliveryBadge } from "@/lib/portal/status-tones";
 import { WEBHOOK_EVENT_NAMES, type WebhookConfig, type WebhookEvent, type WebhookTestResult } from "@/lib/portal/types";
 
+/** The backend's message when it sent one. These are written for
+ * merchants and tell them what to do next, so replacing one with a
+ * generic line would hide the only useful part. */
+function messageFor(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export function WebhooksView() {
   const [config, setConfig] = useState<WebhookConfig | null>(null);
   const [events, setEvents] = useState<WebhookEvent[]>([]);
@@ -24,6 +31,7 @@ export function WebhooksView() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getWebhookConfig().then((data) => {
@@ -59,12 +67,15 @@ export function WebhooksView() {
   async function handleSave(formEvent: React.FormEvent) {
     formEvent.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       const updated = await updateWebhookConfig({
         webhook_url: webhookUrl,
         subscribed_events: allEvents ? [] : selectedEvents,
       });
       setConfig(updated);
+    } catch (err) {
+      setError(messageFor(err, "Couldn't save your webhook settings. Try again."));
     } finally {
       setSaving(false);
     }
@@ -72,10 +83,13 @@ export function WebhooksView() {
 
   async function handleRegenerateSecret() {
     setRegenerating(true);
+    setError(null);
     try {
       const updated = await updateWebhookConfig({ regenerate_secret: true });
       setConfig(updated);
       setRevealedSecret(updated.secret);
+    } catch (err) {
+      setError(messageFor(err, "Couldn't generate a signing secret. Try again."));
     } finally {
       setRegenerating(false);
     }
@@ -84,9 +98,15 @@ export function WebhooksView() {
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
+    setError(null);
     try {
       const result = await sendTestWebhook();
       setTestResult(result);
+    } catch (err) {
+      // The backend's own wording, e.g. "Configure a webhook URL before
+      // sending a test delivery" - which is a thing the merchant can act
+      // on, not an incident.
+      setError(messageFor(err, "Couldn't send a test delivery. Try again."));
     } finally {
       setTesting(false);
     }
@@ -190,6 +210,16 @@ export function WebhooksView() {
             </div>
           )}
 
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 text-sm px-3.5 py-2.5 rounded-lg bg-error-container/10 text-error"
+            >
+              <Icon name="error" className="text-[18px] shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {testResult && (
             <div
               className={`flex items-center gap-2.5 text-sm px-3.5 py-2.5 rounded-lg ${testResult.delivered ? "bg-primary-container/10 text-primary" : "bg-error-container/10 text-error"}`}
@@ -215,9 +245,14 @@ export function WebhooksView() {
           <EmptyState
             icon="webhook"
             heading="No webhook deliveries yet"
-            body="Once you configure a webhook URL above, events like payment_link.paid and invoice.paid will queue here."
-            actionLabel="Send Test Webhook"
-            onAction={handleTest}
+            body={
+              config?.webhook_url
+                ? "Events like payment_link.paid and invoice.paid will queue here. Send a test delivery to check your endpoint now."
+                : "Once you configure a webhook URL above, events like payment_link.paid and invoice.paid will queue here."
+            }
+            {...(config?.webhook_url
+              ? { actionLabel: "Send Test Webhook", onAction: handleTest }
+              : {})}
           />
         </Card>
       ) : (
