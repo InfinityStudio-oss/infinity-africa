@@ -97,6 +97,17 @@ export function formatTzs(amount: string | number | null | undefined): string {
   return `TZS ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** For balance columns, which the API returns as null when it has no
+ * figure: transactions created before the column existed, or with no
+ * wallet-affecting leg. Null means "not available" and is shown as such
+ * — formatTzs would print TZS 0.00, which is a different claim and a
+ * false one. Mirrors the portal's own money() helper.
+ */
+export function formatTzsOrUnavailable(amount: string | number | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") return "Not available";
+  return formatTzs(amount);
+}
+
 /** Shows enough of a number to recognise a customer, not enough to
  * reuse it. Mirrors the portal's maskAccountIdentifier. */
 export function maskPhone(phone: string | null | undefined): string {

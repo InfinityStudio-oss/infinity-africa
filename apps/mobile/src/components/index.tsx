@@ -204,6 +204,36 @@ export function ListRow({
   );
 }
 
+/** The money columns behind a list row: opening balance, amount, charge,
+ * net, closing balance.
+ *
+ * The portal shows these as five columns of a wide table. A phone has no
+ * room for that, so a row reveals them on tap instead — which keeps the
+ * list scannable while still putting the figures a merchant reconciles
+ * against one tap away rather than on a laptop.
+ *
+ * Every value is the server's. Nothing here subtracts a charge from an
+ * amount to produce a net, or adds one to a balance: where the API sends
+ * no figure the row says "Not available", because a derived number that
+ * disagreed with the ledger would be worse than a gap.
+ */
+export function MoneyBreakdown({
+  lines,
+}: {
+  lines: { label: string; value: string; strong?: boolean }[];
+}) {
+  return (
+    <View style={s.breakdown}>
+      {lines.map((line) => (
+        <View key={line.label} style={s.breakdownRow}>
+          <Text style={s.breakdownLabel}>{line.label}</Text>
+          <Text style={[s.breakdownValue, line.strong && s.breakdownValueStrong]}>{line.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
   return (
     <View style={s.centred}>
@@ -302,6 +332,25 @@ const s = StyleSheet.create({
   rowPressed: { opacity: 0.6 },
   rowMain: { flex: 1, gap: 2 },
   rowRight: { alignItems: "flex-end", gap: 4 },
+  breakdown: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceLow,
+    borderRadius: radius.md,
+  },
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
+  breakdownLabel: { ...typography.caption, color: colors.onSurfaceVariant },
+  breakdownValue: {
+    ...typography.caption,
+    color: colors.onSurface,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  breakdownValueStrong: { ...typography.label, color: colors.onSurface, fontVariant: ["tabular-nums"] },
   rowTitle: { ...typography.label, color: colors.onSurface },
   rowMeta: { ...typography.caption, color: colors.onSurfaceVariant },
 });

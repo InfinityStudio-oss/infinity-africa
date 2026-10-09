@@ -18,6 +18,7 @@ import {
   ErrorState,
   ListRow,
   LoadingState,
+  MoneyBreakdown,
   PrimaryButton,
   SectionHeader,
   StatCard,
@@ -25,7 +26,7 @@ import {
   formatDate,
   humanise,
 } from "../../src/components";
-import { colors, formatTzs, spacing, typography } from "../../src/theme";
+import { colors, formatTzs, formatTzsOrUnavailable, maskPhone, spacing, typography } from "../../src/theme";
 
 export default function WalletScreen() {
   const overview = useApi(() => api.overview());
@@ -38,6 +39,9 @@ export default function WalletScreen() {
   };
 
   const [exporting, setExporting] = useState(false);
+  /** Which row is showing its money columns. One at a time: this is a
+   * list to scan, not a table to read all of at once. */
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   /** Exports the ledger page on screen. The web portal exports the ledger
    * as Excel from the backend over a date range; CSV built here is the
@@ -82,6 +86,7 @@ export default function WalletScreen() {
       </View>
 
       <SectionHeader title="Wallet ledger" />
+      <Text style={s.hint}>Tap a line for its opening balance, charge and closing balance.</Text>
       <PrimaryButton
         label="Export CSV"
         variant="outline"
@@ -97,14 +102,41 @@ export default function WalletScreen() {
           <AppCard>
             {ledger.data.map((entry: LedgerEntry) => {
               const credit = entry.direction === "credit";
+              const open = expanded === entry.id;
               return (
-                <ListRow
-                  key={entry.id}
-                  title={`${credit ? "+" : "−"}${formatTzs(entry.amount)}`}
-                  meta={`${entry.description ?? humanise(entry.method)} · ${formatDate(entry.date)}`}
-                  right={entry.status ? <StatusBadge status={entry.status} /> : undefined}
-                  rightMeta={`Balance ${formatTzs(entry.balance_after)}`}
-                />
+                <View key={entry.id}>
+                  <ListRow
+                    title={`${credit ? "+" : "−"}${formatTzs(entry.amount)}`}
+                    meta={`${entry.description ?? humanise(entry.method)} · ${formatDate(entry.date)}`}
+                    right={entry.status ? <StatusBadge status={entry.status} /> : undefined}
+                    rightMeta={`Balance ${formatTzs(entry.balance_after)}`}
+                    onPress={() => setExpanded(open ? null : entry.id)}
+                  />
+                  {open ? (
+                    <MoneyBreakdown
+                      lines={[
+                        { label: "Opening balance", value: formatTzs(entry.balance_before) },
+                        {
+                          label: credit ? "Amount in" : "Amount out",
+                          value: formatTzs(entry.amount),
+                        },
+                        // Nullable on the ledger - "Not available" rather
+                        // than a zero the server did not send.
+                        { label: "Charge", value: formatTzsOrUnavailable(entry.fee_amount) },
+                        { label: "Net", value: formatTzsOrUnavailable(entry.net_amount) },
+                        {
+                          label: "Closing balance",
+                          value: formatTzs(entry.balance_after),
+                          strong: true,
+                        },
+                        ...(entry.reference ? [{ label: "Reference", value: entry.reference }] : []),
+                        ...(entry.customer_phone
+                          ? [{ label: "Customer", value: maskPhone(entry.customer_phone) }]
+                          : []),
+                      ]}
+                    />
+                  ) : null}
+                </View>
               );
             })}
           </AppCard>
@@ -125,6 +157,7 @@ export default function WalletScreen() {
 }
 
 const s = StyleSheet.create({
+  hint: { ...typography.caption, color: colors.onSurfaceVariant },
   statRow: { flexDirection: "row", gap: spacing.md },
   note: { ...typography.caption, color: colors.onSurfaceVariant, textAlign: "center", marginTop: spacing.sm },
 });

@@ -19,12 +19,21 @@ import {
   ErrorState,
   ListRow,
   LoadingState,
+  MoneyBreakdown,
   PrimaryButton,
   StatusBadge,
   formatDate,
   humanise,
 } from "../../src/components";
-import { colors, formatTzs, maskPhone, radius, spacing, typography } from "../../src/theme";
+import {
+  colors,
+  formatTzs,
+  formatTzsOrUnavailable,
+  maskPhone,
+  radius,
+  spacing,
+  typography,
+} from "../../src/theme";
 
 export default function TransactionsScreen() {
   const [term, setTerm] = useState("");
@@ -42,6 +51,7 @@ export default function TransactionsScreen() {
   );
 
   const [exporting, setExporting] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   /** Exports the rows this screen is holding, not the whole account. The
    * share dialog names the count so a page is never mistaken for a full
@@ -94,17 +104,49 @@ export default function TransactionsScreen() {
       {!loading && !error ? (
         data && data.length > 0 ? (
           <AppCard>
-            {data.map((txn: Transaction) => (
-              <ListRow
-                key={txn.id}
-                title={formatTzs(txn.gross_amount)}
-                meta={`${txn.reference} · ${humanise(txn.method)} · ${formatDate(txn.created_at)}`}
-                right={<StatusBadge status={txn.status} />}
-                rightMeta={`Net ${formatTzs(txn.net_amount)}${
-                  txn.customer_phone ? ` · ${maskPhone(txn.customer_phone)}` : ""
-                }`}
-              />
-            ))}
+            <Text style={s.tapHint}>
+              Tap a line for its opening balance, charge and closing balance.
+            </Text>
+            {data.map((txn: Transaction) => {
+              const open = expanded === txn.id;
+              return (
+                <View key={txn.id}>
+                  <ListRow
+                    title={formatTzs(txn.gross_amount)}
+                    meta={`${txn.reference} · ${humanise(txn.method)} · ${formatDate(
+                      txn.created_at,
+                    )}`}
+                    right={<StatusBadge status={txn.status} />}
+                    rightMeta={`Net ${formatTzs(txn.net_amount)}${
+                      txn.customer_phone ? ` · ${maskPhone(txn.customer_phone)}` : ""
+                    }`}
+                    onPress={() => setExpanded(open ? null : txn.id)}
+                  />
+                  {open ? (
+                    <MoneyBreakdown
+                      lines={[
+                        // Nullable on transactions: null for rows created
+                        // before the column existed, or with no
+                        // wallet-affecting leg. Shown as "Not available"
+                        // rather than backfilled with a derived figure.
+                        {
+                          label: "Opening balance",
+                          value: formatTzsOrUnavailable(txn.balance_before),
+                        },
+                        { label: "Amount", value: formatTzs(txn.gross_amount) },
+                        { label: "Charge", value: formatTzs(txn.fee_amount) },
+                        { label: "Net", value: formatTzs(txn.net_amount) },
+                        {
+                          label: "Closing balance",
+                          value: formatTzsOrUnavailable(txn.balance_after),
+                          strong: true,
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </View>
+              );
+            })}
           </AppCard>
         ) : (
           <EmptyState
@@ -126,6 +168,7 @@ export default function TransactionsScreen() {
 }
 
 const s = StyleSheet.create({
+  tapHint: { ...typography.caption, color: colors.onSurfaceVariant, paddingBottom: spacing.xs },
   toolbar: { gap: spacing.sm },
   search: {
     ...typography.body,
