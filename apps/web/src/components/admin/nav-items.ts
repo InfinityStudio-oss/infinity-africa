@@ -24,6 +24,22 @@ export interface AdminNavItem {
 // Accounts, Provider Status, and Support Tickets still have no real data
 // model behind them. The old /admin/* mock page files still exist, just no
 // longer reachable from here.
+//
+// Unlinked 2026-10-09 at the platform owner's request: Document Requests,
+// Disputes, Inquiries. Unlike the 2026-08-25 removals above these are all
+// real, working pages over real tables — they are hidden because the
+// business is not running those workflows, not because they are unfinished.
+//
+// Their routes, APIs and tables are untouched, so each is one line away
+// from coming back. Two things still write to them and are worth knowing
+// about:
+//   - POST /v1/public/inquiries, from the public /contact form, which is
+//     linked from the marketing site. Inquiries will keep arriving with no
+//     page showing them.
+//   - POST /v1/public/disputes/report and the merchant-facing dispute and
+//     document-submission endpoints, which remain callable.
+// If those workflows are genuinely retired, the public forms should go too
+// rather than accepting submissions nobody reads.
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Dashboard", href: "/super-admin", icon: "dashboard" },
   { label: "Businesses", href: "/super-admin/merchants", icon: "storefront" },
@@ -36,12 +52,9 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Withdrawals", href: "/super-admin/withdrawals", icon: "receipt_long" },
   { label: "Transactions", href: "/super-admin/transactions", icon: "list_alt" },
   { label: "Risk Monitoring", href: "/super-admin/risk-monitoring", icon: "gpp_maybe" },
-  { label: "Document Requests", href: "/super-admin/document-requests", icon: "folder_shared" },
-  { label: "Disputes", href: "/super-admin/disputes", icon: "gavel" },
   { label: "Pricing Rules", href: "/super-admin/pricing-rules", icon: "sell" },
   { label: "API Keys", href: "/super-admin/api-keys", icon: "api" },
   { label: "Webhooks & Reconciliation", href: "/super-admin/webhooks", icon: "webhook" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", icon: "history" },
-  { label: "Inquiries", href: "/super-admin/inquiries", icon: "mail" },
   { label: "Settings", href: "/admin/settings", icon: "settings" },
 ];
