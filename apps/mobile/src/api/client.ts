@@ -25,7 +25,7 @@
 
 import { getAccessToken, signOut } from "../auth/session";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   constructor(
@@ -90,6 +90,36 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   return body.data;
+}
+
+/** Ask for a password-reset email.
+ *
+ * Deliberately the backend's own endpoint rather than
+ * supabase.auth.resetPasswordForEmail: the backend generates the recovery
+ * link, points it at the web portal's reset form, and sends InfinityPay's
+ * branded email through Resend. Calling Supabase straight from here would
+ * send Supabase's default template to the project's Site URL — the
+ * marketing homepage — where a merchant would arrive holding a recovery
+ * token and nothing to type a new password into.
+ *
+ * Unauthenticated, and never throws. The endpoint returns one identical
+ * response whether or not the address has an account, so that nobody can
+ * use it to discover who banks with InfinityPay. Surfacing a network
+ * error here would reintroduce exactly that signal, so the caller shows
+ * the same message either way.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/v1/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // redirect_path is a closed set of two values server-side, so this
+      // cannot be pointed at a host someone else controls.
+      body: JSON.stringify({ email: email.trim(), redirect_path: "/dashboard/reset-password" }),
+    });
+  } catch {
+    // Swallowed on purpose — see above.
+  }
 }
 
 function query(params: Record<string, string | number | undefined>): string {

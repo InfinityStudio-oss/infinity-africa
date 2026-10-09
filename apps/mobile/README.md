@@ -37,7 +37,7 @@ and `npm run typecheck:mobile` forward into this directory.
 Then scan the QR code with Expo Go, or press `a` / `i` for an emulator.
 
 Pointing at a local API from a physical device needs your machine's LAN
-address in `EXPO_PUBLIC_API_URL` (`http://192.168.x.x:8000`), not
+address in `EXPO_PUBLIC_API_BASE_URL` (`http://192.168.x.x:8000`), not
 `localhost` — on the phone, `localhost` is the phone.
 
 Checks, from this directory:
@@ -79,12 +79,23 @@ src/
   Supabase anon key is safe there by design; a service role key never is.
 - A 401 clears the session rather than retrying.
 
-## Before a store release
+## Shipping it
 
-- Replace `assets/icon.png`, `assets/splash.png` and
-  `assets/adaptive-icon.png` with 1024×1024 artwork (these are the
-  512×512 brand mark, fine for development).
-- Set up EAS (`eas build:configure`) with production `EXPO_PUBLIC_*`
-  values, and confirm `EXPO_PUBLIC_API_URL` points at the production API.
-- Decide what the app does on a pending or suspended account beyond the
-  notice Home shows today.
+[PLAY_STORE_INTERNAL_TESTING.md](PLAY_STORE_INTERNAL_TESTING.md) covers
+EAS setup, the Android AAB build, Google Play internal testing, the Data
+Safety declaration, and the full list of public-release blockers.
+
+Two things worth knowing before you read it:
+
+- **Password reset lands on the web portal**, by design. The app calls the
+  same `POST /v1/auth/forgot-password` endpoint the portal does, so the
+  merchant gets InfinityPay’s branded email and sets the new password at
+  `/dashboard/reset-password`. No Supabase redirect change is needed.
+- **The artwork is the 512×512 brand mark**, which is fine for internal
+  testing and is already the right size for the Play listing icon, but the
+  build wants 1024×1024 before a public release — see
+  [assets/README.md](assets/README.md).
+
+Still open as a product decision: what the app should do on a pending or
+suspended account beyond the notice Home shows today, and whether
+withdrawal *creation* belongs here at all.

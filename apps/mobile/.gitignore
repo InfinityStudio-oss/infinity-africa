@@ -1,10 +1,20 @@
 .env
 .env.local
+.env.*.local
 .expo/
 dist/
 web-build/
+android/
+ios/
+
+# Signing and publishing credentials. A leaked upload key or Play service
+# account lets someone ship a build as InfinityPay.
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
 *.mobileprovision
+credentials.json
+google-service-account*.json
+play-service-account*.json

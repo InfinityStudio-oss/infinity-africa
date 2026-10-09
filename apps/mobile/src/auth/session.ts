@@ -100,11 +100,6 @@ export async function signIn(email: string, password: string): Promise<{ error: 
   return { error: error?.message ?? null };
 }
 
-export async function sendPasswordReset(email: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
-  return { error: error?.message ?? null };
-}
-
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }

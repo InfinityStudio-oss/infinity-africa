@@ -7,34 +7,40 @@
     "scheme": "infinitypay",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "primaryColor": "#04332a",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#04332a"
     },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "me.infinitypay.merchant"
     },
     "android": {
       "package": "me.infinitypay.merchant",
+      "versionCode": 1,
+      "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#04332a"
       },
       "edgeToEdgeEnabled": true
     },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-status-bar"
-    ],
+    "plugins": ["expo-router", "expo-secure-store", "expo-status-bar"],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "comment": "No secrets here. Runtime configuration comes from EXPO_PUBLIC_* env vars at build time - see .env.example. Anything in this file or in an EXPO_PUBLIC_ var ships inside the app bundle and must be treated as public."
+      "notes": [
+        "No secrets in this file. It is bundled into the app and is readable by anyone who installs it.",
+        "Runtime configuration comes from EXPO_PUBLIC_* variables at build time - see .env.example.",
+        "android.permissions is deliberately empty: only the minimum Expo requires is declared, which keeps the Play Data Safety surface small for a finance app.",
+        "TODO before public release: assets/icon.png, assets/splash.png and assets/adaptive-icon.png are the 512x512 brand mark. Replace with 1024x1024 artwork - see assets/README.md.",
+        "TODO before public release: raise version and android.versionCode for every Play Console upload."
+      ]
     }
   }
 }

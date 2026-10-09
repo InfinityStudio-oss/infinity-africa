@@ -1,34 +1,31 @@
 /** Password reset request.
  *
- * Supabase emails the link; the link opens the web portal, which is
- * where the new password is set. One reset flow, one place it can go
- * wrong.
+ * The backend emails the link and the link opens the web portal's reset
+ * form at /dashboard/reset-password, which is where the new password is
+ * set. One reset flow, one place it can go wrong — and the merchant gets
+ * InfinityPay's own branded email rather than Supabase's default one.
  */
 
 import { useState } from "react";
 import { StyleSheet, Text, TextInput } from "react-native";
 
-import { sendPasswordReset } from "../../src/auth/session";
+import { requestPasswordReset } from "../../src/api/client";
 import { AppCard, AppScreen, PrimaryButton } from "../../src/components";
 import { colors, radius, spacing, typography } from "../../src/theme";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     setBusy(true);
-    setError(null);
-    const { error: resetError } = await sendPasswordReset(email);
+    await requestPasswordReset(email);
     setBusy(false);
-    if (resetError) {
-      setError(resetError);
-      return;
-    }
-    // Shown whether or not the address exists — confirming which emails
-    // have accounts would hand an attacker a merchant list.
+    // Always the same outcome, even on a network failure. The endpoint
+    // answers identically for a registered and an unregistered address so
+    // that it cannot be used to find out who has an InfinityPay account,
+    // and showing an error here would hand that difference back.
     setSent(true);
   }
 
@@ -38,9 +35,10 @@ export default function ForgotPasswordScreen() {
         <AppCard style={s.form}>
           <Text style={s.title}>Check your email</Text>
           <Text style={s.body}>
-            If that address has an InfinityPay account, we’ve sent a reset link. Open it to set a new
-            password, then come back and sign in.
+            If that address has an InfinityPay account, we’ve sent a reset link. Opening it takes you to
+            the InfinityPay website to set a new password — then come back here and sign in.
           </Text>
+          <Text style={s.body}>Check your spam folder if it has not arrived in a few minutes.</Text>
         </AppCard>
       </AppScreen>
     );
@@ -63,8 +61,6 @@ export default function ForgotPasswordScreen() {
           placeholderTextColor={colors.outline}
           inputMode="email"
         />
-
-        {error ? <Text style={s.error}>{error}</Text> : null}
 
         <PrimaryButton
           label="Send reset link"
@@ -93,5 +89,4 @@ const s = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 48,
   },
-  error: { ...typography.body, color: colors.error },
 });

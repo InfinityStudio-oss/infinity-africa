@@ -49,7 +49,7 @@ export default function LoginScreen() {
           <AppCard style={s.warning}>
             <Text style={s.warningTitle}>App not configured</Text>
             <Text style={s.warningBody}>
-              Set EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY and EXPO_PUBLIC_API_URL in
+              Set EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY and EXPO_PUBLIC_API_BASE_URL in
               apps/mobile/.env before signing in. See .env.example.
             </Text>
           </AppCard>
