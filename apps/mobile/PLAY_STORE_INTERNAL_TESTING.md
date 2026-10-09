@@ -48,6 +48,29 @@ does nothing.
 npm start          # then scan the QR code with Expo Go, or press a / i
 ```
 
+### Expo Go now requires a login (SDK 57)
+
+Expo changed this with SDK 57: opening a project from a development
+server in Expo Go **on a physical iOS device** requires the Expo CLI and
+the Expo Go app to be signed in to the *same* Expo account. Without it
+Expo Go shows "There was a problem running the requested project — you
+need to be signed in to Expo Go and Expo CLI".
+
+It is a policy, not a misconfiguration, and `--offline` does not work
+around it. Three ways through:
+
+```bash
+npx expo login     # then sign in to the same account in Expo Go
+npx expo start     # restart - the CLI reads its auth state at startup
+```
+
+- A **free Expo account** is enough, and you need one for EAS builds
+  anyway.
+- **Android devices, the Android Emulator and the iOS Simulator are
+  unaffected** — an Android phone needs no login at all.
+- A **development build** does not involve Expo Go, so the restriction
+  does not apply.
+
 Checks:
 
 ```bash
