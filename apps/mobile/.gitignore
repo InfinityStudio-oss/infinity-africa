@@ -1,0 +1,10 @@
+.env
+.env.local
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

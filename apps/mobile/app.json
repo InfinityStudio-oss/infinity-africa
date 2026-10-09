@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "InfinityPay",
+    "slug": "infinitypay-merchant",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "infinitypay",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#04332a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "me.infinitypay.merchant"
+    },
+    "android": {
+      "package": "me.infinitypay.merchant",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#04332a"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "comment": "No secrets here. Runtime configuration comes from EXPO_PUBLIC_* env vars at build time - see .env.example. Anything in this file or in an EXPO_PUBLIC_ var ships inside the app bundle and must be treated as public."
+    }
+  }
+}
