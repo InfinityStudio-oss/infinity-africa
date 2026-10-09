@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.requests import ClientDisconnect
+from starlette.responses import Response
 
 from app.core.monitoring import capture_exception
 from app.schemas.common import ErrorDetail, ErrorResponse
@@ -200,6 +202,26 @@ def _error_content(code: str, message: str, details=None) -> dict:
     )
 
 
+def _is_client_disconnect(exc: BaseException) -> bool:
+    """True for a ClientDisconnect, including one nested in the
+    ExceptionGroup that BaseHTTPMiddleware's task group wraps it in.
+
+    Recursive because groups can nest, and bounded only by the depth of
+    that nesting — which anyio builds, not a caller.
+    """
+    if isinstance(exc, ClientDisconnect):
+        return True
+    # Duck-typed rather than isinstance(exc, BaseExceptionGroup): this
+    # repo pins no ruff target-version, so the 3.11+ builtin reads as an
+    # undefined name, and setting one here would surface 70-odd unrelated
+    # findings in files this change does not touch. `.exceptions` is the
+    # group protocol either way.
+    nested = getattr(exc, "exceptions", None)
+    if nested is not None:
+        return any(_is_client_disconnect(inner) for inner in nested)
+    return False
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(APIError)
     async def api_error_handler(request: Request, exc: APIError):
@@ -239,8 +261,41 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=_error_content(code, str(exc.detail)),
         )
 
+    @app.exception_handler(ClientDisconnect)
+    async def client_disconnect_handler(request: Request, _exc: ClientDisconnect):
+        """The caller hung up before finishing its request body.
+
+        Raised by `await request.body()` when the connection drops
+        mid-upload — in practice a provider posting a callback whose own
+        timeout fired first. There is no body to act on and nobody left to
+        answer, so there is nothing to fix and nothing to alert on: this
+        is the network, not a fault in the app.
+
+        Logged at warning so a burst of them is still visible in Railway,
+        because "deliveries keep dropping" is worth noticing even though
+        no single one is a bug. 499 is nginx's "client closed request";
+        nothing reads it, it only keeps the dropped request out of the 5xx
+        rate.
+        """
+        logger.warning(
+            "Client disconnected before the request body arrived: %s %s",
+            request.method,
+            request.url.path,
+        )
+        return Response(status_code=499)
+
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
+        # Starlette's BaseHTTPMiddleware runs the app inside an anyio task
+        # group, so anything raised under it reaches here wrapped in an
+        # ExceptionGroup. A disconnect that happens outside the route —
+        # while the response is being written, say — therefore arrives as
+        # a group rather than as the handler above, and is still not ours
+        # to fix.
+        if _is_client_disconnect(exc):
+            logger.warning("Client disconnected on %s %s", request.method, request.url.path)
+            return Response(status_code=499)
+
         logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
         # After the log, never instead of it: Railway's logs stay the
         # source of truth, and this is a no-op when monitoring is off.
