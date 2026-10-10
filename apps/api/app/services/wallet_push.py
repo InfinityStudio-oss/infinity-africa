@@ -57,6 +57,9 @@ from app.services.collection_source import (
 from app.services.collections import create_processing_transaction
 from app.services.crud import execute_maybe_single, insert_row
 from app.services.failure_reasons import failure_columns
+from app.services.provider_references import (
+    insert_collection_tolerating_repeated_reference,
+)
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
     get_selcom_checkout_credentials,
@@ -161,9 +164,8 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
     # waits for the not-yet-implemented webhook/reconciliation step.
     collection_status = "failed" if result.status == "failed" else "processing"
 
-    collection = insert_row(
+    collection = insert_collection_tolerating_repeated_reference(
         client,
-        "collections",
         {
             **base_row,
             "status": collection_status,
@@ -172,13 +174,18 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
                 if collection_status == "failed"
                 else {}
             ),
-            "provider_reference": result.reference or None,
+            # Selcom's value, under our unique index. The helper falls back
+            # to transid when they repeat one, matching what the linked
+            # transactions row does below.
+            "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
             "provider_result": result.result,
             "provider_message": result.message,
             "raw_response": result.raw_response,
         },
+        fallback_reference=transid,
+        context="wallet_push",
     )
 
     if collection_status == "processing":
@@ -300,9 +307,8 @@ async def execute_wallet_push_collection(
 
     collection_status = "failed" if result.status == "failed" else "processing"
 
-    collection = insert_row(
+    collection = insert_collection_tolerating_repeated_reference(
         client,
-        "collections",
         {
             **base_row,
             "status": collection_status,
@@ -311,13 +317,18 @@ async def execute_wallet_push_collection(
                 if collection_status == "failed"
                 else {}
             ),
-            "provider_reference": result.reference or None,
+            # Selcom's value, under our unique index. The helper falls back
+            # to transid when they repeat one, matching what the linked
+            # transactions row does below.
+            "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
             "provider_result": result.result,
             "provider_message": result.message,
             "raw_response": result.raw_response,
         },
+        fallback_reference=transid,
+        context="wallet_push",
     )
 
     if collection_status == "processing":

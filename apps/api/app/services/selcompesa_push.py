@@ -37,6 +37,9 @@ from app.services.collections import create_processing_transaction
 from app.services.crud import execute_maybe_single
 from app.services.crud import insert_row as _insert_row
 from app.services.failure_reasons import failure_columns
+from app.services.provider_references import (
+    insert_collection_tolerating_repeated_reference,
+)
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
     get_selcom_checkout_credentials,
@@ -126,9 +129,8 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
     # codes move this to "failed".
     collection_status = "failed" if result.status == "failed" else "processing"
 
-    collection = _insert_row(
+    collection = insert_collection_tolerating_repeated_reference(
         client,
-        "collections",
         {
             **base_row,
             "status": collection_status,
@@ -137,13 +139,17 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
                 if collection_status == "failed"
                 else {}
             ),
-            "provider_reference": result.reference or None,
+            # See wallet_push.py: Selcom's value under our unique index,
+            # falling back to our own transid when they repeat one.
+            "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
             "provider_result": result.result,
             "provider_message": result.message,
             "raw_response": result.raw_response,
         },
+        fallback_reference=transid,
+        context="selcompesa_push",
     )
 
     if collection_status == "processing":
@@ -244,9 +250,8 @@ async def execute_selcompesa_push_collection(
 
     collection_status = "failed" if result.status == "failed" else "processing"
 
-    collection = _insert_row(
+    collection = insert_collection_tolerating_repeated_reference(
         client,
-        "collections",
         {
             **base_row,
             "status": collection_status,
@@ -255,13 +260,17 @@ async def execute_selcompesa_push_collection(
                 if collection_status == "failed"
                 else {}
             ),
-            "provider_reference": result.reference or None,
+            # See wallet_push.py: Selcom's value under our unique index,
+            # falling back to our own transid when they repeat one.
+            "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
             "provider_result": result.result,
             "provider_message": result.message,
             "raw_response": result.raw_response,
         },
+        fallback_reference=transid,
+        context="selcompesa_push",
     )
 
     if collection_status == "processing":

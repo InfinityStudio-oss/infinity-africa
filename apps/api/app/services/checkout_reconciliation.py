@@ -40,6 +40,9 @@ from app.services.audit import write_audit_log
 from app.services.collections import resolve_collection, reverse_successful_collection
 from app.services.crud import execute_maybe_single, get_by_id, update_row
 from app.services.notifications_service import notify_merchant
+from app.services.provider_references import (
+    update_collection_tolerating_repeated_reference,
+)
 from app.services.selcom.schemas import CollectionResult, ProviderStatus
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
@@ -190,9 +193,13 @@ async def complete_checkout_collection_once(
     was_still_processing = collection["status"] == "processing"
     was_already_successful = collection["status"] == "successful"
 
-    update_row(
+    # provider_reference is Selcom's value under our unique index. If the
+    # reference they send now already belongs to another collection, the
+    # update raises 23505 and this whole resolution fails — on the webhook
+    # path, that means a paid collection never gets credited. The helper
+    # keeps the reference this row already has and applies the rest.
+    update_collection_tolerating_repeated_reference(
         client,
-        "collections",
         collection_id,
         {
             "provider_reference": reference or collection.get("provider_reference"),
@@ -203,6 +210,7 @@ async def complete_checkout_collection_once(
             "channel": channel or collection.get("channel"),
             "raw_response": raw_response,
         },
+        context="checkout_reconciliation",
     )
 
     status = map_checkout_status_to_provider_status(
