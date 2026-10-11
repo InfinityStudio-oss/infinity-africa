@@ -24,9 +24,13 @@ from decimal import Decimal
 
 from supabase import Client
 
-from app.core.time import dar_es_salaam_day_start_utc, is_dar_es_salaam_today
+from app.core.time import (
+    dar_es_salaam_day_start_utc,
+    dar_es_salaam_month_start_utc,
+    is_dar_es_salaam_today,
+)
 from app.schemas.enums import AccountStatus
-from app.services.crud import execute_maybe_single
+from app.services.crud import execute_maybe_single, fetch_all
 
 
 def _parse_dt(value: str) -> datetime:
@@ -40,7 +44,7 @@ def _is_today(value: str, today: datetime) -> bool:
     return is_dar_es_salaam_today(value, today)
 
 
-def _platform_revenue_mtd(client: Client, *, start_of_month: datetime) -> Decimal:
+def _platform_revenue_account_id(client: Client) -> str | None:
     account = execute_maybe_single(
         client.table("ledger_accounts")
         .select("id")
@@ -48,30 +52,38 @@ def _platform_revenue_mtd(client: Client, *, start_of_month: datetime) -> Decima
         .is_("merchant_id", "null")
         .maybe_single()
     )
-    if not account:
+    return account["id"] if account else None
+
+
+def _platform_revenue_since(client: Client, *, account_id: str | None, since: str) -> Decimal:
+    """What the platform has earned since `since`, a UTC ISO instant.
+
+    Paged, not a single select. One month already runs to 1,083 credit
+    entries, so the first page stopped short of the newest ones and
+    month-to-date read TZS 27,592.58 against a true 29,430.08 — revenue
+    under-reported by 1,837.50 and widening with every collection.
+    """
+    if not account_id:
         return Decimal(0)
 
-    entries = (
-        client.table("ledger_entries")
+    entries = fetch_all(
+        lambda: client.table("ledger_entries")
         .select("amount, created_at")
-        .eq("ledger_account_id", account["id"])
+        .eq("ledger_account_id", account_id)
         .eq("direction", "credit")
-        .gte("created_at", start_of_month.isoformat())
-        .execute()
-    ).data or []
-    return sum(
-        (Decimal(str(e["amount"])) for e in entries if _parse_dt(e["created_at"]) >= start_of_month),
-        Decimal(0),
+        .gte("created_at", since)
     )
+    return sum((Decimal(str(e["amount"])) for e in entries), Decimal(0))
 
 
 def get_admin_overview(client: Client) -> dict:
     now = datetime.now(timezone.utc)
-    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     total_merchants = (client.table("merchants").select("id", count="exact").execute()).count or 0
 
     day_start = dar_es_salaam_day_start_utc(now)
+    month_start = dar_es_salaam_month_start_utc(now)
+    revenue_account_id = _platform_revenue_account_id(client)
 
     successful_collections = (
         client.table("transactions")
@@ -160,7 +172,15 @@ def get_admin_overview(client: Client) -> dict:
         "paid_invoices_today": paid_invoices_today,
         "outstanding_invoice_value": outstanding_invoice_value,
         "failed_transactions": failed_transactions,
-        "platform_revenue": _platform_revenue_mtd(client, start_of_month=start_of_month),
+        # Two windows, one account. "Today" is what the platform has
+        # earned since midnight in Dar es Salaam; "this month" since the
+        # 1st, same clock.
+        "platform_revenue_today": _platform_revenue_since(
+            client, account_id=revenue_account_id, since=day_start
+        ),
+        "platform_revenue": _platform_revenue_since(
+            client, account_id=revenue_account_id, since=month_start
+        ),
         "pending_onboarding_requests": pending_onboarding_requests,
         "pending_withdrawals": pending_withdrawals,
     }

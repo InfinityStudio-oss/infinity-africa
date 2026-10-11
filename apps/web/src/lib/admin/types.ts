@@ -17,6 +17,9 @@ export interface AdminOverview {
   paid_invoices_today: number;
   outstanding_invoice_value: string;
   failed_transactions: number;
+  /** Since midnight EAT. */
+  platform_revenue_today: string;
+  /** Since the 1st, EAT. */
   platform_revenue: string;
   pending_onboarding_requests: number;
   pending_withdrawals: number;

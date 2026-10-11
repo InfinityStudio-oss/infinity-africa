@@ -22,6 +22,9 @@ class AdminOverviewResponse(BaseModel):
     paid_invoices_today: int
     outstanding_invoice_value: Decimal
     failed_transactions: int
+    # Since midnight in Dar es Salaam, and since the 1st of the Tanzanian
+    # month. Both from the platform_revenue ledger account.
+    platform_revenue_today: Decimal
     platform_revenue: Decimal
     pending_onboarding_requests: int
     pending_withdrawals: int

@@ -65,6 +65,20 @@ def dar_es_salaam_day_start_utc(now: datetime) -> str:
     return local_midnight.astimezone(timezone.utc).isoformat()
 
 
+def dar_es_salaam_month_start_utc(now: datetime) -> str:
+    """Midnight on the 1st of the current Tanzanian month, as UTC ISO.
+
+    Month-to-date has to start where the merchant's month starts, for the
+    same reason the day does: a UTC month boundary begins at 03:00 local
+    on the 1st, so revenue earned in those three hours would be counted
+    in the previous month.
+    """
+    local_first = now.astimezone(_DAR_ES_SALAAM).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    return local_first.astimezone(timezone.utc).isoformat()
+
+
 def is_dar_es_salaam_today(value: str | datetime | None, now: datetime) -> bool:
     """Whether a stored UTC timestamp falls on the current Tanzanian day.
 

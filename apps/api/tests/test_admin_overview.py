@@ -107,3 +107,74 @@ def test_overview_platform_revenue_is_mtd_not_running_balance(fake_client):
     assert response.json()["data"]["platform_revenue"] == "700.00" or float(
         response.json()["data"]["platform_revenue"]
     ) == 700
+
+
+def _seed_revenue_account(fake_client):
+    return fake_client.seed(
+        "ledger_accounts",
+        {
+            "merchant_id": None,
+            "name": "Platform Revenue",
+            "account_type": "revenue",
+            "purpose": "platform_revenue",
+            "currency": "TZS",
+            "balance": "999999",
+        },
+    )
+
+
+def _credit(fake_client, account, amount, created_at):
+    fake_client.seed(
+        "ledger_entries",
+        {
+            "transaction_id": str(uuid.uuid4()),
+            "ledger_account_id": account["id"],
+            "direction": "credit",
+            "amount": str(amount),
+            "currency": "TZS",
+            "created_at": created_at,
+        },
+    )
+
+
+def test_revenue_today_is_separate_from_the_month(fake_client):
+    """The daily figure the Super Admin asked for: what the platform has
+    earned since midnight, beside the month-to-date one."""
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    account = _seed_revenue_account(fake_client)
+
+    now = datetime.now(timezone.utc)
+    eat_now = now.astimezone(timezone(timedelta(hours=3)))
+    # Earlier in the same Tanzanian month, but not today.
+    earlier_this_month = (eat_now.replace(day=1, hour=12) ).astimezone(timezone.utc)
+    if earlier_this_month >= now:
+        earlier_this_month = now - timedelta(days=1)
+    _credit(fake_client, account, "700", earlier_this_month.isoformat())
+    _credit(fake_client, account, "250", now.isoformat())
+
+    body = client.get("/v1/admin/overview", headers=auth_headers(admin_id)).json()["data"]
+
+    assert float(body["platform_revenue_today"]) == 250
+    assert float(body["platform_revenue"]) == 950
+
+
+def test_revenue_counts_every_page_of_entries(fake_client):
+    """Production had 1,083 credit entries in one month, so the single
+    page the old code read stopped 83 short: month-to-date showed
+    TZS 27,592.58 against a true 29,430.08."""
+    from tests.fakes import POSTGREST_DEFAULT_PAGE
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    account = _seed_revenue_account(fake_client)
+
+    now = datetime.now(timezone.utc)
+    entries = POSTGREST_DEFAULT_PAGE + 83
+    for index in range(entries):
+        _credit(fake_client, account, "1", (now - timedelta(seconds=index)).isoformat())
+
+    body = client.get("/v1/admin/overview", headers=auth_headers(admin_id)).json()["data"]
+
+    assert float(body["platform_revenue"]) == entries
+    assert float(body["platform_revenue_today"]) == entries
