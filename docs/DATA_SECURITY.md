@@ -70,10 +70,11 @@ Design detail in [WALLET_LEDGER.md](WALLET_LEDGER.md), reconciliation in
 ### One stale plaintext credential, pending a decision
 
 The pre-2026-08-26 plaintext `merchants.webhook_secret` column still
-exists. No code reads it, so it is harmless to today's requests — but any
-legacy value in it is a webhook signing secret stored in plaintext, and
-"nothing queries it" is a property of the current code rather than of the
-schema. The count query and the one-line drop are in
+exists. No code reads it, and **production was checked on 2026-10-11: 0
+rows hold a value**, so there is no exposure — every merchant with
+webhooks configured regenerated after the encrypted column landed. The
+column is dead weight rather than a leak, and dropping it is
+housekeeping: see
 [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md#1-drop-the-dead-plaintext-merchantswebhook_secret-column).
 
 ## Withdrawals are auditable end to end

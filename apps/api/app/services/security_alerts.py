@@ -71,19 +71,37 @@ class _AlertDeduper:
 _deduper = _AlertDeduper()
 
 
-def _recipient() -> str:
-    """SECURITY_ALERT_EMAIL, falling back to the first CEO_EMAIL recipient.
+def _recipients() -> list[str]:
+    """SECURITY_ALERT_EMAIL, falling back to the CEO_EMAIL recipients.
 
     The fallback exists so turning alerts on does not require a second
     address to be configured first — CEO_EMAIL is already the platform's
-    internal-notification address. Empty means "not configured", which
-    every caller treats as "do nothing".
+    internal-notification address. An empty list means "not configured",
+    which every caller treats as "do nothing".
+
+    **Comma-separated, like CEO_EMAIL.** It used to be a single string
+    handed straight to send_email, so configuring two addresses the
+    obvious way (``a@x,b@x``) produced one malformed recipient and Resend
+    rejected the send — turning the alerts off while looking configured,
+    which is the worst of the three possible states.
+
+    The fallback also used to take only ``ceo_emails[0]``, so a second
+    Super Admin added to CEO_EMAIL silently did not receive security
+    alerts even though they received everything else. Both addresses was
+    a deliberate decision for CEO email; there was no reason for these to
+    disagree with it.
     """
     settings = get_settings()
-    explicit = (settings.security_alert_email or "").strip()
-    if explicit:
-        return explicit
-    return settings.ceo_emails[0] if settings.ceo_emails else ""
+    raw = (settings.security_alert_email or "").strip()
+    if not raw:
+        return list(settings.ceo_emails)
+
+    seen: list[str] = []
+    for part in raw.split(","):
+        address = part.strip()
+        if address and address not in seen:
+            seen.append(address)
+    return seen
 
 
 def mask_phone(value: str | None) -> str:
@@ -132,8 +150,8 @@ def notify_security_event(
         if not settings.security_alerts_enabled:
             return False
 
-        recipient = _recipient()
-        if not recipient:
+        recipients = _recipients()
+        if not recipients:
             # Nothing configured. Deliberately silent rather than noisy —
             # the audit log still has the event.
             return False
@@ -174,18 +192,18 @@ def notify_security_event(
 
         try:
             message_id = send_email(
-                to=recipient,
+                to=recipients,
                 subject=subject,
                 html=_email_shell(body_html=body),
                 sender=settings.email_from,
                 reply_to=settings.email_reply_to,
             )
         except EmailDeliveryError as exc:
-            _safe_log_delivery(client, recipient, subject, status="failed", error=str(exc))
+            _safe_log_delivery(client, recipients, subject, status="failed", error=str(exc))
             logger.warning("security_alert_send_failed event=%s", event)
             return False
 
-        _safe_log_delivery(client, recipient, subject, status="sent", message_id=message_id)
+        _safe_log_delivery(client, recipients, subject, status="sent", message_id=message_id)
         return True
     except Exception as exc:
         logger.exception("security_alert_unexpected_failure event=%s", event)
@@ -197,7 +215,7 @@ def notify_security_event(
 
 def _safe_log_delivery(
     client: Client,
-    recipient: str,
+    recipients: list[str],
     subject: str,
     *,
     status: str,
@@ -211,7 +229,10 @@ def _safe_log_delivery(
             email_type="security_alert",
             related_resource_type=None,
             related_resource_id=None,
-            recipient_email=recipient,
+            # One delivery row per send, so several recipients are joined
+            # rather than logged as separate sends — Resend sent one
+            # message, and the log should say so.
+            recipient_email=", ".join(recipients),
             sender_email=get_settings().email_from,
             subject=subject,
             status=status,

@@ -51,14 +51,51 @@ def test_sends_to_the_configured_security_address(fake_client, sent):
     assert sent[0]["subject"] == "InfinityPay Security Alert: Withdrawal approved"
 
 
-def test_falls_back_to_the_ceo_address_when_no_security_address_is_set(fake_client, sent, monkeypatch):
+def test_several_security_addresses_all_receive_the_alert(fake_client, sent, monkeypatch):
+    """SECURITY_ALERT_EMAIL is comma-separated, like CEO_EMAIL.
+
+    It used to be handed to send_email as a single string, so configuring
+    two addresses the obvious way produced one malformed recipient and
+    Resend rejected the send. That is the worst of the three states: the
+    alerts are off and the config says they are on.
+    """
+    monkeypatch.setenv("SECURITY_ALERT_EMAIL", "security@infinitypay.me,ceo@infinitypay.me")
+    get_settings.cache_clear()
+
+    notify_security_event(fake_client, event="test.event", title="Withdrawal approved")
+
+    assert sent[0]["to"] == ["security@infinitypay.me", "ceo@infinitypay.me"]
+
+
+def test_a_repeated_or_blank_security_address_is_dropped(fake_client, sent, monkeypatch):
+    """A trailing comma or a duplicate must not mail someone twice, same
+    as CEO_EMAIL's own parsing."""
+    monkeypatch.setenv("SECURITY_ALERT_EMAIL", "security@infinitypay.me, ,security@infinitypay.me,")
+    get_settings.cache_clear()
+
+    notify_security_event(fake_client, event="test.event", title="X")
+
+    assert sent[0]["to"] == ["security@infinitypay.me"]
+
+
+def test_falls_back_to_every_ceo_address_when_no_security_address_is_set(
+    fake_client, sent, monkeypatch
+):
+    """All of them, not just the first.
+
+    The fallback used to take ceo_emails[0], so a second Super Admin added
+    to CEO_EMAIL received every other platform notification but silently
+    not the security ones. Sending CEO mail to both Super Admins was a
+    deliberate decision (2026-10-02); there was no reason for these to
+    disagree with it.
+    """
     monkeypatch.setenv("SECURITY_ALERT_EMAIL", "")
     monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me,second@example.com")
     get_settings.cache_clear()
 
     notify_security_event(fake_client, event="test.event", title="Pricing changed")
 
-    assert sent[0]["to"] == ["ceo@infinitypay.me"]
+    assert sent[0]["to"] == ["ceo@infinitypay.me", "second@example.com"]
 
 
 def test_sends_nothing_when_no_recipient_is_configured_anywhere(fake_client, sent, monkeypatch):

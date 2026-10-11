@@ -147,18 +147,25 @@ readable by anything that can reach the `merchants` row.
 A credential that is unused is still a credential. The only thing keeping
 it safe is a property of today's code, not of the schema.
 
-First, find out whether it is actually holding anything:
+**Checked against production on 2026-10-11: 0 rows.**
 
 ```sql
 select count(*) from public.merchants where webhook_secret is not null;
+-- 0
 ```
 
-If that is 0, the column is merely untidy. If it is not 0, those are live
-plaintext secrets and this should be done promptly:
+So there is **no live exposure** — the column is empty, and this is
+housekeeping rather than an incident. Every merchant with webhooks
+configured regenerated after 2026-08-26 and their secret is in
+`webhook_secret_encrypted`. Drop it whenever convenient:
 
 ```sql
 alter table public.merchants drop column if exists webhook_secret;
 ```
+
+Re-run the count before dropping if significant time has passed — the
+column is still writable by anything holding the service role, so "empty
+in October" is not a permanent property.
 
 **Nothing breaks either way.** A merchant whose secret only ever existed
 in this column already cannot sign webhooks with it — they have to
@@ -171,13 +178,25 @@ This was not written as a migration file on purpose: a destructive schema
 change on a live payments database is a decision for a human, and the
 count above should be read first.
 
-### 2. Confirm `SECURITY_ALERT_EMAIL` is set and monitored
+### 2. Set `SECURITY_ALERT_EMAIL` on Railway — currently unset
 
-`security_alert_email` defaults to `""`. With nothing set on Railway, the
-platform's own security alerts — failed Super Admin MFA, rejected IPs —
-are generated and sent nowhere. [SECURITY.md](../SECURITY.md) publishes
-`security@infinitypay.me` as the reporting address; verify that inbox
-exists and is read before relying on either.
+**Checked 2026-10-11: not set.** This is the live gap.
+
+`security_alert_email` defaults to `""`, and
+`app/services/security_alerts.py` sends to it. With nothing configured,
+the platform detects failed Super Admin MFA attempts and rejected API-key
+IPs, builds the alert, and sends it **nowhere**. The detection works; the
+notification does not.
+
+Set it to an inbox someone actually reads. [SECURITY.md](../SECURITY.md)
+publishes `security@infinitypay.me` as the reporting address, so that is
+the natural choice — but confirm the mailbox exists first, because an
+alert delivered to a non-existent address is worse than a known gap: it
+looks configured.
+
+For reference, the rest of the production config was verified correct at
+the same time: `ENVIRONMENT=production`, `REQUIRE_SUPER_ADMIN_MFA=true`,
+`TRUSTED_PROXY_HOPS=1`.
 
 ### 3. Do a restore drill
 
