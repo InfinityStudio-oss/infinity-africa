@@ -17,6 +17,9 @@ from pydantic import BaseModel
 class AdminOverviewResponse(BaseModel):
     total_merchants: int
     collections_today: Decimal
+    # Month to date on the Tanzanian calendar, same boundary as
+    # platform_revenue so the two cards describe one period.
+    collections_this_month: Decimal
     withdrawals_today: Decimal
     active_payment_links: int
     paid_invoices_today: int

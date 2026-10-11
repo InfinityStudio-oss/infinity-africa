@@ -12,6 +12,8 @@ import type { UserRole } from "@infinity/shared";
 export interface AdminOverview {
   total_merchants: number;
   collections_today: string;
+  /** Month to date, EAT. */
+  collections_this_month: string;
   withdrawals_today: string;
   active_payment_links: number;
   paid_invoices_today: number;

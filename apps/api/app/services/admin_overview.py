@@ -85,16 +85,34 @@ def get_admin_overview(client: Client) -> dict:
     month_start = dar_es_salaam_month_start_utc(now)
     revenue_account_id = _platform_revenue_account_id(client)
 
-    successful_collections = (
-        client.table("transactions")
-        .select("gross_amount, created_at")
-        .eq("type", "collection")
-        .eq("status", "successful")
-        .gte("created_at", day_start)
-        .execute()
-    ).data or []
+    def _successful_collections_since(since: str) -> list[dict]:
+        """Paged, not a single select.
+
+        A month of successful collections already runs past a thousand
+        rows on this platform, and a single request answers with one page
+        and says nothing about the rest - which is how Collections Today
+        once read TZS 0.00. Today's own count is a few hundred and
+        climbing, so it gets the same treatment rather than waiting to
+        cross the same line.
+        """
+        return fetch_all(
+            lambda: client.table("transactions")
+            .select("gross_amount, created_at")
+            .eq("type", "collection")
+            .eq("status", "successful")
+            .gte("created_at", since)
+        )
+
+    successful_collections = _successful_collections_since(day_start)
     collections_today = sum(
         (Decimal(str(t["gross_amount"])) for t in successful_collections if _is_today(t["created_at"], now)),
+        Decimal(0),
+    )
+
+    # Month to date, on the merchant's calendar - the same month boundary
+    # platform revenue uses, so the two cards describe the same period.
+    collections_this_month = sum(
+        (Decimal(str(t["gross_amount"])) for t in _successful_collections_since(month_start)),
         Decimal(0),
     )
 
@@ -167,6 +185,7 @@ def get_admin_overview(client: Client) -> dict:
     return {
         "total_merchants": total_merchants,
         "collections_today": collections_today,
+        "collections_this_month": collections_this_month,
         "withdrawals_today": withdrawals_today,
         "active_payment_links": active_payment_links,
         "paid_invoices_today": paid_invoices_today,

@@ -42,7 +42,7 @@ export default async function SuperAdminCommandCenterPage() {
           <AdminKpiCard variant="brand" icon="account_balance_wallet" label="Collections Today" value={formatCurrency(overview.collections_today, "TZS")} />
           <AdminKpiCard variant="brand" icon="send_money" label="Withdrawals Today" value={formatCurrency(overview.withdrawals_today, "TZS")} />
           <AdminKpiCard variant="brand" icon="link" label="Active Payment Links" value={overview.active_payment_links.toLocaleString()} />
-          <AdminKpiCard variant="brand" icon="receipt" label="Paid Invoices Today" value={overview.paid_invoices_today.toLocaleString()} />
+          <AdminKpiCard variant="brand" icon="payments" label="Collections This Month" value={formatCurrency(overview.collections_this_month, "TZS")} caption="Month to date" />
           <AdminKpiCard variant="brand" icon="warning" label="Failed Transactions" value={overview.failed_transactions.toLocaleString()} />
           <AdminKpiCard variant="brand" icon="monetization_on" label="Revenue Today" value={formatCurrency(overview.platform_revenue_today, "TZS")} caption="Since midnight" />
           <AdminKpiCard variant="brand" icon="monetization_on" label="Revenue This Month" value={formatCurrency(overview.platform_revenue, "TZS")} caption="Month to date" />

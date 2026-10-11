@@ -178,3 +178,61 @@ def test_revenue_counts_every_page_of_entries(fake_client):
 
     assert float(body["platform_revenue"]) == entries
     assert float(body["platform_revenue_today"]) == entries
+
+
+def test_collections_this_month_counts_every_page(fake_client):
+    """A month of successful collections already runs past a thousand
+    rows in production, so a single select would report a page as if it
+    were the month."""
+    from tests.fakes import POSTGREST_DEFAULT_PAGE
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    now = datetime.now(timezone.utc)
+    eat_now = now.astimezone(timezone(timedelta(hours=3)))
+    rows = POSTGREST_DEFAULT_PAGE + 120
+    for index in range(rows):
+        # Spread across the current Tanzanian month, newest first, so
+        # none falls outside the window.
+        at = now - timedelta(minutes=index)
+        if at.astimezone(timezone(timedelta(hours=3))).month != eat_now.month:
+            at = now
+        fake_client.seed(
+            "transactions",
+            {
+                "id": str(uuid.uuid4()),
+                "merchant_id": str(uuid.uuid4()),
+                "type": "collection",
+                "status": "successful",
+                "gross_amount": "100",
+                "created_at": at.isoformat(),
+            },
+        )
+
+    body = client.get("/v1/admin/overview", headers=auth_headers(admin_id)).json()["data"]
+
+    assert float(body["collections_this_month"]) == rows * 100
+
+
+def test_collections_this_month_excludes_failed_collections(fake_client):
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    now = datetime.now(timezone.utc).isoformat()
+
+    for status, amount in (("successful", "1000"), ("failed", "9999")):
+        fake_client.seed(
+            "transactions",
+            {
+                "id": str(uuid.uuid4()),
+                "merchant_id": str(uuid.uuid4()),
+                "type": "collection",
+                "status": status,
+                "gross_amount": amount,
+                "created_at": now,
+            },
+        )
+
+    body = client.get("/v1/admin/overview", headers=auth_headers(admin_id)).json()["data"]
+
+    assert float(body["collections_this_month"]) == 1000
