@@ -57,7 +57,7 @@ def list_for_merchant(
 _PAGE = 1000
 
 
-def fetch_all(query_factory, *, page_size: int = _PAGE) -> list[dict]:
+def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = None) -> list[dict]:
     """Every row a query matches, not just its first page.
 
     Takes a factory rather than a built query because a PostgREST query
@@ -67,6 +67,11 @@ def fetch_all(query_factory, *, page_size: int = _PAGE) -> list[dict]:
 
     The loop ends on the first short page, so a table of exactly N*1000
     rows costs one extra empty request rather than looping forever.
+
+    `max_rows` bounds an aggregation that would otherwise grow without
+    limit. Note the server caps a single request at 1000 whatever
+    `.limit()` asks for — `.limit(5000)` returns 1000 rows and says
+    nothing — so a cap only means what it says if it is applied here.
     """
     rows: list[dict] = []
     offset = 0
@@ -76,6 +81,8 @@ def fetch_all(query_factory, *, page_size: int = _PAGE) -> list[dict]:
         if len(page) < page_size:
             return rows
         offset += page_size
+        if max_rows is not None and len(rows) >= max_rows:
+            return rows[:max_rows]
 
 
 def execute_maybe_single(query) -> dict | None:

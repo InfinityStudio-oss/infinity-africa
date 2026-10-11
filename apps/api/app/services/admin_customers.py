@@ -13,21 +13,27 @@ by (merchant_id, customer_phone) — matching the page's own description,
 empty table.
 
 Aggregation happens in Python, not SQL, since supabase-py's query
-builder has no GROUP BY. Fine at this platform's current real scale
-(a handful of merchants, a small number of collections); the
-_MAX_COLLECTIONS_SCANNED cap below is the honest boundary of that
-approach — a real materialized view/RPC would be needed if collection
-volume grows far beyond it, not attempted here.
+builder has no GROUP BY. _MAX_COLLECTIONS_SCANNED is the honest boundary
+of that approach — a real materialized view/RPC would be needed if
+collection volume grows far beyond it, not attempted here.
+
+That cap is now applied while paging, which is the only place it can be
+applied truthfully: PostgREST answers a single request with at most 1000
+rows no matter what `.limit()` asks for, so `.limit(5000)` returned a
+thousand and said nothing about the rest.
 """
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from supabase import Client
 
 from app.core.pagination import PaginationParams
+from app.core.time import dar_es_salaam_date
 from app.services.admin_directory import batch_merchant_codes, batch_merchant_names
+from app.services.crud import fetch_all
 
 _MAX_COLLECTIONS_SCANNED = 5000
 
@@ -52,18 +58,26 @@ def _latest(a: str | None, b: str) -> str:
     return b if a is None or b > a else a
 
 
-def list_admin_customers(
-    client: Client, *, merchant_id: uuid.UUID | None, pagination: PaginationParams
-) -> tuple[list[dict], int]:
-    query = (
-        client.table("collections")
-        .select("merchant_id,customer_phone,payment_link_id,amount,currency,status,completed_at,created_at")
-        .order("created_at", desc=True)
-        .limit(_MAX_COLLECTIONS_SCANNED)
-    )
-    if merchant_id is not None:
-        query = query.eq("merchant_id", str(merchant_id))
-    collections = (query.execute()).data or []
+def _grouped_customers(client: Client, *, merchant_id: uuid.UUID | None) -> list[_CustomerAgg]:
+    """Every customer, newest activity first. The one definition of "a
+    customer" that both the list and its summary read, so a KPI card can
+    never disagree with the table beneath it."""
+    def query():
+        q = (
+            client.table("collections")
+            .select(
+                "merchant_id,customer_phone,payment_link_id,amount,currency,status,completed_at,created_at"
+            )
+            .order("created_at", desc=True)
+        )
+        return q.eq("merchant_id", str(merchant_id)) if merchant_id is not None else q
+
+    # Paged, because the server answers any single request with at most
+    # 1000 rows however large a .limit() asks for. The old
+    # .limit(_MAX_COLLECTIONS_SCANNED) therefore scanned 1000 collections,
+    # not 5000, and the page silently described only the most recent
+    # thousand payments - 547 customers where there were 940.
+    collections = fetch_all(query, max_rows=_MAX_COLLECTIONS_SCANNED)
     collections = [c for c in collections if c.get("customer_phone")]
 
     payment_link_ids = {c["payment_link_id"] for c in collections if c.get("payment_link_id")}
@@ -95,7 +109,38 @@ def list_admin_customers(
         agg.first_seen_at = _earliest(agg.first_seen_at, row["created_at"])
         agg.last_transaction_at = _latest(agg.last_transaction_at, activity_at)
 
-    ordered = sorted(groups.values(), key=lambda a: a.last_transaction_at or "", reverse=True)
+    return sorted(groups.values(), key=lambda a: a.last_transaction_at or "", reverse=True)
+
+
+def summarise_admin_customers(client: Client, *, merchant_id: uuid.UUID | None) -> dict:
+    """The three figures above the table, counted across **every**
+    customer rather than the page the browser happened to receive.
+
+    The page asks for page_size=100, which the API caps at 100, and the
+    cards used to count the rows that came back - so they read "Total
+    Customers 100 / Repeat 53" when the real figures were 940 and 461,
+    with 840 customers invisible. A total that is exactly the page size
+    is not a total.
+    """
+    customers = _grouped_customers(client, merchant_id=merchant_id)
+    month_prefix = dar_es_salaam_date(datetime.now(timezone.utc)).strftime("%Y-%m")
+    return {
+        "total_customers": len(customers),
+        # First seen inside the current Tanzanian month, matching every
+        # other "this month" figure on the platform.
+        "new_this_month": sum(
+            1
+            for c in customers
+            if c.first_seen_at and dar_es_salaam_date(c.first_seen_at).strftime("%Y-%m") == month_prefix
+        ),
+        "repeat_customers": sum(1 for c in customers if c.transaction_count > 1),
+    }
+
+
+def list_admin_customers(
+    client: Client, *, merchant_id: uuid.UUID | None, pagination: PaginationParams
+) -> tuple[list[dict], int]:
+    ordered = _grouped_customers(client, merchant_id=merchant_id)
     total = len(ordered)
     page = ordered[pagination.start : pagination.end + 1]
 

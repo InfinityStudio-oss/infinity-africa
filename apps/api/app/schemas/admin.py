@@ -47,6 +47,14 @@ class AdminCustomerResponse(BaseModel):
     last_transaction_at: datetime | None = None
 
 
+class AdminCustomerSummaryResponse(BaseModel):
+    """Counted across every customer, not the page the browser received."""
+
+    total_customers: int
+    new_this_month: int
+    repeat_customers: int
+
+
 class AdminApiKeyResponse(BaseModel):
     id: uuid.UUID
     merchant_id: uuid.UUID

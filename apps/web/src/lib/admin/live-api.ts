@@ -6,6 +6,7 @@ import type {
   AdminApiKeyPlatformRow,
   AdminApiKeyRow,
   AdminCustomerPlatformRow,
+  AdminCustomerSummary,
   AdminCollectionRow,
   AdminDisputeRow,
   AdminDocumentRequestRow,
@@ -216,6 +217,15 @@ export async function listAdminCustomers(filters?: { merchantId?: string }): Pro
   const params = new URLSearchParams(LIST_ALL_PARAMS);
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   return apiList<AdminCustomerPlatformRow>(`/v1/admin/customers?${params.toString()}`);
+}
+
+export async function getAdminCustomerSummary(
+  filters?: { merchantId?: string },
+): Promise<AdminCustomerSummary | null> {
+  const params = new URLSearchParams();
+  if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
+  const query = params.toString();
+  return apiGet<AdminCustomerSummary>(`/v1/admin/customers/summary${query ? `?${query}` : ""}`);
 }
 
 export async function updateMerchantStatus(merchantId: string, status: MerchantAccountStatus): Promise<void> {

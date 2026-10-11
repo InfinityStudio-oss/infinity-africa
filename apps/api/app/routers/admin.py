@@ -28,6 +28,7 @@ from app.schemas.admin import (
     AdminAuditLogResponse,
     AdminCollectionResponse,
     AdminCustomerResponse,
+    AdminCustomerSummaryResponse,
     AdminInquiryResponse,
     AdminInvoiceResponse,
     AdminMerchantOptionResponse,
@@ -52,7 +53,7 @@ from app.schemas.merchant_notifications import (
 )
 from app.schemas.pay_by_link import PayByLinkResponse
 from app.schemas.webhook_config import WebhookConfigResponse
-from app.services.admin_customers import list_admin_customers
+from app.services.admin_customers import list_admin_customers, summarise_admin_customers
 from app.services.admin_directory import (
     batch_api_key_prefixes,
     batch_merchant_codes,
@@ -493,6 +494,22 @@ def list_admin_customers_route(
     data, total = list_admin_customers(client, merchant_id=merchant_id, pagination=pagination)
     return APIResponse(
         data=[AdminCustomerResponse(**row) for row in data], meta=build_page_meta(pagination, total)
+    )
+
+
+@router.get("/customers/summary", response_model=APIResponse[AdminCustomerSummaryResponse])
+def admin_customers_summary_route(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    merchant_id: Annotated[uuid.UUID | None, Query()] = None,
+):
+    """The Customers page's KPI cards. Separate from the list because the
+    list is paginated and these are not - counting the rows a page
+    returned is what made the cards read 100 when there were 940."""
+    client = get_supabase_admin()
+    return APIResponse(
+        data=AdminCustomerSummaryResponse(
+            **summarise_admin_customers(client, merchant_id=merchant_id)
+        )
     )
 
 

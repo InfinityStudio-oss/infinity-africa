@@ -256,6 +256,15 @@ export interface CollectionPricingRuleRow {
  * merchant + customer phone), not read from a table; see the backend's
  * own admin_customers.py docstring for why. Distinct from the older,
  * still-mock AdminCustomerRow below (lib/admin/api.ts / /admin/customers). */
+/** The Customers page's KPI cards, counted server-side across every
+ * customer. Counting the rows a page returned is what made them read
+ * 100 when the real total was 940. */
+export interface AdminCustomerSummary {
+  total_customers: number;
+  new_this_month: number;
+  repeat_customers: number;
+}
+
 export interface AdminCustomerPlatformRow {
   id: string;
   merchant_id: string;
