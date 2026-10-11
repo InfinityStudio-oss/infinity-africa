@@ -38,6 +38,10 @@ apps/web/.env.*
 # --- Deploy platforms ---
 .railway/
 turbo/
+# Expo build/dev state. apps/mobile has its own .gitignore for this, but
+# `expo export` run from the repo root would land here instead.
+.expo/
+.expo-shared/
 
 # --- Secrets / private material ---
 *.pem
@@ -61,6 +65,17 @@ uploads/
 playwright-report/
 test-results/
 supabase/.temp/
+supabase/.branches/
+
+# Local database dumps. `supabase db dump` and pg_dump output carry real
+# merchant rows, customer phone numbers and ledger history — everything
+# supabase/migrations deliberately does not. Migrations themselves stay
+# tracked; these patterns are narrow so they cannot swallow one.
+*.dump
+*.sql.gz
+supabase/dumps/
+supabase/*dump*.sql
+db-dump*.sql
 
 # Local-only seeded test-account credentials (real, if throwaway, passwords —
 # never push to GitHub; see docs/test-accounts.md's own "Before going live"

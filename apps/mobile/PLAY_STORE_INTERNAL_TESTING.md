@@ -351,12 +351,41 @@ for p in "Available balance" "InfinityPay" "v1/merchant/overview"; do
 done
 
 # These must all be 0
-for p in sk_live sk_test service_role RESEND_API SELCOM_ DATABASE_URL \
-         JWT_SECRET whsec_ SUPABASE_SERVICE_ROLE eyJhbGciOi v1/admin; do
+for p in sk_live sk_test service_role SUPABASE_SERVICE_ROLE RESEND_API \
+         AZAMPAY DATABASE_URL JWT_SECRET whsec_ SENTRY_AUTH_TOKEN \
+         client_secret private_key v1/admin; do
   echo "secret $p: $(grep -a -o -- "$p" "$B" | wc -l)"
+done
+
+# Any JWT in the bundle must be the ANON key. Checking the role claim,
+# not merely counting eyJ, is the point -- see below.
+grep -a -o -E 'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{60,}' "$B" | while read -r t; do
+  p=$(echo "$t" | cut -d. -f2); pad=$(( (4 - ${#p} % 4) % 4 ))
+  echo "$p$(printf '=%.0s' $(seq 1 $pad))" | base64 -d 2>/dev/null \
+    | python -c "import sys,json; print('jwt role:', json.load(sys.stdin).get('role'))"
 done
 ```
 
+**Two traps this script is written around.**
+
 `grep -a` matters: the bundle is Hermes bytecode, and `strings` is not
 installed in this environment — a scan that silently finds nothing because
-the tool is missing looks identical to a clean result.
+the tool is missing looks identical to a clean result. That is why the
+controls are checked first and must be greater than zero.
+
+`eyJhbGciOi` used to be in the forbidden list, expected to be 0. That was
+wrong, and dangerously so in both directions: a **real** production build
+inlines `EXPO_PUBLIC_SUPABASE_ANON_KEY`, which *is* a JWT, so the check
+fails on every correct build — and the natural response to a check that
+always fails is to stop running it. Decode the role claim instead. `anon`
+is correct and expected; `service_role` is an incident.
+
+`SELCOM_` was also removed from the forbidden list. It matches
+`SELCOM_PESA`, a withdrawal method name that legitimately appears in the
+UI, and Hermes packs it adjacent to unrelated strings so the match looks
+alarming out of context. A pattern that fires on correct builds trains
+people to ignore the scan.
+
+**Verified 2026-10-11** against a fresh `expo export` (5.8 MB `.hbc`):
+all three controls > 0, every forbidden pattern 0, one JWT present and it
+decoded to `"role": "anon"`.
