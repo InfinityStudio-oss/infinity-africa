@@ -138,6 +138,10 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
     businessPhone,
     tinNumber,
     websiteOrAppLink,
+    // Kept across a failed submit like every other field. Losing it would
+    // quietly cost the referrer their commission on a signup that only
+    // bounced because of a weak password.
+    referralCode: get("referralCode"),
   };
 
   const errors: Record<string, string[]> = {};

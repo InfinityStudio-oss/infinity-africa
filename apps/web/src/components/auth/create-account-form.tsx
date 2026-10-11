@@ -113,7 +113,9 @@ function SignupComplete({ email, notice, canResend }: { email: string; notice?: 
 
 function CreateAccountFormInner() {
   // useSearchParams rather than a prop: this page is a server component
-  // and the code only matters to the form.
+  // and the code only matters to the form. Seeds the Referral Code field,
+  // which stays editable - a visitor who arrived by link should not have
+  // to retype it, and one who was told a code still needs to enter it.
   const referralCode = (useSearchParams().get("ref") ?? "").trim();
 
   const [state, action, pending] = useActionState(signupWithBusinessAction, null);
@@ -132,12 +134,6 @@ function CreateAccountFormInner() {
 
   return (
     <form action={action} className="mt-8 space-y-9">
-      {/* Carried from /create-account?ref=CODE. Hidden rather than shown:
-          someone arriving through an invite link should not have to
-          understand or confirm it, and an empty value is simply no
-          referral. A bad code never fails the signup - the backend
-          records it and carries on. */}
-      <input type="hidden" name="referralCode" value={referralCode} />
       {state?.formError && (
         <div className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">{state.formError}</div>
       )}
@@ -159,6 +155,27 @@ function CreateAccountFormInner() {
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <Field name="tinNumber" label="TIN" optional hideOptionalHint placeholder="Taxpayer Identification Number" defaultValue={v.tinNumber} errors={err.tinNumber} />
           <Field name="websiteOrAppLink" label="Website or App Link" optional placeholder="www.yourbusiness.co.tz" defaultValue={v.websiteOrAppLink} />
+        </div>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          {/* Visible and editable, not hidden. A code arriving by
+              WhatsApp or word of mouth needs somewhere to go, and the
+              merchant portal tells referrers it can be typed in here.
+              Prefilled from /create-account?ref=CODE so someone who
+              followed a link never has to touch it. */}
+          <div>
+            <Field
+              name="referralCode"
+              label="Referral Code"
+              optional
+              placeholder="e.g. INF-VZ7K3M"
+              // The re-rendered value after a failed submit wins over the
+              // URL, so a typed code survives a validation bounce.
+              defaultValue={v.referralCode ?? referralCode}
+            />
+            <p className="mt-1.5 text-xs text-on-surface-variant">
+              If a business invited you to InfinityPay, enter their code here.
+            </p>
+          </div>
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <div>
