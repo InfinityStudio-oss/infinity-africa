@@ -607,3 +607,23 @@ export interface GeneratedReport {
    * than asking them to trust that "sent" meant the right addresses. */
   emailed_to: string[];
 }
+
+
+/** GET /v1/merchant/referrals.
+ *
+ * Deliberately only counts and money. The referred businesses' names,
+ * contact details, trading volumes and any review flags are another
+ * business's private information; a referrer's interest ends at whether
+ * a referral qualified. */
+export interface MerchantReferralSummary {
+  referral_code: string | null;
+  referral_code_status: string;
+  referral_link: string | null;
+  total_invited: number;
+  approved_referrals: number;
+  qualified_referrals: number;
+  pending_commission: string;
+  approved_commission: string;
+  paid_commission: string;
+  currency: string;
+}

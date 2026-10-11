@@ -24,6 +24,7 @@ from app.routers import (
     admin_disputes,
     admin_onboarding,
     admin_pricing,
+    admin_referrals,
     admin_risk,
     admin_withdrawals,
     auth_actions,
@@ -48,6 +49,7 @@ from app.routers import (
 from app.services.checkout_reconciliation import reconcile_pending_checkout_collections
 from app.services.collection_expiry import expire_stale_pushes
 from app.services.disbursements import reconcile_pending_disbursements
+from app.services.referral_commissions import recalculate_open_referrals
 from app.services.webhook_delivery import deliver_pending_webhooks
 
 settings = get_settings()
@@ -252,6 +254,43 @@ def _start_webhook_delivery_task() -> asyncio.Task | None:
     return asyncio.create_task(_webhook_delivery_loop(interval))
 
 
+async def _referral_recalculation_loop(interval_seconds: float) -> None:
+    """Revalues open referral commissions on a timer.
+
+    Idempotent by construction: each referral has exactly one commission
+    row, updated in place, and anything a Super Admin has already ruled on
+    is skipped. So a missed tick costs nothing and a double tick changes
+    nothing - there is no retry logic here for that reason.
+    """
+    logger.info("referral_recalculation_loop_running interval_seconds=%s", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            # Off the event loop: the sweep is synchronous and walks every
+            # open referral's transactions, which must not stall requests.
+            summary = await asyncio.to_thread(recalculate_open_referrals, get_supabase_admin())
+            if summary.get("processed"):
+                logger.info("scheduled_referral_recalculation %s", summary)
+        except Exception as exc:
+            logger.exception("scheduled_referral_recalculation_failed")
+            capture_exception(exc)
+
+
+def _start_referral_recalculation_task() -> asyncio.Task | None:
+    """Starts only when the programme is on *and* an interval is set, the
+    same opt-in shape as the reconciliation sweeps."""
+    interval = settings.referral_recalculation_interval_seconds
+    if not settings.referral_program_enabled or interval <= 0:
+        logger.info(
+            "referral_recalculation_scheduler_disabled enabled=%s interval_seconds=%s",
+            settings.referral_program_enabled,
+            interval,
+        )
+        return None
+    logger.info("referral_recalculation_scheduler_started interval_seconds=%s", interval)
+    return asyncio.create_task(_referral_recalculation_loop(interval))
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Before anything else. Every required secret defaults to an empty
@@ -275,6 +314,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             _start_checkout_reconciliation_task(),
             _start_disbursement_reconciliation_task(),
             _start_webhook_delivery_task(),
+            _start_referral_recalculation_task(),
         )
         if task is not None
     ]
@@ -341,6 +381,7 @@ app.include_router(transactions.by_reference_router, prefix="/v1")
 app.include_router(webhooks.router, prefix="/v1")
 app.include_router(webhooks.callback_router, prefix="/v1")
 app.include_router(developer_docs.router, prefix="/v1")
+app.include_router(admin_referrals.router, prefix="/v1")
 app.include_router(merchant_webhooks.router, prefix="/v1")
 app.include_router(system.router, prefix="/v1")
 app.include_router(auth_actions.router, prefix="/v1")

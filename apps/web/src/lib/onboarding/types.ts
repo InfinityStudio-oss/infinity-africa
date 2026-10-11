@@ -36,6 +36,10 @@ export interface MerchantSignupInput extends OnboardingMerchantAccountInput {
   full_name: string;
   email: string;
   password: string;
+  /** Invite code, from /create-account?ref=CODE. Optional: the backend
+   * records an unusable one and carries on, so a bad code can never be
+   * the reason a business fails to sign up. */
+  referral_code?: string;
 }
 
 export interface MerchantSignupResult {

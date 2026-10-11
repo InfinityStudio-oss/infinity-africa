@@ -53,6 +53,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Transactions", href: "/super-admin/transactions", icon: "list_alt" },
   { label: "Risk Monitoring", href: "/super-admin/risk-monitoring", icon: "gpp_maybe" },
   { label: "Pricing Rules", href: "/super-admin/pricing-rules", icon: "sell" },
+  { label: "Referrals", href: "/super-admin/referrals", icon: "group_add" },
   { label: "API Keys", href: "/super-admin/api-keys", icon: "api" },
   { label: "Webhooks & Reconciliation", href: "/super-admin/webhooks", icon: "webhook" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", icon: "history" },

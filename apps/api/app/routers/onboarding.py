@@ -6,6 +6,7 @@ the caller's own verified JWT identity (app.auth.get_current_user);
 do (app.auth.get_own_merchant / get_current_user + a null-safe lookup).
 """
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
@@ -34,6 +35,7 @@ from app.services.onboarding import (
     register_onboarding_document,
     signup_merchant,
 )
+from app.services.referrals import capture_referral
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -69,6 +71,12 @@ async def merchant_signup(
     business_phone: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
     tin_certificate: Annotated[UploadFile | None, File()] = None,
+    # Whoever invited this business, if anyone. Carried from
+    # /create-account?ref=CODE, or typed into the form. Optional and
+    # never able to fail a signup: an unknown, disabled or self-referring
+    # code is recorded and ignored (app/services/referrals.py).
+    ref: Annotated[str | None, Form()] = None,
+    referral_code: Annotated[str | None, Form()] = None,
 ):
     """Combined signup: account credentials + business details (+ an
     optional TIN certificate file) in one `multipart/form-data` call.
@@ -106,6 +114,14 @@ async def merchant_signup(
     client = get_supabase_admin()
     result = await signup_merchant(client, payload=payload, tin_certificate=tin_certificate)
     merchant = result["merchant"]
+
+    # After the merchant exists, so a referral can never be the reason one
+    # does not. Returns None for every rejection path.
+    capture_referral(
+        client,
+        code=referral_code or ref,
+        referred_merchant_id=uuid.UUID(merchant["id"]),
+    )
     return APIResponse(
         data=OnboardingSignupResponse(
             merchant_id=merchant["id"],

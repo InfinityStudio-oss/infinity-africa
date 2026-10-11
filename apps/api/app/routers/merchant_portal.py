@@ -99,6 +99,7 @@ from app.schemas.merchant_portal import (
 from app.schemas.merchants import MerchantResponse
 from app.schemas.notifications import NotificationResponse
 from app.schemas.payment_links import PaymentLinkResponse
+from app.schemas.referrals import MerchantReferralSummaryResponse
 from app.schemas.refunds import RefundResponse
 from app.schemas.reports import ReportRequest, ReportResponse
 from app.schemas.transactions import TransactionResponse
@@ -158,6 +159,7 @@ from app.services.payment_links import (
     validate_payment_link_for_collection,
     with_effective_status,
 )
+from app.services.referrals import issue_referral_code, merchant_referral_summary
 from app.services.report_rendering import render_report
 from app.services.reports import build_report
 from app.services.wallet_ledger_export import build_wallet_ledger_workbook
@@ -2245,6 +2247,49 @@ def list_my_notifications(
 # customer's own address). See app/services/email.py::
 # send_merchant_collection_notification_email and
 # app/services/merchant_notifications.py.
+
+
+# --- Referrals -------------------------------------------------------------
+
+
+@router.get("/referrals", response_model=APIResponse[MerchantReferralSummaryResponse])
+def read_my_referrals(
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
+):
+    """This merchant's own invite code and what it has earned.
+
+    Counts and money only. Who the referred businesses are, what they
+    trade and whether any is under review are another business's private
+    affairs - a referrer's interest ends at "did it qualify".
+    """
+    client = get_supabase_admin()
+    return APIResponse(
+        data=MerchantReferralSummaryResponse(
+            **merchant_referral_summary(client, merchant_id=membership.merchant_id)
+        )
+    )
+
+
+@router.post("/referrals/code", response_model=APIResponse[MerchantReferralSummaryResponse])
+def create_my_referral_code(
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+):
+    """Issues this merchant's code, or returns the one they already have.
+
+    Idempotent on purpose: rotating a code would orphan every poster and
+    message already carrying the old one. Merchant-admin only, and only
+    for an approved account.
+    """
+    if not get_settings().referral_program_enabled:
+        raise ValidationAPIError("The referral programme is not available yet.")
+
+    client = get_supabase_admin()
+    issue_referral_code(client, merchant_id=membership.merchant_id, actor_id=membership.user_id)
+    return APIResponse(
+        data=MerchantReferralSummaryResponse(
+            **merchant_referral_summary(client, merchant_id=membership.merchant_id)
+        )
+    )
 
 
 @router.get("/notification-settings", response_model=APIResponse[MerchantNotificationSettingsResponse])

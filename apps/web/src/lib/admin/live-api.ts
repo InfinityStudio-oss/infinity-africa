@@ -7,6 +7,8 @@ import type {
   AdminApiKeyRow,
   AdminCustomerPlatformRow,
   AdminCustomerSummary,
+  AdminReferralRow,
+  AdminReferralSummary,
   AdminCollectionRow,
   AdminDisputeRow,
   AdminDocumentRequestRow,
@@ -91,7 +93,11 @@ async function apiList<T>(path: string): Promise<T[]> {
   return (await apiGet<T[]>(path)) ?? [];
 }
 
-async function apiWrite<T>(path: string, method: "POST" | "PATCH", input?: unknown): Promise<T> {
+async function apiWrite<T>(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  input?: unknown,
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -226,6 +232,39 @@ export async function getAdminCustomerSummary(
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   const query = params.toString();
   return apiGet<AdminCustomerSummary>(`/v1/admin/customers/summary${query ? `?${query}` : ""}`);
+}
+
+export async function listAdminReferrals(filters?: { status?: string }): Promise<AdminReferralRow[]> {
+  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  if (filters?.status) params.set("status", filters.status);
+  return apiList<AdminReferralRow>(`/v1/admin/referrals?${params.toString()}`);
+}
+
+/** Counted server-side across every referral, so the cards cannot report
+ * a page size as a total. */
+export async function getAdminReferralSummary(): Promise<AdminReferralSummary | null> {
+  return apiGet<AdminReferralSummary>("/v1/admin/referrals/summary");
+}
+
+export async function approveReferralCommission(commissionId: string): Promise<void> {
+  await apiWrite(`/v1/admin/referrals/commissions/${commissionId}/approve`, "POST", {});
+}
+
+export async function rejectReferralCommission(commissionId: string, reason: string): Promise<void> {
+  await apiWrite(`/v1/admin/referrals/commissions/${commissionId}/reject`, "POST", { reason });
+}
+
+/** Records a payout made elsewhere. This does not pay anything. */
+export async function markReferralCommissionPaid(commissionId: string, note?: string): Promise<void> {
+  await apiWrite(`/v1/admin/referrals/commissions/${commissionId}/paid`, "POST", { note: note ?? null });
+}
+
+export async function setReferralFraudHold(referralId: string, reason: string): Promise<void> {
+  await apiWrite(`/v1/admin/referrals/${referralId}/fraud-hold`, "POST", { reason });
+}
+
+export async function clearReferralFraudHold(referralId: string): Promise<void> {
+  await apiWrite(`/v1/admin/referrals/${referralId}/fraud-hold`, "DELETE");
 }
 
 export async function updateMerchantStatus(merchantId: string, status: MerchantAccountStatus): Promise<void> {

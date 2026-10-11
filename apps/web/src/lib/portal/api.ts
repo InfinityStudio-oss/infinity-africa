@@ -15,6 +15,7 @@ import { getAccessTokenClient } from "@/lib/supabase/client-session";
 
 import { mockSupportTickets, MOCK_MERCHANT_ID } from "./mock-data";
 import type {
+  MerchantReferralSummary,
   AllowedIpDraft,
   ApiEnvelope,
   ApiKey,
@@ -792,6 +793,19 @@ export async function createSupportTicket(input: { subject: string; category: st
 }
 
 // --- Webhooks (LIVE) ---------------------------------------------------------
+
+/** This merchant's own referral code and what it has earned. Counts and
+ * money only — who they referred is not theirs to see. */
+export async function getMerchantReferrals(): Promise<MerchantReferralSummary | null> {
+  return apiGet<MerchantReferralSummary>("/v1/merchant/referrals");
+}
+
+/** Issues the code, or returns the one they already have. Idempotent: it
+ * never rotates an existing code, which would orphan every link already
+ * shared. */
+export async function createMerchantReferralCode(): Promise<MerchantReferralSummary> {
+  return apiWrite<MerchantReferralSummary>("/v1/merchant/referrals/code", "POST", {});
+}
 
 export async function getWebhookConfig(): Promise<WebhookConfig | null> {
   return apiGet<WebhookConfig>("/v1/merchant/webhook-config");

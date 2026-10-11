@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useActionState } from "react";
 
 import { resendVerificationAction, signupWithBusinessAction } from "@/lib/auth/actions";
 
@@ -110,7 +111,11 @@ function SignupComplete({ email, notice, canResend }: { email: string; notice?: 
   );
 }
 
-export function CreateAccountForm() {
+function CreateAccountFormInner() {
+  // useSearchParams rather than a prop: this page is a server component
+  // and the code only matters to the form.
+  const referralCode = (useSearchParams().get("ref") ?? "").trim();
+
   const [state, action, pending] = useActionState(signupWithBusinessAction, null);
   const v = state?.values ?? {};
   const err = state?.errors ?? {};
@@ -127,6 +132,12 @@ export function CreateAccountForm() {
 
   return (
     <form action={action} className="mt-8 space-y-9">
+      {/* Carried from /create-account?ref=CODE. Hidden rather than shown:
+          someone arriving through an invite link should not have to
+          understand or confirm it, and an empty value is simply no
+          referral. A bad code never fails the signup - the backend
+          records it and carries on. */}
+      <input type="hidden" name="referralCode" value={referralCode} />
       {state?.formError && (
         <div className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">{state.formError}</div>
       )}
@@ -219,5 +230,18 @@ export function CreateAccountForm() {
         </Link>
       </p>
     </form>
+  );
+}
+
+
+/** useSearchParams opts a component into client-side rendering, which
+ * Next requires a Suspense boundary for on an otherwise static route.
+ * The fallback is null because the form is below the fold of its own
+ * heading and a skeleton would flash on every load. */
+export function CreateAccountForm() {
+  return (
+    <Suspense fallback={null}>
+      <CreateAccountFormInner />
+    </Suspense>
   );
 }

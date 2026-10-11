@@ -40,6 +40,7 @@ from app.services.email import (
 )
 from app.services.ledger import get_wallet_balance
 from app.services.merchant_code import generate_merchant_code
+from app.services.referrals import start_referral_period
 
 # Documents required by the system for a merchant to go live, checked at
 # approval time. Deliberately empty: KYC document upload was removed from
@@ -595,6 +596,12 @@ def approve_onboarding_submission(
         },
     )
     update_row(client, "merchants", merchant_id, {"status": "active", "kyc_status": "verified"})
+
+    # If this business arrived through someone's referral code, their
+    # 30-day earning window opens now - at approval, not at signup, so a
+    # long review does not spend the referrer's month. Best-effort: an
+    # approval must never fail because of referral bookkeeping.
+    start_referral_period(client, referred_merchant_id=merchant_id)
 
     # Lazily creates the merchant's wallet ledger account if it doesn't
     # already exist — same get-or-create path every collection/withdrawal

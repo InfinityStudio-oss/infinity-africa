@@ -191,6 +191,10 @@ export async function signupWithBusinessAction(_prevState: FormState, formData: 
       website_url: websiteOrAppLink || null,
       accepted_terms: agreedToTerms,
       accepted_privacy: agreedToPrivacy,
+      // Carried from /create-account?ref=CODE via a hidden field. Optional,
+      // and the backend records an unusable code and carries on rather than
+      // failing the signup over it.
+      referral_code: get("referralCode") || undefined,
     });
   } catch (err) {
     if (err instanceof OnboardingApiError) {

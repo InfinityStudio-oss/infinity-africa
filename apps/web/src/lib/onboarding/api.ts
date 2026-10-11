@@ -121,6 +121,9 @@ export async function submitMerchantSignup(input: MerchantSignupInput): Promise<
   if (input.business_email) fd.set("business_email", input.business_email);
   if (input.business_phone) fd.set("business_phone", input.business_phone);
   if (input.notes) fd.set("notes", input.notes);
+  // Whoever invited this business, from /create-account?ref=CODE. Optional,
+  // and the backend never fails a signup over a bad one.
+  if (input.referral_code) fd.set("referral_code", input.referral_code);
   for (const service of input.services_needed ?? []) fd.append("services_needed", service);
 
   let res: Response;

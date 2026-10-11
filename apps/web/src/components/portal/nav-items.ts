@@ -21,5 +21,6 @@ export const PORTAL_NAV_ITEMS: PortalNavItem[] = [
   { label: "Team", href: "/dashboard/users", icon: "group_add" },
   { label: "API Credentials", href: "/portal/api-credentials", icon: "vpn_key" },
   { label: "Reports", href: "/portal/reports", icon: "bar_chart" },
+  { label: "Invite & Earn", href: "/portal/referrals", icon: "group_add", requiresVerification: true },
   { label: "Settings", href: "/dashboard/settings", icon: "settings" },
 ];

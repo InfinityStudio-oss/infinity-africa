@@ -687,3 +687,46 @@ export interface MerchantOption {
   business_name: string;
   merchant_code: string | null;
 }
+
+/** One referral relationship, with its current commission attached.
+ * GET /v1/admin/referrals. */
+export interface AdminReferralRow {
+  id: string;
+  referrer_merchant_id: string;
+  referrer_name: string | null;
+  referrer_code: string | null;
+  referred_merchant_id: string;
+  referred_name: string | null;
+  referred_code: string | null;
+  referral_code_used: string;
+  status: string;
+  signup_at: string;
+  referred_approved_at: string | null;
+  referral_period_start_at: string | null;
+  referral_period_end_at: string | null;
+  qualification_volume_threshold: string;
+  commission_rate_bps: number;
+  minimum_payout_amount: string;
+  currency: string;
+  ineligible_reason: string | null;
+  fraud_flag_reason: string | null;
+  commission_id: string | null;
+  commission_status: string | null;
+  successful_volume: string | null;
+  infinitypay_net_revenue: string | null;
+  commission_amount: string | null;
+  /** Whether this could be approved right now — the question a reviewer
+   * is actually asking. */
+  payout_eligible: boolean;
+}
+
+/** Counted across every referral, not the page received. */
+export interface AdminReferralSummary {
+  total_referrals: number;
+  active_referrals: number;
+  fraud_holds: number;
+  awaiting_review: number;
+  pending_review_amount: string;
+  approved_unpaid_amount: string;
+  paid_amount: string;
+}

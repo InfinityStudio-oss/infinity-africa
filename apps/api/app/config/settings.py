@@ -654,6 +654,42 @@ class Settings(BaseSettings):
     # separately zeroing each interval var.
     enable_auto_reconciliation: bool = True
 
+    # --- Merchant referral commissions -------------------------------
+    #
+    # Off by default. The tables and endpoints ship inert: with this
+    # False, no code is issued, no referral is captured at signup, and the
+    # daily recalculation never starts. Turning it on changes nothing
+    # retroactively - a referral has to be captured while it is on.
+    #
+    # Nothing here pays anybody. A commission still needs a Super Admin to
+    # approve it, and marking one paid records a payout made elsewhere.
+    referral_program_enabled: bool = False
+    # 1500 bps = 15% of what InfinityPay earned from the referred
+    # merchant, never of what the merchant collected.
+    referral_commission_rate_bps: int = 1500
+    # The referred merchant must put this much through in successful
+    # collections, inside the window, before anything is owed. This is
+    # what stops a signup farm paying out.
+    referral_min_successful_volume: Decimal = Decimal(100000)
+    # Below this, a commission is held as below_threshold rather than
+    # offered for review - not worth an approval and a payout each.
+    referral_min_payout_amount: Decimal = Decimal(5000)
+    # Measured from approval, not signup.
+    referral_period_days: int = 30
+    # 0 disables the sweep, matching the reconciliation intervals above.
+    referral_recalculation_interval_seconds: int = 3600
+
+    @property
+    def referral_defaults(self) -> dict:
+        """The terms a new referral is captured under. Copied onto the row
+        so a later change to these numbers cannot re-price a referral that
+        has already been earned."""
+        return {
+            "qualification_volume_threshold": str(self.referral_min_successful_volume),
+            "commission_rate_bps": self.referral_commission_rate_bps,
+            "minimum_payout_amount": str(self.referral_min_payout_amount),
+        }
+
     @property
     def docs_enabled(self) -> bool:
         """Whether Swagger UI (/docs), ReDoc (/redoc), and the raw OpenAPI
