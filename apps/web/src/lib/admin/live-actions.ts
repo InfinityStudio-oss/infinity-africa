@@ -39,14 +39,57 @@ import {
 } from "./live-api";
 import type { MerchantAccountStatus } from "./types";
 
-export async function approveMerchantAction(merchantId: string) {
-  await approveMerchantOnboarding(merchantId);
-  revalidatePath("/super-admin/merchants");
+export interface MerchantActionState {
+  error: string | null;
+  /** true once a submit completed successfully — drives the inline
+   * confirmation in merchants-table.tsx. */
+  ok: boolean;
+  message: string | null;
 }
 
-export async function setMerchantStatusAction(merchantId: string, status: MerchantAccountStatus) {
-  await updateMerchantStatus(merchantId, status);
+/** Same silent-failure fix as runWithdrawalAction below (reported: "When I
+ * click this button is not showing anything"). Approve/Suspend/Reactivate
+ * in the Businesses table were bare `<form action>`: the audit log proved
+ * Suspend had fired four times, but the row only changed after the
+ * revalidated page came back, and a failed request threw straight out of
+ * the action with nothing rendered. Either way the button looked dead. */
+async function runMerchantAction(run: () => Promise<string>): Promise<MerchantActionState> {
+  let message: string;
+  try {
+    message = await run();
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Something went wrong. Try again.",
+      ok: false,
+      message: null,
+    };
+  }
   revalidatePath("/super-admin/merchants");
+  return { error: null, ok: true, message };
+}
+
+export async function approveMerchantAction(merchantId: string): Promise<MerchantActionState> {
+  return runMerchantAction(async () => {
+    await approveMerchantOnboarding(merchantId);
+    return "Approved — the business can trade.";
+  });
+}
+
+const MERCHANT_STATUS_DONE: Record<MerchantAccountStatus, string> = {
+  active: "Reactivated.",
+  pending: "Set back to pending.",
+  suspended: "Suspended — logins, payment links, invoices, API keys and withdrawals are blocked.",
+  closed: "Closed.",
+};
+
+export async function setMerchantStatusAction(
+  merchantId: string,
+  status: MerchantAccountStatus,
+): Promise<MerchantActionState> {
+  return runMerchantAction(async () => {
+    await updateMerchantStatus(merchantId, status);
+    return MERCHANT_STATUS_DONE[status];
+  });
 }
 
 export async function revokeAdminApiKeyAction(apiKeyId: string) {

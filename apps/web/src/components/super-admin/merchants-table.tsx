@@ -1,15 +1,158 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
 import { Icon } from "@/components/portal/icon";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { approveMerchantAction, setMerchantStatusAction } from "@/lib/admin/live-actions";
+import {
+  approveMerchantAction,
+  setMerchantStatusAction,
+  type MerchantActionState,
+} from "@/lib/admin/live-actions";
 import { merchantStatusBadge } from "@/lib/admin/status-tones";
 import type { Merchant } from "@/lib/admin/types";
+
+const MERCHANT_ACTION_IDLE: MerchantActionState = { error: null, ok: false, message: null };
+
+/** Must be a child of the <form>, per useFormStatus's own rule. */
+function IconSubmit({
+  icon,
+  title,
+  className,
+}: {
+  icon: string;
+  title: string;
+  className: string;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      title={pending ? `${title}…` : title}
+      aria-busy={pending}
+      className={`p-1.5 disabled:opacity-60 ${className}`}
+    >
+      <Icon
+        name={pending ? "progress_activity" : icon}
+        className={`text-[18px] ${pending ? "animate-spin" : ""}`}
+      />
+    </button>
+  );
+}
+
+function TextSubmit({ idleLabel, pendingLabel, className }: { idleLabel: string; pendingLabel: string; className: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className={`${className} disabled:opacity-60`}>
+      {pending ? pendingLabel : idleLabel}
+    </button>
+  );
+}
+
+/** The piece these buttons were missing: a completed action said nothing,
+ * so a Suspend that had worked looked identical to one that had not. */
+function ActionFeedback({ state }: { state: MerchantActionState }) {
+  if (state.error) {
+    return (
+      <p className="mt-1 inline-flex items-start gap-1 text-xs text-error text-left max-w-[16rem]">
+        <Icon name="error" className="text-[14px] shrink-0" />
+        {state.error}
+      </p>
+    );
+  }
+  if (state.ok) {
+    return (
+      <p className="mt-1 inline-flex items-start gap-1 text-xs text-primary text-left max-w-[16rem]">
+        <Icon name="check_circle" className="text-[14px] shrink-0" />
+        {state.message ?? "Done."}
+      </p>
+    );
+  }
+  return null;
+}
+
+function ApproveMerchantForm({ merchantId }: { merchantId: string }) {
+  const [state, formAction] = useActionState<MerchantActionState, FormData>(
+    () => approveMerchantAction(merchantId),
+    MERCHANT_ACTION_IDLE,
+  );
+  return (
+    <>
+      <form action={formAction} className="inline">
+        <IconSubmit icon="check_circle" title="Approve" className="text-on-surface-variant hover:text-primary" />
+      </form>
+      <ActionFeedback state={state} />
+    </>
+  );
+}
+
+/** Suspension stops the business trading and ends its portal session, so
+ * it asks first — an icon button one pixel from "open merchant" is too
+ * easy to hit by accident for something with that effect. */
+function SuspendMerchantForm({ merchantId, businessName }: { merchantId: string; businessName: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const [state, formAction] = useActionState<MerchantActionState, FormData>(
+    () => setMerchantStatusAction(merchantId, "suspended"),
+    MERCHANT_ACTION_IDLE,
+  );
+
+  // On success the row re-renders from revalidated data as "suspended", so
+  // this component unmounts and the Reactivate button takes its place —
+  // the status badge flipping is the confirmation. A failure keeps the row
+  // as it is, which is why the error has to be shown here, next to a
+  // button that is still there to try again.
+  return (
+    <>
+      {confirming ? (
+        <form action={formAction} className="inline-flex items-center gap-2">
+          <span className="text-xs text-on-surface-variant">Suspend {businessName}?</span>
+          <TextSubmit
+            idleLabel="Confirm"
+            pendingLabel="Suspending…"
+            className="px-2 py-1 rounded-md bg-error text-on-error text-xs font-semibold"
+          />
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="px-2 py-1 rounded-md border border-surface-container-highest text-xs"
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          title="Suspend"
+          className="p-1.5 text-on-surface-variant hover:text-error"
+        >
+          <Icon name="block" className="text-[18px]" />
+        </button>
+      )}
+      <ActionFeedback state={state} />
+    </>
+  );
+}
+
+function ReactivateMerchantForm({ merchantId }: { merchantId: string }) {
+  const [state, formAction] = useActionState<MerchantActionState, FormData>(
+    () => setMerchantStatusAction(merchantId, "active"),
+    MERCHANT_ACTION_IDLE,
+  );
+  return (
+    <>
+      <form action={formAction} className="inline">
+        <IconSubmit icon="restart_alt" title="Reactivate" className="text-on-surface-variant hover:text-primary" />
+      </form>
+      <ActionFeedback state={state} />
+    </>
+  );
+}
 
 function initials(name: string): string {
   return name
@@ -132,31 +275,16 @@ export function MerchantsTable({ rows }: { rows: Merchant[] }) {
                       <td className={`${tdClass} text-on-surface-variant text-xs`}>{formatDateTime(merchant.created_at)}</td>
                       <td className={`${tdClass} text-right whitespace-nowrap`}>
                         {merchant.account_status === "pending" && (
-                          <form action={approveMerchantAction.bind(null, merchant.merchant_id)} className="inline">
-                            <button className="p-1.5 text-on-surface-variant hover:text-primary" title="Approve">
-                              <Icon name="check_circle" className="text-[18px]" />
-                            </button>
-                          </form>
+                          <ApproveMerchantForm merchantId={merchant.merchant_id} />
                         )}
                         {merchant.account_status === "active" && (
-                          <form
-                            action={setMerchantStatusAction.bind(null, merchant.merchant_id, "suspended")}
-                            className="inline"
-                          >
-                            <button className="p-1.5 text-on-surface-variant hover:text-error" title="Suspend">
-                              <Icon name="block" className="text-[18px]" />
-                            </button>
-                          </form>
+                          <SuspendMerchantForm
+                            merchantId={merchant.merchant_id}
+                            businessName={merchant.business_name}
+                          />
                         )}
                         {merchant.account_status === "suspended" && (
-                          <form
-                            action={setMerchantStatusAction.bind(null, merchant.merchant_id, "active")}
-                            className="inline"
-                          >
-                            <button className="p-1.5 text-on-surface-variant hover:text-primary" title="Reactivate">
-                              <Icon name="restart_alt" className="text-[18px]" />
-                            </button>
-                          </form>
+                          <ReactivateMerchantForm merchantId={merchant.merchant_id} />
                         )}
                       </td>
                     </tr>
