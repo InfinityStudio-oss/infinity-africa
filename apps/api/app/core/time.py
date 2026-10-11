@@ -33,6 +33,38 @@ def dar_es_salaam_day_bounds_utc(
     return start_utc, end_utc
 
 
+def dar_es_salaam_date(value: str | datetime) -> date:
+    """The Tanzanian calendar date a UTC timestamp falls on.
+
+    Timestamps are stored in UTC, but a merchant's day is the one they
+    live in. Tanzania is UTC+3 with no DST, so a UTC calendar date rolls
+    over at 03:00 local — which put every payment taken between midnight
+    and 3am into the previous business day, and reset the "today" counters
+    at 3am while hotspot merchants were still trading.
+    """
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+        str(value).replace("Z", "+00:00")
+    )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(_DAR_ES_SALAAM).date()
+
+
+def is_dar_es_salaam_today(value: str | datetime | None, now: datetime) -> bool:
+    """Whether a stored UTC timestamp falls on the current Tanzanian day.
+
+    `now` is passed in rather than read here so one request's counters all
+    agree, even if it straddles midnight. A null timestamp (a withdrawal
+    with no completed_at, say) is never "today".
+    """
+    if not value:
+        return False
+    try:
+        return dar_es_salaam_date(value) == dar_es_salaam_date(now)
+    except ValueError:
+        return False
+
+
 def to_dar_es_salaam(iso_value: str) -> datetime:
     """Parses a UTC ISO timestamp (as stored in created_at columns) and
     converts it to Africa/Dar_es_Salaam local time — for display only

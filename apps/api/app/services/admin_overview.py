@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.time import is_dar_es_salaam_today
 from app.schemas.enums import AccountStatus
 from app.services.crud import execute_maybe_single
 
@@ -22,7 +23,10 @@ def _parse_dt(value: str) -> datetime:
 
 
 def _is_today(value: str, today: datetime) -> bool:
-    return _parse_dt(value).date() == today.date()
+    """The merchant's day, not UTC's. See app/core/time.py — Tanzania is
+    UTC+3, so comparing UTC dates rolled the business day over at 03:00
+    local and reset these counters mid-trading."""
+    return is_dar_es_salaam_today(value, today)
 
 
 def _platform_revenue_mtd(client: Client, *, start_of_month: datetime) -> Decimal:

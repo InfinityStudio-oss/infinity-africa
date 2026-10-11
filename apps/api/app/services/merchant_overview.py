@@ -20,19 +20,17 @@ from decimal import Decimal
 from supabase import Client
 
 from app.core.errors import NotFoundError
+from app.core.time import is_dar_es_salaam_today
 from app.services.crud import get_by_id
 from app.services.ledger import get_wallet_balance
 
 
 def _is_today(value: str | None, now: datetime) -> bool:
-    """Calendar-day comparison in UTC, matching admin_overview's. A null
-    timestamp (a withdrawal with no completed_at) is never "today"."""
-    if not value:
-        return False
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date() == now.date()
-    except ValueError:
-        return False
+    """Calendar-day comparison in Africa/Dar_es_Salaam, matching
+    admin_overview's and the reports/export endpoints, which already use
+    the merchant's own midnight. A null timestamp (a withdrawal with no
+    completed_at) is never "today"."""
+    return is_dar_es_salaam_today(value, now)
 
 _PENDING_TRANSACTION_STATUSES = ("pending", "processing")
 _UNPAID_INVOICE_STATUSES = ("SENT", "PARTIALLY_PAID", "OVERDUE")
