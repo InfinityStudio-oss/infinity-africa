@@ -178,25 +178,41 @@ This was not written as a migration file on purpose: a destructive schema
 change on a live payments database is a decision for a human, and the
 count above should be read first.
 
-### 2. Set `SECURITY_ALERT_EMAIL` on Railway — currently unset
+### 2. `SECURITY_ALERT_EMAIL` — done 2026-10-11
 
-**Checked 2026-10-11: not set.** This is the live gap.
+Set to `ceo@infinitypay.me,masanja.paul3107@gmail.com`: both Super
+Admins, both confirmed real mailboxes.
 
-`security_alert_email` defaults to `""`, and
-`app/services/security_alerts.py` sends to it. With nothing configured,
-the platform detects failed Super Admin MFA attempts and rejected API-key
-IPs, builds the alert, and sends it **nowhere**. The detection works; the
-notification does not.
+Three things were wrong here and all three are fixed, recorded because
+each is easy to reintroduce:
 
-Set it to an inbox someone actually reads. [SECURITY.md](../SECURITY.md)
-publishes `security@infinitypay.me` as the reporting address, so that is
-the natural choice — but confirm the mailbox exists first, because an
-alert delivered to a non-existent address is worse than a known gap: it
-looks configured.
+- **It was unset.** Not the hole it first looked like — `_recipients()`
+  falls back to `CEO_EMAIL`, which is set, so alerts were reaching
+  `ceo@infinitypay.me` all along. The claim that they went "nowhere" was
+  wrong.
+- **It could not hold two addresses.** It was handed to `send_email` as
+  one string, so `a@x,b@x` produced a single malformed recipient and
+  Resend rejected the send. Now comma-parsed with dedup, like
+  `CEO_EMAIL`.
+- **The fallback used only `ceo_emails[0]`**, so the second Super Admin
+  received every other notification but not the security ones. Now all of
+  them.
+
+**`security@infinitypay.me` does not exist.** It was briefly set as a
+recipient and removed. Do not use it anywhere until the mailbox is
+created — an alert sent to a mailbox nobody owns is worse than a known
+gap, because the configuration looks right.
+
+**Changing this variable needs a restart, not just a `--set`.** Settings
+are read once at startup through an `lru_cache`, so a value set with
+`railway variables --set --skip-deploys` sits in Railway looking
+configured while the live process keeps using the old one. Omit
+`--skip-deploys`, or `railway redeploy` afterwards.
 
 For reference, the rest of the production config was verified correct at
 the same time: `ENVIRONMENT=production`, `REQUIRE_SUPER_ADMIN_MFA=true`,
-`TRUSTED_PROXY_HOPS=1`.
+`TRUSTED_PROXY_HOPS=1`, `SECURITY_ALERTS_ENABLED` unset but defaulting to
+`true`.
 
 ### 3. Do a restore drill
 

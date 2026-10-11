@@ -8,16 +8,19 @@ links to.
 
 ## Reporting a vulnerability
 
-Email **security@infinitypay.me** with what you found, how to reproduce it,
-and what you could reach with it. Do not open a public GitHub issue for
+Email **ceo@infinitypay.me** with what you found, how to reproduce it, and
+what you could reach with it. Do not open a public GitHub issue for
 anything that affects money, merchant data or authentication.
 
-> **Set this up before relying on it.** That address is the one the
-> platform's own `SECURITY_ALERT_EMAIL` is expected to point at, but
-> `security_alert_email` defaults to empty — with nothing configured on
-> Railway, automated security alerts are not sent anywhere and the inbox
-> above may not be monitored. Confirm both before publishing this file
-> anywhere public. See [docs/SECURITY_CHECKLIST.md](docs/SECURITY_CHECKLIST.md).
+> **Not `security@infinitypay.me`.** An earlier draft of this file
+> published that address. It does not exist (confirmed 2026-10-11), and a
+> vulnerability report sent to a mailbox nobody owns is worse than no
+> address at all — the reporter believes they have told us. `ceo@` is a
+> real, monitored inbox and is also where the platform's own automated
+> security alerts go (`SECURITY_ALERT_EMAIL`).
+>
+> If a dedicated `security@` mailbox is created later, change it here and
+> in `SECURITY_ALERT_EMAIL` on Railway together, not one or the other.
 
 If you believe a credential has leaked, say so in the first line — that
 changes the response from "triage" to "rotate now".
