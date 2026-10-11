@@ -2,7 +2,8 @@
  * mobile number belongs to.
  *
  * Mixx by Yas (Tigo) refuses a push below TZS 1,000; every other network
- * accepts from TZS 100. Enforced on the backend in
+ * is refused below TZS 200 (Selcom's own per-order floor, raised from
+ * 100 on 2026-10-11). Enforced on the backend in
  * `apps/api/app/core/payment_minimums.py` — this copy exists so the
  * customer finds out while they are still typing, instead of after a
  * round trip that was always going to fail.
@@ -24,7 +25,7 @@ export enum MobileNetwork {
 }
 
 export const MIXX_BY_YAS_MINIMUM = 1000;
-export const DEFAULT_MINIMUM = 100;
+export const DEFAULT_MINIMUM = 200;
 
 /** Two-digit national prefix (what follows "255") -> network. Mirrors
  * _PREFIX_TO_NETWORK in the Python module, including 77 — originally
@@ -50,7 +51,7 @@ export const MIXX_BY_YAS_MESSAGE =
   "Minimum amount for Tigo / Mixx by Yas is TZS 1,000. " +
   "Please enter TZS 1,000 or more, or use another mobile money network.";
 
-export const DEFAULT_MINIMUM_MESSAGE = "Minimum payment amount is TZS 100.";
+export const DEFAULT_MINIMUM_MESSAGE = "Minimum payment amount is TZS 200.";
 
 /** Normalises the shapes a customer actually types — 0713…, 713…,
  * +255713…, with spaces or dashes — to "255XXXXXXXXX", or null if it is

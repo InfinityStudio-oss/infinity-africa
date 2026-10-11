@@ -85,7 +85,7 @@ def test_an_unusable_number_falls_back_rather_than_blocking(bad):
     """An unknown prefix must not invent a 1,000 floor. Phone validity is
     the phone validator's job; this one defaults to the baseline."""
     assert detect_network(bad) is None
-    assert minimum_for(detect_network(bad)) == Decimal(100)
+    assert minimum_for(detect_network(bad)) == Decimal(200)
 
 
 @pytest.mark.parametrize(
@@ -113,14 +113,17 @@ def test_tigo_at_exactly_one_thousand_is_allowed():
     assert_amount_allowed(Decimal(1000), customer_phone=TIGO_PHONE)
 
 
-def test_another_network_at_one_hundred_is_allowed():
-    assert_amount_allowed(Decimal(100), customer_phone=VODACOM_PHONE)
+def test_another_network_at_two_hundred_is_allowed():
+    """The boundary: 200 is the minimum, not the threshold to exceed."""
+    assert_amount_allowed(Decimal(200), customer_phone=VODACOM_PHONE)
 
 
-def test_another_network_below_one_hundred_is_rejected():
+def test_another_network_below_two_hundred_is_rejected():
+    """TZS 100 used to be allowed through to Selcom, which refused every
+    one of them — 180 attempts since 1 September, no successes."""
     with pytest.raises(AmountBelowOperatorMinimumError) as exc:
-        assert_amount_allowed(Decimal(99), customer_phone=VODACOM_PHONE)
-    assert exc.value.message == "Minimum payment amount is TZS 100."
+        assert_amount_allowed(Decimal(100), customer_phone=VODACOM_PHONE)
+    assert exc.value.message == "Minimum payment amount is TZS 200."
 
 
 def test_five_hundred_is_fine_on_a_network_that_accepts_it():
@@ -275,24 +278,28 @@ def test_a_tigo_payment_of_exactly_one_thousand_goes_through(fake_client, monkey
     assert collections[0]["status"] in ("processing", "failed")
 
 
-def test_another_network_at_one_hundred_goes_through(fake_client, monkeypatch):
+def test_another_network_at_two_hundred_goes_through(fake_client, monkeypatch):
     _patch_checkout_client(monkeypatch)
     merchant_id, raw_key = _merchant_with_key(fake_client)
 
-    response = _wallet_push(raw_key, merchant_id, "100.00", VODACOM_PHONE)
+    response = _wallet_push(raw_key, merchant_id, "200.00", VODACOM_PHONE)
 
     assert response.status_code == 202, response.text
     assert len(fake_client.table("collections")._table.rows) == 1
 
 
-def test_another_network_below_one_hundred_is_refused_by_the_api(fake_client):
+def test_another_network_below_two_hundred_is_refused_by_the_api(fake_client):
+    """The exact shape production was producing: a TZS 100 push that
+    reached Selcom and came back "Invalid amount. Minimum amount required
+    for the order is TZS 200". It is now refused before anything is
+    created, so the customer is told while they are typing."""
     merchant_id, raw_key = _merchant_with_key(fake_client)
 
-    response = _wallet_push(raw_key, merchant_id, "99.00", VODACOM_PHONE)
+    response = _wallet_push(raw_key, merchant_id, "100.00", VODACOM_PHONE)
 
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "AMOUNT_BELOW_OPERATOR_MINIMUM"
-    assert response.json()["error"]["message"] == "Minimum payment amount is TZS 100."
+    assert response.json()["error"]["message"] == "Minimum payment amount is TZS 200."
 
 
 # --- every failed collection must say why, in a code a partner can read ---

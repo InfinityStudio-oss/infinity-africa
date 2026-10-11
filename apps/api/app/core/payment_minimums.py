@@ -1,8 +1,11 @@
 """Per-network minimum payment amounts, and the network a Tanzanian
 mobile number belongs to.
 
-Mixx by Yas (Tigo) rejects a push below TZS 1,000. Every other mobile
-money network on this platform accepts from TZS 100. Before this module,
+Mixx by Yas (Tigo) rejects a push below TZS 1,000. Everything else is
+refused below TZS 200 — Selcom's own floor, raised from 100 on
+2026-10-11 after production showed 180 pushes at TZS 100 since 1
+September with not one success, every one coming back "Invalid amount.
+Minimum amount required for the order is TZS 200". Before this module,
 a customer entering 500 on a Tigo number got as far as Selcom and came
 back as a failed payment — the money never moved, but the merchant saw a
 failure, the customer saw a dead prompt, and a provider attempt was spent
@@ -39,7 +42,13 @@ MIXX_BY_YAS_MINIMUM: Decimal = Decimal(1000)
 # Every other network, and the floor applied when the network is unknown
 # or the customer has not chosen one yet (a QR scan, a hosted checkout
 # page) — see assert_amount_allowed.
-DEFAULT_MINIMUM: Decimal = Decimal(100)
+#
+# 200, not 100: Selcom states this one per *order*, not per network, so it
+# applies to an unmapped prefix too. That is why prefixes 63 and 64 — seen
+# in production and deliberately still unmapped, because guessing an
+# operator's range in a money rule is worse than not knowing it — are
+# already covered by this floor rather than needing a table entry.
+DEFAULT_MINIMUM: Decimal = Decimal(200)
 
 # The two-digit national prefix (what follows "255") -> network.
 #
@@ -96,7 +105,7 @@ MIXX_BY_YAS_MESSAGE = (
     "Minimum amount for Tigo / Mixx by Yas is TZS 1,000. "
     "Please enter TZS 1,000 or more, or use another mobile money network."
 )
-DEFAULT_MESSAGE = "Minimum payment amount is TZS 100."
+DEFAULT_MESSAGE = "Minimum payment amount is TZS 200."
 
 
 class AmountBelowOperatorMinimumError(APIError):
