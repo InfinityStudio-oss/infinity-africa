@@ -50,6 +50,21 @@ def dar_es_salaam_date(value: str | datetime) -> date:
     return parsed.astimezone(_DAR_ES_SALAAM).date()
 
 
+def dar_es_salaam_day_start_utc(now: datetime) -> str:
+    """Midnight of the current Tanzanian day, as a UTC ISO string.
+
+    For narrowing a query to "today" in the database rather than fetching
+    every row and filtering in Python. PostgREST caps an unbounded select
+    at 1000 rows, so a table that grows past that silently stops
+    containing today at all — which is exactly how Collections Today
+    reached TZS 0.00 on a morning that had taken 41 payments.
+    """
+    local_midnight = now.astimezone(_DAR_ES_SALAAM).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return local_midnight.astimezone(timezone.utc).isoformat()
+
+
 def is_dar_es_salaam_today(value: str | datetime | None, now: datetime) -> bool:
     """Whether a stored UTC timestamp falls on the current Tanzanian day.
 

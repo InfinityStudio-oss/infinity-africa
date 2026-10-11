@@ -20,8 +20,8 @@ from decimal import Decimal
 from supabase import Client
 
 from app.core.errors import NotFoundError
-from app.core.time import is_dar_es_salaam_today
-from app.services.crud import get_by_id
+from app.core.time import dar_es_salaam_day_start_utc, is_dar_es_salaam_today
+from app.services.crud import fetch_all, get_by_id
 from app.services.ledger import get_wallet_balance
 
 
@@ -47,14 +47,16 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
 
     currency = merchant["currency"]
 
-    successful_collections = (
-        client.table("transactions")
+    # Lifetime totals, so every page is needed: an unbounded select stops
+    # at 1000 rows and would quietly under-report a busy merchant's
+    # takings and fees.
+    successful_collections = fetch_all(
+        lambda: client.table("transactions")
         .select("gross_amount, fee_amount, created_at")
         .eq("merchant_id", str(merchant_id))
         .eq("type", "collection")
         .eq("status", "successful")
-        .execute()
-    ).data or []
+    )
     total_collections = sum(
         (Decimal(str(row["gross_amount"])) for row in successful_collections), Decimal(0)
     )
@@ -65,10 +67,23 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
     # this morning counts today, because the money moved today — which is
     # the question "withdrawals today" is asking.
     now = datetime.now(timezone.utc)
+    day_start = dar_es_salaam_day_start_utc(now)
+
+    # Asked for separately rather than filtered out of the lifetime list:
+    # today's rows must not depend on how many lifetime rows there are.
     collections_today = sum(
         (
             Decimal(str(row["gross_amount"]))
-            for row in successful_collections
+            for row in (
+                client.table("transactions")
+                .select("gross_amount, created_at")
+                .eq("merchant_id", str(merchant_id))
+                .eq("type", "collection")
+                .eq("status", "successful")
+                .gte("created_at", day_start)
+                .execute()
+            ).data
+            or []
             if _is_today(row.get("created_at"), now)
         ),
         Decimal(0),
@@ -79,6 +94,7 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
         .select("amount, completed_at")
         .eq("merchant_id", str(merchant_id))
         .eq("status", "SUCCESS")
+        .gte("completed_at", day_start)
         .execute()
     ).data or []
     withdrawals_today = sum(

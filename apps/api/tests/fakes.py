@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+POSTGREST_DEFAULT_PAGE = 1000
+
 
 class _Result:
     def __init__(self, data, count=None):
@@ -167,6 +169,15 @@ class _FakeQuery:
                 rows = rows[self._range_start : self._range_end + 1]
             elif self._limit is not None:
                 rows = rows[: self._limit]
+            else:
+                # PostgREST answers an unbounded select with one page and
+                # says nothing about the rest. Without this cap the fake
+                # returned every row, so a dashboard that summed a whole
+                # table passed here and silently read zero in production
+                # once the table outgrew a page - which is exactly how
+                # Collections Today reached TZS 0.00. See
+                # tests/test_overview_pagination.py.
+                rows = rows[:POSTGREST_DEFAULT_PAGE]
             if self._single:
                 return _Result(dict(rows[0]) if rows else None)
             return _Result([dict(r) for r in rows], count=total)

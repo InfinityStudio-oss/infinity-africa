@@ -51,6 +51,33 @@ def list_for_merchant(
     return result.data or [], result.count or 0
 
 
+# PostgREST answers an unbounded select with one page and stops. The
+# default page is 1000 rows, and nothing in the response says it was
+# truncated, so a total quietly becomes wrong the day a table outgrows it.
+_PAGE = 1000
+
+
+def fetch_all(query_factory, *, page_size: int = _PAGE) -> list[dict]:
+    """Every row a query matches, not just its first page.
+
+    Takes a factory rather than a built query because a PostgREST query
+    object cannot be re-ranged once executed — each page needs a fresh
+    one. Use it for a lifetime total; for anything scoped to a day or a
+    month, narrow the query with `gte` instead and fetch a single page.
+
+    The loop ends on the first short page, so a table of exactly N*1000
+    rows costs one extra empty request rather than looping forever.
+    """
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        page = (query_factory().range(offset, offset + page_size - 1).execute()).data or []
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
+
 def execute_maybe_single(query) -> dict | None:
     """`.maybe_single().execute()` returns `None` outright — not a Result
     object — when zero rows match (postgrest-py 2.x's documented contract:
