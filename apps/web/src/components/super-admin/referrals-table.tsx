@@ -7,12 +7,12 @@ import { tdClass, thClass } from "@/components/portal/card";
 import { StatusBadge, type BadgeTone } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import {
-  approveReferralCommission,
-  clearReferralFraudHold,
-  markReferralCommissionPaid,
-  rejectReferralCommission,
-  setReferralFraudHold,
-} from "@/lib/admin/live-api";
+  approveReferralCommissionAction,
+  clearReferralFraudHoldAction,
+  markReferralCommissionPaidAction,
+  rejectReferralCommissionAction,
+  setReferralFraudHoldAction,
+} from "@/lib/admin/referral-actions";
 import type { AdminReferralRow } from "@/lib/admin/types";
 
 const TONE: Record<string, BadgeTone> = {
@@ -170,7 +170,7 @@ export function ReferralsTable({ rows }: { rows: AdminReferralRow[] }) {
                           type="button"
                           disabled={busy !== null}
                           onClick={() =>
-                            run(row.id, () => approveReferralCommission(row.commission_id as string))
+                            run(row.id, () => approveReferralCommissionAction(row.commission_id as string))
                           }
                           className="text-xs font-semibold text-primary-container hover:underline disabled:opacity-60"
                         >
@@ -182,7 +182,7 @@ export function ReferralsTable({ rows }: { rows: AdminReferralRow[] }) {
                           type="button"
                           disabled={busy !== null}
                           onClick={() =>
-                            run(row.id, () => markReferralCommissionPaid(row.commission_id as string))
+                            run(row.id, () => markReferralCommissionPaidAction(row.commission_id as string))
                           }
                           className="text-xs font-semibold text-primary-container hover:underline disabled:opacity-60"
                         >
@@ -198,7 +198,7 @@ export function ReferralsTable({ rows }: { rows: AdminReferralRow[] }) {
                               const reason = window.prompt("Why is this commission being rejected?");
                               if (reason?.trim())
                                 void run(row.id, () =>
-                                  rejectReferralCommission(row.commission_id as string, reason.trim()),
+                                  rejectReferralCommissionAction(row.commission_id as string, reason.trim()),
                                 );
                             }}
                             className="text-xs font-semibold text-error hover:underline disabled:opacity-60"
@@ -210,7 +210,7 @@ export function ReferralsTable({ rows }: { rows: AdminReferralRow[] }) {
                         <button
                           type="button"
                           disabled={busy !== null}
-                          onClick={() => run(row.id, () => clearReferralFraudHold(row.id))}
+                          onClick={() => run(row.id, () => clearReferralFraudHoldAction(row.id))}
                           className="text-xs font-semibold text-on-surface-variant hover:underline disabled:opacity-60"
                         >
                           Clear hold
@@ -222,7 +222,7 @@ export function ReferralsTable({ rows }: { rows: AdminReferralRow[] }) {
                           onClick={() => {
                             const reason = window.prompt("Why is this referral being held?");
                             if (reason?.trim())
-                              void run(row.id, () => setReferralFraudHold(row.id, reason.trim()));
+                              void run(row.id, () => setReferralFraudHoldAction(row.id, reason.trim()));
                           }}
                           className="text-xs font-semibold text-on-surface-variant hover:underline disabled:opacity-60"
                         >
