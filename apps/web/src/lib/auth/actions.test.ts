@@ -10,11 +10,12 @@ vi.mock("server-only", () => ({}));
 const signUp = vi.fn();
 const signInWithPassword = vi.fn();
 const resend = vi.fn();
+const signOut = vi.fn();
 const maybeSingle = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { signUp, signInWithPassword, resend },
+    auth: { signUp, signInWithPassword, resend, signOut },
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }),
   }),
 }));
@@ -264,6 +265,43 @@ describe("loginAction", () => {
 
     const state = await loginAction(null, form({ email: "amani@shop.co.tz", password: "wrong" }));
     expect(state?.formError).toBe("Incorrect email or password.");
+  });
+
+  it.each(["suspended", "closed"])("refuses a %s business and signs it back out", async (merchantStatus) => {
+    signInWithPassword.mockResolvedValue({
+      data: { user: { id: "u1" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    maybeSingle.mockResolvedValue({ data: null });
+    // next_path is still the dashboard: the submission was approved long
+    // ago, which is exactly why merchant_status has to be consulted
+    // separately rather than inferred from onboarding progress.
+    getOnboardingStatus.mockResolvedValue({
+      next_path: "/dashboard/overview",
+      merchant_status: merchantStatus,
+    });
+    const { loginAction } = await importActions();
+
+    const state = await loginAction(null, form({ email: "amani@shop.co.tz", password: "Str0ng!pass" }));
+
+    expect(state?.formError).toMatch(/suspended/i);
+    // The session cookie this request just set must not survive.
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it("lets a pending business in - it needs the portal to finish review", async () => {
+    signInWithPassword.mockResolvedValue({
+      data: { user: { id: "u1" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    maybeSingle.mockResolvedValue({ data: null });
+    getOnboardingStatus.mockResolvedValue({ next_path: "/onboarding", merchant_status: "pending" });
+    const { loginAction } = await importActions();
+
+    await expect(
+      loginAction(null, form({ email: "amani@shop.co.tz", password: "Str0ng!pass" })),
+    ).rejects.toMatchObject({ location: "/onboarding" });
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it("redirects a verified merchant to their onboarding next_path", async () => {

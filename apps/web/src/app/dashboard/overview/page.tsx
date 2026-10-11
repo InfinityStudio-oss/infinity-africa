@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
+import { redirectIfSuspended } from "@/lib/onboarding/guard";
 import { getMerchantOverview } from "@/lib/portal/api";
 import { OverviewDashboard } from "@/components/merchant/overview-dashboard";
 import { OverviewWelcome } from "@/components/merchant/overview-welcome";
@@ -17,6 +18,7 @@ export default async function MerchantOverviewPage() {
   await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
+  redirectIfSuspended(onboarding);
   if (!onboarding || onboarding.next_path === "/onboarding") {
     redirect("/onboarding");
   }

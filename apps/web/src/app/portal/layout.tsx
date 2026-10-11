@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/supabase/protected-route";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
+import { redirectIfSuspended } from "@/lib/onboarding/guard";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { PendingVerificationBanner } from "@/components/portal/pending-verification-banner";
 import { AccountStatus } from "@infinity/shared";
@@ -20,6 +21,7 @@ export default async function PortalLayout({
   if (!uiPreviewEnabled()) {
     await requireUser("/dashboard/login");
     const onboarding = await getOnboardingStatus();
+    redirectIfSuspended(onboarding);
     if (!onboarding || onboarding.next_path === "/onboarding") redirect("/onboarding");
 
     return (

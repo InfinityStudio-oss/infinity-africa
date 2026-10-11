@@ -118,6 +118,11 @@ class OnboardingStatusResponse(BaseModel):
     onboarding_completed: bool
     merchant_id: uuid.UUID | None = None
     account_status: AccountStatus | None = None
+    # merchants.status, not the submission's review status — the two
+    # disagree for a business that was approved and later suspended. Plain
+    # str rather than an enum so a status added in the database can never
+    # make this endpoint 500 at the serialisation boundary.
+    merchant_status: str | None = None
     next_path: str
 
 

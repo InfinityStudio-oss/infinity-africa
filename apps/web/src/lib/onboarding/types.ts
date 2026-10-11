@@ -76,6 +76,11 @@ export interface OnboardingStatus {
   onboarding_completed: boolean;
   merchant_id: string | null;
   account_status: AccountStatus | null;
+  /** merchants.status — "pending" | "active" | "suspended" | "closed".
+   * Not the same thing as `account_status`, which is the onboarding
+   * submission's review status: a business approved long ago and
+   * suspended yesterday is still APPROVED there. Login reads this one. */
+  merchant_status: string | null;
   next_path: string;
 }
 

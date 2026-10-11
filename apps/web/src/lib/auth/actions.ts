@@ -335,5 +335,28 @@ export async function loginAction(_prevState: FormState, formData: FormData): Pr
   }
 
   const onboarding = accessToken ? await getOnboardingStatus(accessToken) : null;
+
+  // A suspended or closed business does not get a portal session. The
+  // backend now refuses every /v1/merchant/* call from one
+  // (get_own_merchant), so without this the merchant would sign in
+  // successfully and then land on a dashboard where everything failed
+  // with no explanation. Signing them straight back out also means the
+  // session cookie this request set does not survive to be reused.
+  //
+  // 'pending' is not blocked — that is a new signup on its way through
+  // review, and it needs the portal to get there.
+  if (onboarding && (onboarding.merchant_status === "suspended" || onboarding.merchant_status === "closed")) {
+    if (usedSupabase) {
+      const supabase = await createClient();
+      await supabase.auth.signOut();
+    }
+    return {
+      errors: {},
+      formError:
+        "This business account has been suspended. Contact InfinityPay support if you believe this is a mistake.",
+      values: { email },
+    };
+  }
+
   redirect(onboarding?.next_path ?? "/onboarding");
 }

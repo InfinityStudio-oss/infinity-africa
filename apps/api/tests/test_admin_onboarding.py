@@ -508,7 +508,16 @@ def test_approval_without_custom_pricing_creates_no_merchant_specific_rule(fake_
     assert rules == []
 
 
-def test_reject_sets_status_and_note_without_touching_merchant(fake_client):
+def test_reject_suspends_the_merchant(fake_client):
+    """Rejecting has to stop the business, not just label the queue.
+
+    This test previously asserted the merchant was "untouched by reject",
+    which pinned a real hole: a rejected merchant kept status 'active' and
+    could still log in, collect and withdraw, because every API gate reads
+    merchants.status and not the submission. Found in production on
+    2026-10-11 - a Super Admin had rejected a business and banned its
+    login, and the merchant row was still active.
+    """
     submitted = _submit_onboarding(uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
@@ -528,8 +537,35 @@ def test_reject_sets_status_and_note_without_touching_merchant(fake_client):
     assert body["review_note"] == "Business licence photo is unreadable"
 
     merchant = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
-    assert merchant["status"] == "pending"  # untouched by reject
-    assert merchant["kyc_status"] == "unverified"
+    assert merchant["status"] == "suspended"
+    assert merchant["kyc_status"] == "rejected"
+
+    actions = [row["action"] for row in fake_client.table("audit_logs")._table.rows]
+    assert "merchant.suspended_on_rejection" in actions
+
+
+def test_request_more_info_leaves_the_merchant_alone(fake_client):
+    """"We need something else from you" is not "no". Suspending a
+    business mid-review would stop one that has done nothing wrong."""
+    submitted = _submit_onboarding(uuid.uuid4())
+    merchant_id = submitted["merchant"]["id"]
+    submission_id = next(
+        r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
+    )
+    before = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
+    status_before, kyc_before = before["status"], before["kyc_status"]
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    client.post(
+        f"/v1/admin/onboarding/{submission_id}/request-more-info",
+        headers=auth_headers(admin_id),
+        json={"review_note": "Please upload a clearer TIN certificate"},
+    )
+
+    merchant = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
+    assert merchant["status"] == status_before
+    assert merchant["kyc_status"] == kyc_before
 
 
 def test_request_more_info(fake_client):

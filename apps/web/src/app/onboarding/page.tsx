@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/current-user";
 import { getOnboardingStatus } from "@/lib/onboarding/api";
+import { redirectIfSuspended } from "@/lib/onboarding/guard";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { Header } from "@/components/site/header";
 import { Footer } from "@/components/site/footer";
@@ -14,6 +15,7 @@ export default async function OnboardingPage() {
   const user = await requireCurrentUser("/dashboard/login");
 
   const onboarding = await getOnboardingStatus();
+  redirectIfSuspended(onboarding);
   if (onboarding?.next_path === "/dashboard/overview") {
     redirect("/dashboard/overview");
   }

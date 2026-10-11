@@ -51,6 +51,11 @@ from app.services.security_alerts import notify_security_event
 _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+# merchants.status values that end a merchant's access outright, as opposed
+# to 'pending', which is a business still waiting for review and which must
+# keep its portal to finish onboarding.
+_BLOCKED_MERCHANT_STATUSES = frozenset({"suspended", "closed"})
+
 
 def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
@@ -270,11 +275,22 @@ def verify_api_key(
 
     merchant = execute_maybe_single(
         supabase.table("merchants")
-        .select("api_access_suspended")
+        .select("api_access_suspended, status")
         .eq("id", data["merchant_id"])
         .maybe_single()
     )
-    if merchant and merchant.get("api_access_suspended"):
+    # Two separate ways to be shut out, and the account-level one used to
+    # be missing. Until 2026-10-11 this checked only api_access_suspended,
+    # so a merchant a Super Admin had **suspended** kept collecting money
+    # through their API key: the portal refused them, every session route
+    # refused them, and the one path that actually moves customers' money
+    # let them through. Suspension has to mean suspended everywhere.
+    #
+    # Checked against production when this was added: 23 merchants hold an
+    # active key and every one of them was status='active', so nothing
+    # working was cut off by closing this.
+    suspended_account = bool(merchant) and merchant.get("status") != "active"
+    if merchant and (merchant.get("api_access_suspended") or suspended_account):
         _log_api_request(
             supabase,
             merchant_id=data["merchant_id"],
@@ -292,7 +308,14 @@ def verify_api_key(
             merchant_id=data["merchant_id"],
             api_key_id=data["id"],
         )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This merchant's API access has been suspended")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This merchant's account is not active"
+                if suspended_account
+                else "This merchant's API access has been suspended"
+            ),
+        )
 
     if data["environment"] == "live" and not is_ip_allowed(
         supabase,
@@ -539,6 +562,18 @@ def get_own_merchant(
     onboarding flow (exactly one merchant per signup). If a user is ever
     allowed to belong to multiple merchants, this needs a merchant selector
     instead of resolving implicitly to the first active row.
+
+    A suspended or closed business is refused here, for every /v1/merchant/*
+    route at once. Until 2026-10-11 the only gate was
+    require_approved_merchant on the write paths, so a merchant a Super
+    Admin had suspended still had a working portal: every read page loaded
+    and only the buttons failed. Suspension has to end the session, not
+    just the actions.
+
+    'pending' is deliberately still allowed through. A business that has
+    signed up and is waiting for review uses this same surface to see its
+    own status and finish onboarding, and blocking it here would lock every
+    new signup out of the portal.
     """
     supabase = get_supabase_admin()
     result = (
@@ -555,8 +590,23 @@ def get_own_merchant(
         )
 
     row = rows[0]
+    merchant_id = uuid.UUID(row["merchant_id"])
+
+    merchant = execute_maybe_single(
+        supabase.table("merchants").select("status").eq("id", str(merchant_id)).maybe_single()
+    )
+    merchant_status = merchant.get("status") if merchant else None
+    if merchant_status in _BLOCKED_MERCHANT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This business account has been {merchant_status}. Contact InfinityPay "
+                "support if you believe this is a mistake."
+            ),
+        )
+
     return MerchantMembership(
-        merchant_id=uuid.UUID(row["merchant_id"]), user_id=user.id, role=UserRole(row["role"])
+        merchant_id=merchant_id, user_id=user.id, role=UserRole(row["role"])
     )
 
 

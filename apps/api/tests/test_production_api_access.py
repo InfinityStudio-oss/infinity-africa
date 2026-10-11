@@ -199,3 +199,109 @@ def test_admin_merchant_response_reports_computed_production_eligibility(fake_cl
     response = client.get(f"/v1/admin/merchants/{merchant_id}", headers=auth_headers(admin_id))
     assert response.status_code == 200, response.text
     assert response.json()["data"]["production_api_eligible"] is True
+
+
+def _wallet_push_with_key(raw_key: str, merchant_id):
+    """The Direct Wallet Push route partners integrate against - the one
+    path that actually takes a customer's money."""
+    return client.post(
+        "/v1/collections/wallet-push",
+        headers={"X-API-Key": raw_key, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "merchant_id": str(merchant_id),
+            "amount": "5000",
+            "phone": "255744000001",
+            "currency": "TZS",
+        },
+    )
+
+
+def test_a_suspended_merchants_api_key_stops_collecting(fake_client):
+    """Suspension has to mean suspended everywhere.
+
+    Until 2026-10-11 the API-key path checked only api_access_suspended,
+    never merchants.status. So a merchant a Super Admin had suspended was
+    refused by the portal and by every session route, while the one route
+    that moves customers' money kept working for them.
+    """
+    _merchant, merchant_id, _user_id = _approved_merchant_with_pricing(fake_client)
+    raw_key, _ = make_api_key(fake_client, merchant_id)
+
+    # Works while the account is active.
+    assert _wallet_push_with_key(raw_key, merchant_id).status_code != 403
+
+    fake_client.table("merchants").update({"status": "suspended"}).eq(
+        "id", str(merchant_id)
+    ).execute()
+
+    response = _wallet_push_with_key(raw_key, merchant_id)
+    assert response.status_code == 403, response.text
+    assert "not active" in response.text
+
+
+def test_a_closed_merchants_api_key_stops_collecting(fake_client):
+    """'closed' is not 'active' either - the check is on being active, not
+    on being any particular flavour of stopped."""
+    _merchant, merchant_id, _user_id = _approved_merchant_with_pricing(fake_client)
+    raw_key, _ = make_api_key(fake_client, merchant_id)
+    fake_client.table("merchants").update({"status": "closed"}).eq("id", str(merchant_id)).execute()
+
+    assert _wallet_push_with_key(raw_key, merchant_id).status_code == 403
+
+
+def test_an_active_merchants_api_key_is_untouched(fake_client):
+    """The guard must not cost a working integration. 23 merchants held a
+    live key when this shipped and every one was active."""
+    _merchant, merchant_id, _user_id = _approved_merchant_with_pricing(fake_client)
+    raw_key, _ = make_api_key(fake_client, merchant_id)
+
+    assert _wallet_push_with_key(raw_key, merchant_id).status_code != 403
+
+
+# --- Suspension ends the portal session too ----------------------------------
+
+
+def test_a_suspended_merchant_loses_the_whole_portal(fake_client):
+    """get_own_merchant refuses a suspended business, so every
+    /v1/merchant/* route goes with it.
+
+    Before 2026-10-11 the only gate was require_approved_merchant on the
+    write paths: a suspended merchant still had a working dashboard, and
+    only the buttons failed. The account-level decision has to end the
+    session, not just the actions.
+    """
+    _merchant, merchant_id, user_id = _approved_merchant_with_pricing(fake_client)
+
+    assert client.get("/v1/merchant/api-keys", headers=auth_headers(user_id)).status_code == 200
+
+    fake_client.table("merchants").update({"status": "suspended"}).eq(
+        "id", str(merchant_id)
+    ).execute()
+
+    response = client.get("/v1/merchant/api-keys", headers=auth_headers(user_id))
+    assert response.status_code == 403, response.text
+    assert "suspended" in response.text
+
+
+def test_a_closed_merchant_loses_the_whole_portal(fake_client):
+    _merchant, merchant_id, user_id = _approved_merchant_with_pricing(fake_client)
+    fake_client.table("merchants").update({"status": "closed"}).eq("id", str(merchant_id)).execute()
+
+    assert client.get("/v1/merchant/api-keys", headers=auth_headers(user_id)).status_code == 403
+
+
+def test_a_pending_merchant_keeps_the_portal(fake_client):
+    """The one status deliberately left through. A business waiting for
+    review uses this same surface to see where its application stands, so
+    blocking 'pending' here would lock every new signup out of the portal
+    the moment they finished signing up.
+
+    403 would be this guard; 200 is the route answering normally for a
+    merchant that simply has no keys yet.
+    """
+    _merchant, _merchant_id, user_id = _merchant_admin(
+        fake_client, status="pending", kyc_status="unverified"
+    )
+
+    response = client.get("/v1/merchant/api-keys", headers=auth_headers(user_id))
+    assert response.status_code == 200, response.text

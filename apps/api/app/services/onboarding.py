@@ -360,6 +360,16 @@ async def signup_merchant(
 
 
 def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
+    """Where this user should land, and whether their business is live.
+
+    ``account_status`` is the *submission's* review status; ``merchant_status``
+    is the merchants row's own status, and the two can disagree. A business
+    approved months ago and suspended yesterday still has review_status
+    APPROVED, so this used to answer "/dashboard/overview" for a merchant a
+    Super Admin had shut off. The portal reads merchant_status at login to
+    refuse the session (apps/web/src/lib/auth/actions.ts), so it has to be
+    here rather than inferred from the submission.
+    """
     membership = _find_active_membership(client, user.id)
     if not membership:
         return {
@@ -367,10 +377,13 @@ def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
             "onboarding_completed": False,
             "merchant_id": None,
             "account_status": None,
+            "merchant_status": None,
             "next_path": "/onboarding",
         }
 
     merchant_id = uuid.UUID(membership["merchant_id"])
+    merchant = get_by_id(client, "merchants", merchant_id)
+    merchant_status = merchant.get("status") if merchant else None
     submission = _find_submission(client, merchant_id)
 
     if not submission:
@@ -379,6 +392,7 @@ def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
             "onboarding_completed": False,
             "merchant_id": merchant_id,
             "account_status": None,
+            "merchant_status": merchant_status,
             "next_path": "/onboarding",
         }
 
@@ -390,6 +404,7 @@ def get_onboarding_status(client: Client, *, user: AuthenticatedUser) -> dict:
         "onboarding_completed": completed,
         "merchant_id": merchant_id,
         "account_status": review_status,
+        "merchant_status": merchant_status,
         "next_path": "/dashboard/overview" if completed else "/onboarding",
     }
 
@@ -696,7 +711,40 @@ def _set_review_status(
 def reject_onboarding_submission(
     client: Client, *, submission_id: uuid.UUID, reviewer_id: uuid.UUID, note: str | None
 ) -> dict:
-    return _set_review_status(
+    """Refuses an application, and stops the business trading.
+
+    Both halves matter. Until 2026-10-11 this wrote only to
+    onboarding_submissions, so a rejected merchant kept
+    merchants.status = 'active' and could still log in, collect payments
+    and request withdrawals - the queue said REJECTED while every API gate
+    read 'active' and let them through. A Super Admin who had rejected a
+    business reasonably believed it was stopped; it was not.
+
+    Approval has always set status/kyc_status explicitly
+    (approve_onboarding_submission below); the asymmetry was an oversight,
+    not a decision.
+
+    Suspended rather than closed, so the decision is reversible: a Super
+    Admin can reactivate the business from Businesses without recreating
+    anything.
+
+    What suspension now closes is everything - collections, payment links,
+    invoices, API keys and withdrawals via require_approved_merchant, the
+    API-key auth path via verify_api_key, and the portal session itself via
+    get_own_merchant. Resubmission therefore needs a Super Admin to
+    reactivate the account first; POST /v1/onboarding/submit still works
+    (it resolves the user, not the merchant gate), but the document upload
+    route does not.
+
+    Deliberately NOT done for request-more-info: that state means "we need
+    something else from you", not "no", and suspending a business mid-review
+    would stop a merchant who has done nothing wrong.
+    """
+    submission = get_by_id(client, "onboarding_submissions", submission_id)
+    if not submission:
+        raise NotFoundError("Onboarding submission not found")
+
+    result = _set_review_status(
         client,
         submission_id=submission_id,
         reviewer_id=reviewer_id,
@@ -704,6 +752,25 @@ def reject_onboarding_submission(
         note=note,
         action="onboarding.rejected",
     )
+
+    merchant_id = uuid.UUID(submission["merchant_id"])
+    update_row(
+        client,
+        "merchants",
+        merchant_id,
+        {"status": "suspended", "kyc_status": "rejected"},
+    )
+    write_audit_log(
+        client,
+        actor_id=reviewer_id,
+        actor_type="user",
+        merchant_id=merchant_id,
+        action="merchant.suspended_on_rejection",
+        resource_type="merchant",
+        resource_id=merchant_id,
+        metadata={"submission_id": str(submission_id), "note": note},
+    )
+    return result
 
 
 def request_more_info_onboarding_submission(

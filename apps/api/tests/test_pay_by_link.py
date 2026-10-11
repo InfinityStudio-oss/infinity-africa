@@ -186,9 +186,18 @@ def test_merchant_cannot_create_a_second_pay_by_link(fake_client):
 
 
 def test_suspended_merchant_cannot_create_pay_by_link(fake_client):
+    """403 since 2026-10-11, not the 409 this used to assert.
+
+    The refusal moved earlier and got blunter: suspension now fails in
+    get_own_merchant, so the request never reaches
+    ensure_merchant_accepts_payments and its ConflictError. Same answer -
+    no Pay by Link for a suspended business - from a gate that covers
+    every /v1/merchant/* route at once instead of this one endpoint.
+    """
     _merchant_id, admin_id = _merchant_and_admin(fake_client, status="suspended")
     response = client.post("/v1/merchant/pay-by-link", headers=auth_headers(admin_id), json={})
-    assert response.status_code == 409, response.text
+    assert response.status_code == 403, response.text
+    assert "suspended" in response.text
 
 
 def test_staff_cannot_create_pay_by_link_for_a_different_merchant(fake_client):

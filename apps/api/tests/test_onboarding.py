@@ -171,6 +171,7 @@ def test_onboarding_status_no_account(fake_client):
         "onboarding_completed": False,
         "merchant_id": None,
         "account_status": None,
+        "merchant_status": None,
         "next_path": "/onboarding",
     }
 
@@ -185,6 +186,39 @@ def test_onboarding_status_pending_verification(fake_client):
     assert body["onboarding_completed"] is True
     assert body["account_status"] == "PENDING_VERIFICATION"
     assert body["next_path"] == "/dashboard/overview"
+
+
+def test_onboarding_status_reports_the_merchants_own_status(fake_client):
+    """merchant_status is merchants.status, not the submission's review
+    status. The two disagree exactly where it matters: a business approved
+    long ago and suspended yesterday is still APPROVED on its submission,
+    so the portal cannot work suspension out from account_status."""
+    user_id = uuid.uuid4()
+    client.post("/v1/onboarding/merchant-account", headers=auth_headers(user_id), json=_valid_payload())
+
+    body = client.get("/v1/onboarding/status", headers=auth_headers(user_id)).json()["data"]
+    assert body["merchant_status"] == "pending"
+
+
+def test_onboarding_status_stays_readable_while_suspended(fake_client):
+    """The one merchant route a suspended business must keep.
+
+    get_own_merchant now refuses every other /v1/merchant/* call from a
+    suspended merchant, and this endpoint is how the portal and the login
+    action find out *why* - so it resolves the user directly rather than
+    through that gate. If this ever starts 403ing, a suspended merchant
+    gets a broken dashboard instead of the suspended page.
+    """
+    user_id = uuid.uuid4()
+    create_response = client.post(
+        "/v1/onboarding/merchant-account", headers=auth_headers(user_id), json=_valid_payload()
+    )
+    merchant_id = create_response.json()["data"]["merchant"]["id"]
+    fake_client.table("merchants").update({"status": "suspended"}).eq("id", merchant_id).execute()
+
+    response = client.get("/v1/onboarding/status", headers=auth_headers(user_id))
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["merchant_status"] == "suspended"
 
 
 def test_onboarding_status_rejected_sends_back_to_onboarding(fake_client):
