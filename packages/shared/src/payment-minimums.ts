@@ -30,7 +30,9 @@ export const DEFAULT_MINIMUM = 200;
 /** Two-digit national prefix (what follows "255") -> network. Mirrors
  * _PREFIX_TO_NETWORK in the Python module, including 77 — originally
  * Zantel, merged into Tigo and now sold as Mixx by Yas. Confirmed by the
- * platform owner on 2026-10-04; settled, not an open assumption. */
+ * platform owner on 2026-10-04; settled, not an open assumption. 63 and 64
+ * were added on 2026-10-11, also on the platform owner's word, after they
+ * turned up in real traffic. */
 export const NETWORK_PREFIXES: Record<string, MobileNetwork> = {
   "74": MobileNetwork.MPESA,
   "75": MobileNetwork.MPESA,
@@ -44,6 +46,8 @@ export const NETWORK_PREFIXES: Record<string, MobileNetwork> = {
   "78": MobileNetwork.AIRTELMONEY,
   "61": MobileNetwork.HALOPESA,
   "62": MobileNetwork.HALOPESA,
+  "63": MobileNetwork.HALOPESA,
+  "64": MobileNetwork.HALOPESA,
   "73": MobileNetwork.TTCLPESA,
 };
 

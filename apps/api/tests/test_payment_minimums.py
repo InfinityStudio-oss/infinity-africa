@@ -80,6 +80,16 @@ def test_the_network_is_found_whatever_shape_the_number_arrives_in(shape):
     assert detect_network(shape) == DestinationCode.MIXXBYYAS
 
 
+@pytest.mark.parametrize("prefix", ["61", "62", "63", "64"])
+def test_every_halotel_range_resolves(prefix):
+    """63 and 64 turned up in real traffic unmapped and fell through to
+    the baseline. Confirmed as Halotel by the platform owner on
+    2026-10-11, alongside the 61/62 ranges already here. The floor is the
+    same either way today, so this pins the mapping itself — it is what
+    would carry a Halotel-specific minimum if one ever appears."""
+    assert detect_network(f"255{prefix}1234567") == DestinationCode.HALOPESA
+
+
 @pytest.mark.parametrize("bad", [None, "", "not-a-phone", "12345", "255999999999"])
 def test_an_unusable_number_falls_back_rather_than_blocking(bad):
     """An unknown prefix must not invent a 1,000 floor. Phone validity is

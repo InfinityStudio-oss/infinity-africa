@@ -44,10 +44,7 @@ MIXX_BY_YAS_MINIMUM: Decimal = Decimal(1000)
 # page) — see assert_amount_allowed.
 #
 # 200, not 100: Selcom states this one per *order*, not per network, so it
-# applies to an unmapped prefix too. That is why prefixes 63 and 64 — seen
-# in production and deliberately still unmapped, because guessing an
-# operator's range in a money rule is worse than not knowing it — are
-# already covered by this floor rather than needing a table entry.
+# covers an unmapped prefix too.
 DEFAULT_MINIMUM: Decimal = Decimal(200)
 
 # The two-digit national prefix (what follows "255") -> network.
@@ -55,7 +52,7 @@ DEFAULT_MINIMUM: Decimal = Decimal(200)
 # Vodacom     74 75 76
 # Mixx by Yas 65 67 71, plus 77 from the former Zantel
 # Airtel      68 69 78
-# Halotel     61 62
+# Halotel     61 62 63 64
 # TTCL        73
 _PREFIX_TO_NETWORK: dict[str, DestinationCode] = {
     "74": DestinationCode.MPESA,
@@ -70,6 +67,8 @@ _PREFIX_TO_NETWORK: dict[str, DestinationCode] = {
     "78": DestinationCode.AIRTELMONEY,
     "61": DestinationCode.HALOPESA,
     "62": DestinationCode.HALOPESA,
+    "63": DestinationCode.HALOPESA,
+    "64": DestinationCode.HALOPESA,
     "73": DestinationCode.TTCLPESA,
 }
 
