@@ -682,10 +682,41 @@ def request_more_info(
 
 
 def _find_transaction_for_disbursement(client: Client, disbursement_id: uuid.UUID) -> dict | None:
-    query = (
-        client.table("transactions").select("*").eq("disbursement_id", str(disbursement_id)).maybe_single()
+    """The transaction currently holding this withdrawal's reserved funds.
+
+    **A retried withdrawal has more than one.** retry_disbursement_payout
+    reverses the original transaction and reserves again
+    (_reserve_funds_for_disbursement), both rows pointing at the same
+    disbursement_id. This used to be `.maybe_single()`, which PostgREST
+    answers with "more than one row" — and postgrest-py turns any error
+    that is not the 0-row one into a bare
+    ``APIError("Missing response")``, discarding the real cause. So from
+    the moment payout retry shipped, refreshing or reconciling a retried
+    withdrawal failed with an error that said nothing about what was
+    wrong. Two production withdrawals were stuck PROCESSING this way,
+    unrefreshable, with the merchant's funds still reserved.
+
+    If "Missing response" ever appears again, it means a `.maybe_single()`
+    hit an error that was not "0 rows" — most often more than one row.
+
+    A reversed row is spent history. The live transaction is the newest
+    one that is not reversed, which is what both callers mean: the retry
+    path needs the row still holding the reservation, and
+    _resolve_processing_disbursement needs the row to settle or reverse.
+    Returning None when every row is reversed is correct and already
+    handled — the funds are not reserved, so neither caller may act.
+    """
+    result = (
+        client.table("transactions")
+        .select("*")
+        .eq("disbursement_id", str(disbursement_id))
+        .neq("status", "reversed")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
     )
-    return execute_maybe_single(query)
+    rows = result.data or []
+    return rows[0] if rows else None
 
 
 def _stamp_response_fields(disbursement: dict, transaction: dict) -> dict:

@@ -14,6 +14,51 @@ from decimal import Decimal
 POSTGREST_DEFAULT_PAGE = 1000
 
 
+def _multiple_rows_error(table: str, mode: str, count: int):
+    """What PostgREST really does when `.single()`/`.maybe_single()` match
+    more than one row — it refuses, rather than picking one.
+
+    The fake used to return `rows[0]`, so a query that matched several
+    rows looked fine here and failed in production. That is not
+    hypothetical: payout retry reverses a withdrawal's transaction and
+    reserves a new one, both on the same disbursement_id, and
+    _find_transaction_for_disbursement asked for `.maybe_single()`. Every
+    test passed; two real withdrawals were left stuck PROCESSING and
+    could not be refreshed at all.
+
+    The message mirrors what the application actually sees, which is the
+    detail that makes this worth replicating faithfully. postgrest-py's
+    maybe_single() catches the PGRST116 error, checks it for "contains 0
+    rows", does not match, falls through and raises a bare
+    APIError("Missing response") — discarding the real cause. So
+    "Missing response" in a traceback means "a single-row query hit an
+    error that was not zero rows", and in practice that means too many.
+    """
+    from postgrest.exceptions import APIError
+
+    if mode == "maybe_single":
+        return APIError(
+            {
+                "message": "Missing response",
+                "code": "204",
+                "hint": "Please check traceback of the code",
+                "details": (
+                    f"Fake client: .maybe_single() on {table!r} matched {count} rows. "
+                    "Real PostgREST answers PGRST116 and postgrest-py reports it as "
+                    "this. Filter to one row, or use .order(...).limit(1)."
+                ),
+            }
+        )
+    return APIError(
+        {
+            "message": "JSON object requested, multiple (or no) rows returned",
+            "code": "PGRST116",
+            "hint": None,
+            "details": f"The result contains {count} rows",
+        }
+    )
+
+
 class _Result:
     def __init__(self, data, count=None):
         self.data = data
@@ -179,6 +224,8 @@ class _FakeQuery:
                 # tests/test_overview_pagination.py.
                 rows = rows[:POSTGREST_DEFAULT_PAGE]
             if self._single:
+                if len(rows) > 1:
+                    raise _multiple_rows_error(self._table.name, self._single, len(rows))
                 return _Result(dict(rows[0]) if rows else None)
             return _Result([dict(r) for r in rows], count=total)
 

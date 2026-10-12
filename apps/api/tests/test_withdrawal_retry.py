@@ -478,3 +478,97 @@ def test_the_float_balance_says_so_when_no_account_is_configured(fake_client, mo
 
     assert response.status_code == 200
     assert response.json()["data"]["reason"] == "not_configured"
+
+
+# --- a retried withdrawal must still be refreshable ---------------------------
+
+
+class _ProcessingProvider:
+    """Selcom accepts the payout and leaves it pending, which is what a
+    real mobile-money push does - the withdrawal sits PROCESSING until a
+    callback or a status refresh resolves it."""
+
+    async def process_transaction(self, **kwargs):
+        from app.services.selcom_business.schemas import SelcomBusinessResult
+
+        return SelcomBusinessResult(
+            transaction_id=kwargs["trans_id"],
+            status="processing",
+            receipt=None,
+            raw_status="PENDING",
+            raw_response={"result": "PENDING"},
+        )
+
+
+class _QuerySaysPaidProvider:
+    """Answers a status refresh with a completed payout."""
+
+    async def query_transaction(self, *, trans_id):
+        from app.services.selcom_business.schemas import SelcomBusinessResult
+
+        return SelcomBusinessResult(
+            transaction_id=trans_id,
+            status="successful",
+            receipt="SB-REFRESH-001",
+            raw_status="SUCCESS",
+            raw_response={"result": "SUCCESS"},
+        )
+
+
+def test_a_retried_withdrawal_can_still_have_its_status_refreshed(fake_client, monkeypatch):
+    """The bug payout retry introduced, and the reason two real
+    withdrawals sat stuck PROCESSING.
+
+    A retry reverses the original transaction and reserves a new one, so
+    the withdrawal now has two rows pointing at the same
+    disbursement_id. _find_transaction_for_disbursement asked PostgREST
+    for `.maybe_single()`, which refuses more than one row - and
+    postgrest-py reports that refusal as a bare
+    APIError("Missing response"), so Refresh Status failed with an error
+    that named neither the table nor the cause.
+
+    The money had already left Selcom in the real case. The withdrawal
+    could not be marked SUCCESS, so the merchant's funds stayed reserved
+    with no way to resolve it from the UI.
+    """
+    import app.services.disbursements as disbursements_module
+
+    merchant_id, super_admin_id, withdrawal_id = _setup_failed_withdrawal(fake_client, monkeypatch)
+
+    # Retry, and let Selcom leave it pending so there is something to refresh.
+    monkeypatch.setattr(
+        disbursements_module, "get_selcom_business_client", lambda: _ProcessingProvider()
+    )
+    retry = _retry(withdrawal_id, super_admin_id)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["data"]["status"] == "PROCESSING"
+
+    # The shape that broke it: one reversed row and one live row.
+    rows = [
+        t
+        for t in fake_client.table("transactions")._table.rows
+        if t["disbursement_id"] == withdrawal_id
+    ]
+    assert len(rows) == 2, "a retry should leave the reversed original alongside the new reservation"
+    assert sorted(t["status"] for t in rows) == ["processing", "reversed"]
+
+    monkeypatch.setattr(
+        disbursements_module, "get_selcom_business_client", lambda: _QuerySaysPaidProvider()
+    )
+    response = client.post(
+        f"/v1/admin/withdrawals/{withdrawal_id}/refresh-status",
+        headers=auth_headers(super_admin_id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["status"] == "SUCCESS"
+
+    # Settled against the live transaction, not the reversed one, and the
+    # merchant is debited exactly once for the 4000 withdrawal.
+    live = next(t for t in rows if t["status"] != "reversed")
+    assert _row_by_id(fake_client, "transactions", live["id"])["status"] == "successful"
+    assert _wallet_balance(fake_client, merchant_id) == Decimal("6000.00")
+
+
+def _row_by_id(fake_client, table, row_id):
+    return next(r for r in fake_client.table(table)._table.rows if r["id"] == row_id)
