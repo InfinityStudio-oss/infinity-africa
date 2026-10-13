@@ -32,15 +32,33 @@ export const DEFAULT_MINIMUM = 200;
  * Zantel, merged into Tigo and now sold as Mixx by Yas. Confirmed by the
  * platform owner on 2026-10-04; settled, not an open assumption. 63 and 64
  * were added on 2026-10-11, also on the platform owner's word, after they
- * turned up in real traffic. */
+ * turned up in real traffic.
+ *
+ * 66, 72 and 79 were added on 2026-10-13 from Selcom's own answer rather
+ * than anyone's word: collections.channel is what Selcom reports back on
+ * a completed payment, and it says AIRTELMONEY for every 66 and MPESA-TZ
+ * for every 72 and 79 in production. None of them changes an amount —
+ * all three carry DEFAULT_MINIMUM, which an unmapped prefix already
+ * got.
+ *
+ * 70 is the one that does change behaviour: Selcom reports TIGOPESATZ
+ * for all 27 completed payments on it, so it carries the Mixx by Yas
+ * floor. Production had 0 successes out of 53 pushes below TZS 1,000 on
+ * that range against 28 of 44 above it, while every other prefix
+ * succeeds at both — 53 prompts that could never complete. Added on the
+ * platform owner's instruction, 2026-10-13. */
 export const NETWORK_PREFIXES: Record<string, MobileNetwork> = {
+  "72": MobileNetwork.MPESA,
   "74": MobileNetwork.MPESA,
   "75": MobileNetwork.MPESA,
   "76": MobileNetwork.MPESA,
+  "79": MobileNetwork.MPESA,
   "65": MobileNetwork.MIXXBYYAS,
   "67": MobileNetwork.MIXXBYYAS,
+  "70": MobileNetwork.MIXXBYYAS,
   "71": MobileNetwork.MIXXBYYAS,
   "77": MobileNetwork.MIXXBYYAS,
+  "66": MobileNetwork.AIRTELMONEY,
   "68": MobileNetwork.AIRTELMONEY,
   "69": MobileNetwork.AIRTELMONEY,
   "78": MobileNetwork.AIRTELMONEY,

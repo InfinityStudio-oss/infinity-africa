@@ -90,6 +90,73 @@ def test_every_halotel_range_resolves(prefix):
     assert detect_network(f"255{prefix}1234567") == DestinationCode.HALOPESA
 
 
+@pytest.mark.parametrize(
+    "prefix,expected",
+    [
+        ("72", DestinationCode.MPESA),
+        ("79", DestinationCode.MPESA),
+        ("66", DestinationCode.AIRTELMONEY),
+    ],
+)
+def test_the_ranges_selcom_itself_named_resolve(prefix, expected):
+    """66, 72 and 79 were unmapped while carrying real volume - 623
+    collections between them, 327 of which succeeded.
+
+    Unlike every other entry in this table, these three were not taken
+    from an allocation list or from anyone's recollection. They are what
+    Selcom reports back on a completed payment in collections.channel:
+    AIRTELMONEY on every 66, MPESA-TZ on every 72 and 79. That is the
+    provider naming the network it actually routed to.
+
+    The floor does not change - all three sit at DEFAULT_MINIMUM, which
+    is what an unmapped prefix already got - so this pins the mapping
+    itself, the thing that would matter the day any of these networks
+    gets a minimum of its own.
+    """
+    assert detect_network(f"255{prefix}1234567") == expected
+
+
+def test_070_carries_the_mixx_by_yas_floor():
+    """The one mapping in this table that was decided by evidence rather
+    than by an allocation list, and the only one of the four that changes
+    what is accepted.
+
+    Selcom reports TIGOPESATZ for all 27 completed payments on 070. The
+    traffic agrees: 0 successes out of 53 pushes below TZS 1,000, against
+    28 of 44 above it, while every other prefix on the platform succeeds
+    at both amounts. Each of those 53 was a customer handed a prompt that
+    could never complete.
+
+    This is the test to read if someone later "corrects" 070 to Vodacom -
+    it was believed to be Vodacom, and it is not.
+    """
+    assert detect_network("255705787971") == DestinationCode.MIXXBYYAS
+
+    with pytest.raises(AmountBelowOperatorMinimumError):
+        assert_amount_allowed(Decimal(500), customer_phone="0705787971")
+
+    # And still fine at the floor itself.
+    assert_amount_allowed(Decimal(1000), customer_phone="0705787971")
+
+
+def test_a_voda_number_on_079_is_not_caught_by_that_floor():
+    """The partner numbers that prompted this: three 079 numbers and one
+    070. Only the 070 is restricted, and a regression that widened the
+    Mixx floor to 079 would quietly raise the minimum on Vodacom - the
+    busiest network on the platform."""
+    for phone in ("0794863100", "0797077866", "0795638136"):
+        assert detect_network(phone) == DestinationCode.MPESA
+        assert_amount_allowed(Decimal(200), customer_phone=phone)
+
+
+def test_the_newly_mapped_ranges_did_not_gain_a_floor():
+    """The whole point of naming them was to change nothing about what is
+    accepted. A regression here would start refusing payments that work
+    today."""
+    for prefix in ("66", "72", "79"):
+        assert_amount_allowed(Decimal(200), customer_phone=f"255{prefix}1234567")
+
+
 @pytest.mark.parametrize("bad", [None, "", "not-a-phone", "12345", "255999999999"])
 def test_an_unusable_number_falls_back_rather_than_blocking(bad):
     """An unknown prefix must not invent a 1,000 floor. Phone validity is

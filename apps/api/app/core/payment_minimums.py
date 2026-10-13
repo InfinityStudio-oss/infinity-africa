@@ -49,19 +49,43 @@ DEFAULT_MINIMUM: Decimal = Decimal(200)
 
 # The two-digit national prefix (what follows "255") -> network.
 #
-# Vodacom     74 75 76
-# Mixx by Yas 65 67 71, plus 77 from the former Zantel
-# Airtel      68 69 78
+# Vodacom     72 74 75 76 79
+# Mixx by Yas 65 67 70 71, plus 77 from the former Zantel
+# Airtel      66 68 69 78
 # Halotel     61 62 63 64
 # TTCL        73
+#
+# 66, 72 and 79 were added on 2026-10-13 from Selcom's own answer rather
+# than from a published allocation table: collections.channel is what
+# Selcom reports back on a completed payment, and across production it
+# says AIRTELMONEY for every 66, MPESA-TZ for every 72 and MPESA-TZ for
+# every 79. Until then those three were unmapped and 623 collections had
+# gone through them unrecognised. None of the three changes any amount:
+# they all carry DEFAULT_MINIMUM, which is what an unmapped prefix got
+# anyway. The value is that the network is now named correctly.
+#
+# 70 is the one of the four that changes behaviour, and it is the reason
+# the others were worth checking at all. Selcom reports TIGOPESATZ for
+# every completed 70 payment, 27 of 27, so it carries the Mixx by Yas
+# floor. Production shows what not enforcing that cost: 0 successes out
+# of 53 pushes below TZS 1,000 on this range, against 28 of 44 above it.
+# Every other prefix on the platform succeeds at both. So those 53
+# customers each got a prompt that could never complete, and 53 merchants
+# each saw a failure. The platform owner read those figures and asked for
+# the floor (2026-10-13), having previously believed 070 was Vodacom —
+# which is why this entry cites the provider rather than a recollection.
 _PREFIX_TO_NETWORK: dict[str, DestinationCode] = {
+    "72": DestinationCode.MPESA,
     "74": DestinationCode.MPESA,
     "75": DestinationCode.MPESA,
     "76": DestinationCode.MPESA,
+    "79": DestinationCode.MPESA,
     "65": DestinationCode.MIXXBYYAS,
     "67": DestinationCode.MIXXBYYAS,
+    "70": DestinationCode.MIXXBYYAS,
     "71": DestinationCode.MIXXBYYAS,
     "77": DestinationCode.MIXXBYYAS,
+    "66": DestinationCode.AIRTELMONEY,
     "68": DestinationCode.AIRTELMONEY,
     "69": DestinationCode.AIRTELMONEY,
     "78": DestinationCode.AIRTELMONEY,
