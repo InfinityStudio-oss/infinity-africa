@@ -14,6 +14,33 @@ from decimal import Decimal
 POSTGREST_DEFAULT_PAGE = 1000
 
 
+# Rendered characters allowed inside one `.in_(...)`. The real limit is on
+# the whole URL; this is the share of it an id list can take before the
+# request stops being answerable.
+_IN_LIST_CHAR_BUDGET = 25_000
+
+
+def _url_too_long_error(table: str, column: str, count: int, rendered: int):
+    """What the server in front of PostgREST really does with an `.in_()`
+    list long enough to blow the URL limit: a 400 whose body is the plain
+    text "Bad Request", which postgrest-py reports as "JSON could not be
+    generated"."""
+    from postgrest.exceptions import APIError
+
+    return APIError(
+        {
+            "message": "JSON could not be generated",
+            "code": 400,
+            "hint": "Refer to full message for details",
+            "details": (
+                f"Fake client: .in_({column!r}, ...) on {table!r} rendered {count} values "
+                f"into ~{rendered} characters of URL, past the ~25,000 a real request "
+                f"survives. Batch it - see app/services/crud.py::fetch_in_chunks."
+            ),
+        }
+    )
+
+
 def _multiple_rows_error(table: str, mode: str, count: int):
     """What PostgREST really does when `.single()`/`.maybe_single()` match
     more than one row — it refuses, rather than picking one.
@@ -95,7 +122,27 @@ class _FakeQuery:
         return self
 
     def in_(self, column, values):
-        self._filters.append(("in", column, list(values)))
+        values = list(values)
+        # `.in_()` is rendered into the URL, so the real constraint is the
+        # rendered *length*, not the count - which is why this measures
+        # characters and a list of short status strings never trips it.
+        #
+        # Measured against production on 2026-10-13: 675 uuids
+        # (25,054 characters of URL) are accepted, 676 (25,091) come back
+        # 400 with a plain-text "Bad Request" body. postgrest-py cannot
+        # parse that as an error document, so the application sees
+        # `APIError: JSON could not be generated` - an error naming
+        # neither the table nor the cause.
+        #
+        # The fake used to accept any length, which is why a merchant's
+        # Wallet Ledger could 500 in production on a query that every
+        # test here passed. Same lesson as the multi-row .single() rule
+        # above and the 1000-row page cap: wherever this fake is more
+        # forgiving than PostgREST, a real bug looks fine.
+        rendered = sum(len(str(v)) + 1 for v in values)
+        if rendered > _IN_LIST_CHAR_BUDGET:
+            raise _url_too_long_error(self._table.name, column, len(values), rendered)
+        self._filters.append(("in", column, values))
         return self
 
     def gte(self, column, value):

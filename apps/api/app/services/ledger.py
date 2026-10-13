@@ -17,7 +17,12 @@ from supabase import Client
 from app.core.errors import InsufficientBalanceError
 from app.core.pagination import PaginationParams
 from app.core.time import dar_es_salaam_day_bounds_utc
-from app.services.crud import execute_maybe_single, get_by_id, insert_row
+from app.services.crud import (
+    execute_maybe_single,
+    fetch_in_chunks,
+    get_by_id,
+    insert_row,
+)
 from app.services.customer_lookup import customer_phones_for_collections
 
 
@@ -201,11 +206,17 @@ def _wallet_ledger_entries(
         or []
     )
 
-    transaction_ids = {e["transaction_id"] for e in entries if e.get("transaction_id")}
-    transactions_by_id: dict[str, dict] = {}
-    if transaction_ids:
-        txn_rows = client.table("transactions").select("*").in_("id", list(transaction_ids)).execute().data or []
-        transactions_by_id = {t["id"]: t for t in txn_rows}
+    # Chunked, because this list grows with the merchant's whole trading
+    # history and `.in_()` is rendered into the URL. At 883 entries the
+    # single-request version produced a 32,750-character URL, which the
+    # server in front of PostgREST refused outright - so the Wallet Ledger
+    # returned 500 for exactly the merchants who had used the platform
+    # most. See fetch_in_chunks.
+    txn_rows = fetch_in_chunks(
+        lambda batch: client.table("transactions").select("*").in_("id", batch),
+        {e["transaction_id"] for e in entries if e.get("transaction_id")},
+    )
+    transactions_by_id: dict[str, dict] = {t["id"]: t for t in txn_rows}
 
     # Second hop for the customer's phone. Batched the same way, and only for
     # the transactions that actually reference a collection — withdrawals

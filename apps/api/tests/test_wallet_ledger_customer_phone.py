@@ -230,3 +230,43 @@ def test_adding_the_customer_phone_did_not_change_any_balance(fake_client):
     assert Decimal(row["amount"]) == Decimal(970)
     assert Decimal(row["balance_before"]) == Decimal(0)
     assert Decimal(row["balance_after"]) == Decimal(970)
+
+
+# --- a long trading history must not break the page ------------------------
+
+
+def test_a_merchant_with_a_long_history_can_still_open_their_ledger(fake_client):
+    """Reported from production as `APIError: JSON could not be generated`
+    on GET /v1/merchant/wallet/ledger.
+
+    The ledger looks up every transaction its entries reference, and used
+    to ask for all of them in one `.in_()`. That list is rendered into the
+    URL, so it grows with the merchant's whole trading history: at 883
+    entries the URL was 32,750 characters and the server in front of
+    PostgREST refused it with a plain-text 400. postgrest-py cannot parse
+    that as an error document, so it surfaced under a message naming
+    neither the table nor the cause, and the page returned 500.
+
+    The cruelty of it is who it hit. It works perfectly until a merchant
+    has traded enough, and then it never works again - so it broke for
+    exactly the merchants using the platform most, while every smaller
+    account looked fine.
+
+    700 entries here because production measured the real cutoff at 676
+    uuids; the fake client now refuses an over-long `.in_()` the same way
+    (tests/fakes.py::_url_too_long_error).
+    """
+    merchant_id = _merchant(fake_client)
+    for _ in range(700):
+        collection_id = _collection(fake_client, merchant_id, phone="255712000001")
+        _credit(fake_client, merchant_id, _transaction(fake_client, merchant_id, collection_id=collection_id))
+
+    rows, total = list_wallet_ledger(
+        fake_client, merchant_id=merchant_id, currency="TZS", pagination=_Pagination()
+    )
+
+    assert total == 700
+    # And the batching did not lose the enrichment that the single query
+    # used to provide - a row still knows its transaction and its payer.
+    assert rows[0]["reference"] is not None
+    assert rows[0]["customer_phone"] == "255712000001"

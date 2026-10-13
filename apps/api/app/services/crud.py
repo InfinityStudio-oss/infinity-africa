@@ -85,6 +85,52 @@ def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = N
             return rows[:max_rows]
 
 
+# How many ids may go into one `.in_(...)`.
+#
+# `.in_()` is rendered into the URL, so a long list becomes a long URL and
+# the server in front of PostgREST rejects it for its *length* rather than
+# answering it. Measured against production on 2026-10-13: 675 uuids
+# (25,054 characters) are accepted and 676 (25,091) come back
+# `400 Bad Request` with a plain-text body — which postgrest-py cannot
+# parse as an error document, so it surfaces as the uninformative
+# `APIError: JSON could not be generated`.
+#
+# 200 leaves room for longer base URLs, longer column names and whatever
+# margin the limit has on a different day. It is the same number
+# referral_commissions.py arrived at independently.
+IN_CHUNK_SIZE = 200
+
+
+def fetch_in_chunks(query_factory, values, *, chunk_size: int = IN_CHUNK_SIZE) -> list[dict]:
+    """Rows for a set of ids, asked for in batches small enough to send.
+
+    `query_factory(batch)` must build a fresh query filtered to that
+    batch; the rows from every batch are concatenated. Order across
+    batches follows the order of `values`, so callers that need a
+    particular ordering should sort the result rather than rely on it.
+
+    The failure this exists to prevent is not a slow query, it is a
+    rejected one. A merchant's wallet ledger looks up every transaction
+    its entries reference in a single `.in_()`; at 883 entries that URL
+    was 32,750 characters and the page returned 500 for that merchant
+    every time, while working for everyone smaller. It breaks at a
+    threshold nobody crosses until they have been trading for a while,
+    which is the worst way for it to break.
+
+    Each batch still goes through fetch_all, so a batch that matches more
+    than one page of rows is paged out properly.
+    """
+    ids = [value for value in values if value]
+    if not ids:
+        return []
+
+    rows: list[dict] = []
+    for index in range(0, len(ids), chunk_size):
+        batch = ids[index : index + chunk_size]
+        rows.extend(fetch_all(lambda batch=batch: query_factory(batch)))
+    return rows
+
+
 def execute_maybe_single(query) -> dict | None:
     """`.maybe_single().execute()` returns `None` outright — not a Result
     object — when zero rows match (postgrest-py 2.x's documented contract:

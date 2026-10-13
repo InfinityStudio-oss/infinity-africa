@@ -17,6 +17,8 @@ import uuid
 
 from supabase import Client
 
+from app.services.crud import fetch_in_chunks
+
 
 def customer_phones_for_collections(
     client: Client, collection_ids: set[str] | set[uuid.UUID]
@@ -32,7 +34,12 @@ def customer_phones_for_collections(
     if not ids:
         return {}
 
-    rows = (
-        client.table("collections").select("id,customer_phone").in_("id", ids).execute().data or []
+    # Chunked for the same reason as the transactions lookup that calls
+    # this: `.in_()` goes into the URL, and a merchant with a long history
+    # produces one too long for the server to accept. See
+    # app/services/crud.py::fetch_in_chunks.
+    rows = fetch_in_chunks(
+        lambda batch: client.table("collections").select("id,customer_phone").in_("id", batch),
+        ids,
     )
     return {row["id"]: row.get("customer_phone") for row in rows}
