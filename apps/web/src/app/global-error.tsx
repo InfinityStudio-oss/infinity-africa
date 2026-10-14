@@ -21,9 +21,19 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
+import { isStaleServerActionError } from "@/lib/monitoring/stale-deploy";
+
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
+  // A tab left open across a deploy posts a Server Action id the new
+  // build does not have. Nothing ran, so nothing changed - but "this
+  // page failed to load" is the wrong thing to tell someone whose page
+  // loaded fine and whose button did not work. See
+  // src/lib/monitoring/stale-deploy.ts.
+  const staleBuild = isStaleServerActionError(error);
+
   useEffect(() => {
-    // No-op when no DSN was configured.
+    // No-op when no DSN was configured, and ignoreErrors drops the
+    // stale-build case before it is sent.
     Sentry.captureException(error);
   }, [error]);
 
@@ -45,11 +55,12 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
       >
         <div style={{ maxWidth: "28rem", textAlign: "center" }}>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0 0 0.75rem" }}>
-            Something went wrong
+            {staleBuild ? "InfinityPay has been updated" : "Something went wrong"}
           </h1>
           <p style={{ margin: "0 0 1.5rem", lineHeight: 1.6, color: "#56615e" }}>
-            This page failed to load. No payment was taken and nothing was changed. Please try
-            again.
+            {staleBuild
+              ? "This page was open while we released a new version, so that action did not go through. Nothing was changed and no payment was taken. Reload to continue."
+              : "This page failed to load. No payment was taken and nothing was changed. Please try again."}
           </p>
           {/* A plain <a>, not next/link, on purpose: this boundary renders
               because the React tree below the root failed, and a client-side
@@ -57,7 +68,21 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
               page load is the only reliable way out. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
+            // Always a real href: if the click handler never runs because
+            // scripting is broken, going to the homepage is a safe landing
+            // rather than a dead link.
             href="/"
+            onClick={
+              staleBuild
+                ? (event) => {
+                    // Reload where they already are, rather than sending
+                    // them to the marketing site and making them navigate
+                    // back to the thing they were doing.
+                    event.preventDefault();
+                    window.location.reload();
+                  }
+                : undefined
+            }
             style={{
               display: "inline-block",
               padding: "0.75rem 1.5rem",
@@ -68,7 +93,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
               fontWeight: 500,
             }}
           >
-            Go to InfinityPay
+            {staleBuild ? "Reload the page" : "Go to InfinityPay"}
           </a>
           {/* The digest is Next's own id for this error and is what ties
               a merchant's screenshot to a line in the logs. It carries no
