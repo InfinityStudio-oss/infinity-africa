@@ -34,6 +34,28 @@ from starlette.responses import Response
 _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
 _HEADERS = {
+    # Nothing this API returns may be stored by a shared cache, and until
+    # 2026-10-14 nothing said so.
+    #
+    # Without an explicit policy a cache falls back to heuristics. Most
+    # refuse to store a response to a request carrying an Authorization
+    # header, which is the only reason this has been safe so far - an
+    # accident of convention rather than a decision. The moment a CDN is
+    # put in front of this API (under discussion, see
+    # docs/CACHING_AND_PERFORMANCE.md) a single over-broad cache rule
+    # could store one merchant's wallet response and serve it to another.
+    # On this platform that is not a stale page, it is one business
+    # reading another's money.
+    #
+    # no-store rather than no-cache: no-cache permits storing the
+    # response and revalidating, which still means a copy of a merchant's
+    # balance sitting in an intermediary. no-store means do not write it
+    # down at all.
+    #
+    # Set with setdefault below, so a specific route can still opt into
+    # `private, max-age=N` - private being browser-only, never shared -
+    # once there is a read worth caching and a decision that it is safe.
+    "Cache-Control": "no-store",
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

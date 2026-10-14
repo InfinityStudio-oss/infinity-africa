@@ -161,6 +161,19 @@ class Settings(BaseSettings):
     # httpx's 5s and start failing slow-but-fine queries.
     supabase_client_timeout_seconds: int = 120
 
+    # A single Supabase round trip slower than this gets one warning line
+    # naming the table (never the filters — those are phone numbers and
+    # merchant ids). See app/database/session.py::_log_if_slow.
+    #
+    # 400ms, not 50: the API runs in Amsterdam and the database in
+    # Frankfurt, so 5-8ms is the floor before Postgres does any work, and
+    # a legitimate report over a busy merchant's history is allowed to
+    # take a moment. The number is set to catch a query that has lost its
+    # index or outgrown its access pattern, not to narrate normal
+    # traffic — a threshold that fires constantly is one people filter
+    # out. 0 disables it.
+    slow_query_warning_ms: int = 400
+
     sentry_dsn: str = ""
     sentry_environment: str = ""
     # Traces are off by default. Performance tracing samples real request

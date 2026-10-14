@@ -7,6 +7,7 @@ and API keys directly against the tables in supabase/migrations.
 """
 
 import logging
+import time
 from functools import lru_cache
 
 import httpx
@@ -37,8 +38,40 @@ _CONNECTION_FAILURES = (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtoco
 _REPLAYABLE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
+def _log_if_slow(request: httpx.Request, elapsed_ms: float) -> None:
+    """One line when a single Supabase round trip takes too long.
+
+    Here rather than at the call sites for the same reason the retry is:
+    it covers every query in the codebase, including ones not yet
+    written. The API runs in Amsterdam and the database in Frankfurt, so
+    the floor is 5-8ms of travel before Postgres does anything; anything
+    far above that is either a query without a usable index or a table
+    that has outgrown the way it is being read.
+
+    **Path only, never the query string.** A PostgREST URL carries the
+    filters, and those filters are a customer's phone number, a
+    merchant's id and a payment reference. The table name is the part
+    that identifies the slow query; the values are what would make this
+    a privacy leak in a log file. Same rule the Sentry scrubber follows.
+    """
+    settings = get_settings()
+    threshold = settings.slow_query_warning_ms
+    if threshold <= 0 or elapsed_ms < threshold:
+        return
+    # rsplit on "?" rather than urlparse: cheaper, and the only thing
+    # being dropped is everything after the first question mark.
+    path = str(request.url).split("?", 1)[0].rsplit("/rest/v1/", 1)[-1]
+    logger.warning(
+        "slow_supabase_query table=%s method=%s duration_ms=%d",
+        path or "unknown",
+        request.method,
+        int(elapsed_ms),
+    )
+
+
 class _RetryStaleConnectionTransport(httpx.HTTPTransport):
-    """Retries a read once when the connection itself failed.
+    """Retries a read once when the connection itself failed, and times
+    every request so a slow one is visible.
 
     Deliberately at the transport rather than at the 124 `.execute()`
     call sites: this covers every query in the codebase, including ones
@@ -48,8 +81,9 @@ class _RetryStaleConnectionTransport(httpx.HTTPTransport):
     """
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
+        started = time.perf_counter()
         try:
-            return super().handle_request(request)
+            response = super().handle_request(request)
         except _CONNECTION_FAILURES as exc:
             if request.method not in _REPLAYABLE_METHODS:
                 raise
@@ -62,7 +96,15 @@ class _RetryStaleConnectionTransport(httpx.HTTPTransport):
             # pool, so this gets a fresh one. One retry only: a second
             # failure is a real outage, and should be reported as such
             # rather than hidden behind more waiting.
-            return super().handle_request(request)
+            response = super().handle_request(request)
+
+        # Timing must never be the thing that breaks a query, so it sits
+        # after the response is in hand and raises nothing of its own.
+        try:
+            _log_if_slow(request, (time.perf_counter() - started) * 1000)
+        except Exception:  # noqa: BLE001, S110
+            pass
+        return response
 
 
 @lru_cache

@@ -183,8 +183,25 @@ def test_signup_does_not_send_approval_email(fake_client, fake_resend):
 
 
 def test_signup_does_not_log_full_nida(fake_client, caplog):
-    with caplog.at_level(logging.DEBUG):
-        _post(_form())
+    """A national ID must never reach a log file.
+
+    caplog alone could not see this. Every logger in this app is named
+    "infinity.X" and the shared "infinity" parent sets propagate=False
+    (app/main.py::_configure_logging, which says so explicitly), so its
+    records never reach the root logger where caplog attaches. Until
+    2026-10-14 this test read an empty string and passed no matter what
+    signup logged - a privacy guarantee that could not fail, which is
+    worse than no test because it is believed.
+    """
+    infinity_logger = logging.getLogger("infinity")
+    caplog.set_level(logging.DEBUG, logger="infinity")
+    infinity_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.DEBUG):
+            _post(_form())
+    finally:
+        infinity_logger.removeHandler(caplog.handler)
+
     assert _NIDA_DIGITS not in caplog.text
     assert _NIDA not in caplog.text
 

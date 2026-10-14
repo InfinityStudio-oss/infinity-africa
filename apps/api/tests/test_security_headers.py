@@ -54,3 +54,31 @@ def test_content_security_policy_skipped_on_docs_path():
     assert "content-security-policy" not in response.headers
     # The other headers still apply everywhere, docs included.
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_no_response_may_be_stored_by_a_shared_cache():
+    """Every response says Cache-Control: no-store.
+
+    Until 2026-10-14 nothing did. A cache with no explicit policy falls
+    back to heuristics, and the only thing keeping merchant data out of
+    intermediaries was the convention that a response to an
+    Authorization-bearing request is not stored - an accident, not a
+    decision.
+
+    This matters because putting a CDN in front of this API is under
+    consideration. One over-broad cache rule against a silent origin
+    could store one merchant's wallet response and hand it to another;
+    that is not a stale page, it is one business reading another's money.
+    """
+    response = client.get("/health")
+
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_an_unauthenticated_read_is_also_no_store():
+    """The public endpoints are the ones a CDN is most likely to be
+    pointed at, and they include payment status polling - which is a
+    financial decision path and must always come from the database."""
+    response = client.get("/health/db-latency")
+
+    assert response.headers["Cache-Control"] == "no-store"

@@ -40,6 +40,14 @@ from app.main import app
 # reach it before any session exists.
 PUBLIC_ROUTES = {
     ("GET", "/health"),
+    # Uptime probes, which have to work without holding a credential.
+    # Neither reads merchant data: /health reports the environment name,
+    # and /health/db-latency reports whether one trivial indexed read
+    # answered and how many milliseconds it took. No host, no query, no
+    # row counts, nothing that is not already implied by the site being
+    # up. db-latency is rate limited, because an unauthenticated route
+    # that touches the database is otherwise a way to push load onto it.
+    ("GET", "/health/db-latency"),
     # Customer-facing payment pages and their status polling.
     ("GET", "/public/pay-by-link/{slug}"),
     ("POST", "/public/pay-by-link/{slug}/checkout"),
