@@ -117,6 +117,29 @@ is what actually protects the money.
 
 The merchant row is also read live, so a settings change shows at once.
 
+### Super Admin is never cached — a decision, not an oversight
+
+**`/v1/admin/*` has no cache and must not get one.** Confirmed by the
+platform owner, 2026-10-14. Do not propose it again without a new reason.
+
+The cache is wired into `/v1/merchant/*` only. Super Admin is where
+withdrawals are approved, businesses are suspended and fraud alerts are
+reviewed. Those are decisions about money, and a decision made on a
+cached figure is the exact failure this whole design exists to prevent.
+
+The Super Admin overview makes **13 queries** — more than the merchant
+dashboard's 9 — so there is a real temptation here, which is why the
+decision is written down rather than left to judgement. If that page
+needs to be faster, the answer is **fewer queries**, not cached ones:
+platform-wide totals computed database-side help whether or not anything
+is cached, and introduce no staleness into a screen where money decisions
+are made.
+
+Indexes are different and already apply everywhere — they are
+database-level, so Super Admin benefits from
+`20261014120000_merchant_list_composite_indexes.sql` with no caching
+involved.
+
 ### What the brief asked for that does not exist here
 
 - **"Today collections summary"** is not a separate endpoint; it is a
