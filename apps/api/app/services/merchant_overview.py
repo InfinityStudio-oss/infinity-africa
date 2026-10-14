@@ -19,6 +19,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.cache import cache_get, cache_set, merchant_key
 from app.core.errors import NotFoundError
 from app.core.time import dar_es_salaam_day_start_utc, is_dar_es_salaam_today
 from app.services.crud import fetch_all, get_by_id
@@ -40,7 +41,42 @@ def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+# The expensive part of the overview, cached. Nine Supabase queries at
+# ~57ms each, for figures that describe a merchant's own history.
+_OVERVIEW_TTL_SECONDS = 20
+
+
 def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
+    """The dashboard figures, with the aggregates cached and the balance
+    never cached.
+
+    **available_balance is deliberately left out of the cache and read
+    fresh on every call.** It is one query of the nine, so caching it
+    would buy about a ninth of the saving, and it is the single number a
+    merchant trusts most: the one they look at to decide whether to
+    withdraw. A stale total-collections figure is a cosmetic lag; a stale
+    balance is a merchant being told they have money they have already
+    moved, which is a support call and a dent in trust.
+
+    This does not make the balance here authoritative - the withdrawal
+    path reads it again for itself in app/services/disbursements.py,
+    which is what actually protects the money. It means the displayed
+    number matches the database at the moment it was displayed.
+    """
+    cache_key = merchant_key(merchant_id, "overview")
+    cached = cache_get(cache_key)
+    if cached is not None:
+        merchant = get_by_id(client, "merchants", merchant_id)
+        if merchant:
+            currency = merchant["currency"]
+            return {
+                **cached,
+                "merchant": merchant,
+                "available_balance": get_wallet_balance(
+                    client, merchant_id=merchant_id, currency=currency
+                ),
+            }
+
     merchant = get_by_id(client, "merchants", merchant_id)
     if not merchant:
         raise NotFoundError("Merchant not found")
@@ -145,6 +181,23 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
         .in_("status", list(_UNPAID_INVOICE_STATUSES))
         .execute()
     ).count or 0
+
+    # Cached without the two live parts: the merchant row (so a settings
+    # change shows immediately) and the balance (see the docstring).
+    cache_set(
+        cache_key,
+        {
+            "total_collections": total_collections,
+            "collections_today": collections_today,
+            "withdrawals_today": withdrawals_today,
+            "pending_transactions": pending_transactions,
+            "successful_withdrawals": successful_withdrawals,
+            "active_payment_links": active_payment_links,
+            "unpaid_invoices": unpaid_invoices,
+            "total_fees_charged": total_fees_charged,
+        },
+        _OVERVIEW_TTL_SECONDS,
+    )
 
     return {
         "merchant": merchant,

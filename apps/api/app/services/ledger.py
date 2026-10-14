@@ -14,6 +14,7 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.cache import invalidate_merchant_display
 from app.core.errors import InsufficientBalanceError
 from app.core.pagination import PaginationParams
 from app.core.time import dar_es_salaam_day_bounds_utc
@@ -69,6 +70,21 @@ def _get_or_create_ledger_account(
 def _account_name(purpose: str, merchant_id: uuid.UUID | None) -> str:
     label = purpose.replace("_", " ").title()
     return f"{label} ({merchant_id})" if merchant_id else f"{label} (Platform)"
+
+
+def _invalidate_display_after_ledger_write(merchant_id: uuid.UUID) -> None:
+    """Every ledger write changes what the merchant's dashboard should
+    say, so every ledger write drops their cached display.
+
+    Called from the five public posting functions rather than from
+    _post_entries, which does not know whose money it is moving.
+
+    Freshness only. invalidate_merchant_display cannot raise, and nothing
+    about the correctness of a ledger write depends on it succeeding - a
+    failed invalidation means a figure is up to twenty seconds stale, not
+    that money was handled wrongly.
+    """
+    invalidate_merchant_display(merchant_id)
 
 
 def _post_entries(client: Client, entries: list[dict]) -> list[dict]:
@@ -370,6 +386,7 @@ def post_collection_entries(
     _record_wallet_snapshot(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
+    _invalidate_display_after_ledger_write(merchant_id)
 
 
 def post_disbursement_entries(
@@ -436,6 +453,7 @@ def post_disbursement_entries(
     _record_wallet_snapshot(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
+    _invalidate_display_after_ledger_write(merchant_id)
 
 
 def post_refund_entry(
@@ -486,6 +504,7 @@ def post_refund_entry(
     _record_wallet_snapshot(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
+    _invalidate_display_after_ledger_write(merchant_id)
 
 
 def reverse_collection_entries(
@@ -556,6 +575,7 @@ def reverse_collection_entries(
     _record_wallet_snapshot(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
+    _invalidate_display_after_ledger_write(merchant_id)
 
 
 def reverse_disbursement_entries(
@@ -622,3 +642,4 @@ def reverse_disbursement_entries(
     _record_wallet_snapshot(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
+    _invalidate_display_after_ledger_write(merchant_id)

@@ -37,6 +37,7 @@ from fastapi import (
 
 from app.auth import get_current_user, hash_api_key, require_own_merchant_role
 from app.config import get_settings
+from app.core.cache import cache_get, cache_set, merchant_key
 from app.core.errors import APIError, ConflictError, NotFoundError, ValidationAPIError
 from app.core.feature_flags import (
     require_merchant_api_keys_enabled,
@@ -178,6 +179,13 @@ logger = logging.getLogger("infinity.merchant_portal")
 
 router = APIRouter(prefix="/merchant", tags=["merchant-portal"])
 
+
+# Cached read TTLs. Short because these are numbers a merchant reads to
+# understand their own money; the cost of a stale one is confusion about
+# whether something arrived.
+_SETTINGS_TTL_SECONDS = 300
+_API_KEYS_TTL_SECONDS = 60
+
 _ADMIN_AND_STAFF = (UserRole.MERCHANT_ADMIN, UserRole.MERCHANT_STAFF)
 _ADMIN_ONLY = (UserRole.MERCHANT_ADMIN,)
 _ADMIN_AND_DEVELOPER = (UserRole.MERCHANT_ADMIN, UserRole.DEVELOPER)
@@ -191,9 +199,18 @@ def get_my_merchant(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role())],
 ):
     client = get_supabase_admin()
+    cache_key = merchant_key(membership.merchant_id, "settings")
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return APIResponse(data=MerchantResponse(**cached))
+
     row = get_by_id(client, "merchants", membership.merchant_id)
     if not row:
         raise NotFoundError("Merchant not found")
+    # The merchant row holds no secret: webhook_secret_encrypted is not
+    # on MerchantResponse, and the API key secret was never stored in
+    # plaintext anywhere. What is cached is what the endpoint returns.
+    cache_set(cache_key, MerchantResponse(**row).model_dump(mode="json"), _SETTINGS_TTL_SECONDS)
     return APIResponse(data=MerchantResponse(**row))
 
 
@@ -1697,8 +1714,30 @@ def list_my_api_keys(
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
 ):
     client = get_supabase_admin()
+    # Keyed by page, so page 2 cannot answer a request for page 1.
+    cache_key = merchant_key(
+        membership.merchant_id, "api-keys", str(pagination.page), str(pagination.page_size)
+    )
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return APIResponse(
+            data=[ApiKeyResponse(**row) for row in cached["rows"]],
+            meta=build_page_meta(pagination, cached["total"]),
+        )
+
     rows, total = list_for_merchant(client, "api_keys", merchant_id=membership.merchant_id, pagination=pagination)
     data = [ApiKeyResponse(**row) for row in rows]
+    # Serialised through ApiKeyResponse, not from the raw rows. That
+    # schema has no field capable of carrying a secret - not even an
+    # optional one - so what reaches Redis is structurally the masked
+    # view: prefix, last4, environment, status, timestamps. The secret
+    # itself exists only in the one-time creation response and is stored
+    # nowhere, here or in the database.
+    cache_set(
+        cache_key,
+        {"rows": [item.model_dump(mode="json") for item in data], "total": total},
+        _API_KEYS_TTL_SECONDS,
+    )
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
 

@@ -16,6 +16,7 @@ from typing import Any
 
 from supabase import Client
 
+from app.core.cache import invalidate_merchant_display
 from app.core.pagination import PaginationParams
 
 
@@ -183,9 +184,34 @@ def get_by_id(client: Client, table: str, row_id: uuid.UUID) -> dict | None:
     return execute_maybe_single(query)
 
 
+# Tables whose contents are shown on a cached dashboard read. Writing to
+# one drops that merchant's cached display, centrally, so a mutation
+# added later cannot forget to - which is the failure mode of scattering
+# invalidation calls through handlers.
+_CACHED_DISPLAY_TABLES = {"merchants", "api_keys"}
+
+
+def _invalidate_display_for(table: str, row: dict | None) -> None:
+    """Freshness only, and it cannot raise.
+
+    A missed invalidation means a merchant sees a figure up to its TTL
+    old. It never means money was handled wrongly, because nothing
+    cached decides anything - see app/core/cache.py.
+    """
+    if not row or table not in _CACHED_DISPLAY_TABLES:
+        return
+    # On merchants the row id *is* the merchant id; elsewhere it is a
+    # column.
+    merchant_id = row.get("id") if table == "merchants" else row.get("merchant_id")
+    if merchant_id:
+        invalidate_merchant_display(merchant_id)
+
+
 def insert_row(client: Client, table: str, data: dict) -> dict:
     result = client.table(table).insert(data).execute()
-    return result.data[0]
+    row = result.data[0]
+    _invalidate_display_for(table, row)
+    return row
 
 
 def update_row(
@@ -201,4 +227,6 @@ def update_row(
         query = query.eq("merchant_id", str(merchant_id))
 
     result = query.execute()
-    return result.data[0] if result.data else None
+    row = result.data[0] if result.data else None
+    _invalidate_display_for(table, row)
+    return row

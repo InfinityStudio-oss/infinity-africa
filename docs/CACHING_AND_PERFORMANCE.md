@@ -7,9 +7,11 @@
 > withdrawal approval, webhook processing, reconciliation, and API
 > authentication and authorization.
 
-**There is no application cache today, and that is deliberate.** This
-document records what was measured, what was done instead, and what the
-evidence would have to say before adding one.
+**A Redis cache was added on 2026-10-14**, after measurement showed the
+database was the dominant cost. It holds three merchant *display* reads
+and nothing else. It is off unless `CACHE_ENABLED=true` and `REDIS_URL`
+are both set, and turning it off is a performance change, never a
+correctness one.
 
 ---
 
@@ -87,10 +89,48 @@ Every API response now sends `Cache-Control: no-store`. See below.
 
 ---
 
+## What is cached
+
+| Read | Key | TTL | Why safe |
+|---|---|---|---|
+| Dashboard aggregates | `merchant:{id}:overview` | **20 s** | Totals describing a merchant's own history. Nine queries become one cache read. |
+| Merchant settings | `merchant:{id}:settings` | **300 s** | The merchant's own profile. `MerchantResponse` carries no secret. |
+| API key list (masked) | `merchant:{id}:api-keys:{page}:{size}` | **60 s** | Serialised through `ApiKeyResponse`, which has **no field capable of holding a secret**. |
+
+Every key is prefixed `infinitypay:{environment}:`, so a staging deploy
+sharing a Redis cannot answer a production request, and every merchant
+key contains the merchant id **by construction** — which is what prevents
+one merchant's dashboard answering another's request.
+
+### The wallet balance is deliberately not cached
+
+`get_merchant_overview` caches eight aggregates and reads
+`available_balance` **fresh on every call**. It is one query of nine, so
+caching it would buy about a ninth of the saving, and it is the single
+number a merchant trusts most: the one they look at to decide whether to
+withdraw. A stale total-collections figure is a cosmetic lag. A stale
+balance tells a merchant they have money they have already moved.
+
+This does not make the displayed balance authoritative — the withdrawal
+path reads it again for itself in `app/services/disbursements.py`, which
+is what actually protects the money.
+
+The merchant row is also read live, so a settings change shows at once.
+
+### What the brief asked for that does not exist here
+
+- **"Today collections summary"** is not a separate endpoint; it is a
+  field inside the overview and is cached with it.
+- **"Reports summary"** has no cacheable read. `POST /v1/merchant/reports`
+  *builds and emails* a report — caching it would cache an email send.
+  Report figures are read from the database every time.
+
+---
+
 ## What is NOT cached, and must never be
 
-Confirmed by audit, 2026-10-14. None of these read from any cache, and
-there is no cache to read from:
+Confirmed by audit, 2026-10-14, and enforced structurally — see below.
+None of these read from any cache:
 
 - customer payment page status polling
 - payment success/failure verification
@@ -107,9 +147,54 @@ there is no cache to read from:
 - auth and session state
 - raw provider callbacks and provider verification responses
 
-The structural guarantee is `tests/test_tenant_isolation_route_guards.py`,
-which walks the whole route table and fails on any route that is not
-deliberately classified.
+**This is enforced, not just documented.**
+`tests/test_cache_never_reaches_money.py` parses every module's imports
+and fails if `app/core/cache.py` is imported by anything outside a
+four-module allowlist — and names each money path individually so a
+failure says which one. A module that cannot import the cache cannot read
+a stale value from one. Adding an import means arguing for it in a diff
+rather than hoping it is noticed in review.
+
+Route-level authorization is held separately by
+`tests/test_tenant_isolation_route_guards.py`.
+
+## Invalidation
+
+Display freshness only. **Correctness never depends on an invalidation
+succeeding** — if one fails, a figure is stale until its TTL expires, at
+most twenty seconds for the overview. That is also why it is safe to call
+from inside a money path: it cannot raise, and the caller's correctness
+does not rest on it.
+
+| Event | Hook |
+|---|---|
+| Any ledger write — collection credit, disbursement, refund, either reversal | all five posting functions in `app/services/ledger.py` |
+| Merchant settings or status change | `crud.update_row` on `merchants` |
+| API key create / revoke / update | `crud.insert_row` and `crud.update_row` on `api_keys` |
+
+The last two are hooked centrally in `crud` rather than in each handler,
+so a mutation added later cannot forget to invalidate.
+
+## When Redis is unavailable
+
+The API keeps working from the database. Specifically:
+
+- Every failure — outage, timeout, unparseable value, wrong type —
+  returns a **miss**, and the caller reads the database as if no cache
+  existed. No operation in `app/core/cache.py` raises.
+- **Socket timeouts are 0.25 s.** A cache lookup slower than a ~57 ms
+  query has already lost; waiting longer would make the page slower than
+  no cache at all.
+- **A circuit breaker** opens after 3 consecutive failures and stops
+  calling Redis for 30 seconds. Without it, an outage would cost every
+  cached endpoint a timeout on *every* request — turning a performance
+  feature into a regression precisely when nobody is watching.
+
+## Rollback
+
+Set `CACHE_ENABLED=false` on Railway and redeploy. Nothing else changes:
+no code path, no schema, no financial behaviour. Clearing `REDIS_URL` has
+the same effect. Both are safe to do at any time, including mid-incident.
 
 ---
 

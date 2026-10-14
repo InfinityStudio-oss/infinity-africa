@@ -161,6 +161,24 @@ class Settings(BaseSettings):
     # httpx's 5s and start failing slow-but-fine queries.
     supabase_client_timeout_seconds: int = 120
 
+    # --- Cache (app/core/cache.py) ------------------------------------
+    #
+    # Off unless both of these say otherwise, and off by default. The
+    # cache holds dashboard and report *displays* only - nothing in it
+    # decides whether money exists, moves or is owed - so switching it
+    # off is a performance change and never a correctness one. That is
+    # the rollback: CACHE_ENABLED=false, redeploy, done.
+    cache_enabled: bool = False
+    # redis://... or rediss://... The password lives in this URL, so it is
+    # never logged, never echoed in an error, and never returned by an
+    # endpoint.
+    redis_url: str = ""
+    # Fallback TTL for a cached read that does not state its own. Short
+    # on purpose: these are figures a merchant reads to understand their
+    # own money, and the cost of a stale one is confusion about whether a
+    # payment arrived.
+    cache_default_ttl_seconds: int = 30
+
     # A single Supabase round trip slower than this gets one warning line
     # naming the table (never the filters — those are phone numbers and
     # merchant ids). See app/database/session.py::_log_if_slow.

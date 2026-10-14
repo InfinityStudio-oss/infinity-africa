@@ -12,3 +12,4 @@ fpdf2==2.8.4
 resend==2.41.0
 sentry-sdk==2.71.0
 posthog==7.62.1
+redis==5.2.1
