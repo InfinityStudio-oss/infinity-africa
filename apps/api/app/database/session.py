@@ -43,9 +43,11 @@ def _log_if_slow(request: httpx.Request, elapsed_ms: float) -> None:
 
     Here rather than at the call sites for the same reason the retry is:
     it covers every query in the codebase, including ones not yet
-    written. The API runs in Amsterdam and the database in Frankfurt, so
-    the floor is 5-8ms of travel before Postgres does anything; anything
-    far above that is either a query without a usable index or a table
+    written. Measured 2026-10-14, the floor for the most trivial
+    possible Supabase REST query is 56-60ms - not the 5-8ms the network
+    distance alone suggests, because the request also crosses Supabase's
+    edge, its gateway and PostgREST before Postgres sees it. Anything far
+    above that floor is either a query without a usable index or a table
     that has outgrown the way it is being read.
 
     **Path only, never the query string.** A PostgREST URL carries the

@@ -105,10 +105,13 @@ def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = N
 # requests at either size, so 300 is the same number of round trips with
 # considerably more room.
 #
-# The round trips are the point. Railway runs in Amsterdam and Supabase
-# in Frankfurt, so each one costs 5-8ms of travel that no amount of
-# database tuning removes. For a merchant with 883 ledger entries this
-# takes the wallet ledger from about eleven requests to about seven.
+# The round trips are the point, and they cost more than they look.
+# Measured 2026-10-14 via /health/db-latency, the floor for even a
+# trivial Supabase REST query is 56-60ms - the Amsterdam-to-Frankfurt
+# network time is only 5-8ms of that, the rest being Supabase's edge,
+# gateway and PostgREST. For a merchant with 883 ledger entries this
+# takes the wallet ledger from about eleven requests to about seven,
+# which at the measured cost is roughly 230ms.
 #
 # Deliberately not larger. The measured limit is on the whole URL, and a
 # table with a longer name or a longer select clause spends more of it

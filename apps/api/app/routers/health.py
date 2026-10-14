@@ -28,14 +28,18 @@ def db_latency(
 ) -> DbLatencyResponse:
     """How long one trivial round trip to the database takes, from here.
 
-    The number this exists to make visible: the API runs in Amsterdam and
-    Supabase in Frankfurt, so every query pays 5-8ms of travel before
-    Postgres does any work. An endpoint that makes ten queries spends
-    most of a tenth of a second on geography alone, and until now there
-    was no way to see that without guessing. Measuring it from a browser
-    is useless — a merchant in Dar es Salaam is ~90ms from anything in
-    Europe, which swamps the signal entirely. This measures the hop that
-    actually matters, from the side that makes it.
+    The number this exists to make visible, and it was worth measuring:
+    the estimate before this endpoint existed was 5-8ms, the network time
+    between Amsterdam and Frankfurt. The first live readings were 56-60ms,
+    because a Supabase REST query also crosses their edge, their gateway
+    and PostgREST before Postgres sees it. An endpoint making ten queries
+    therefore spends most of a second in the database, not a tenth of one
+    - which makes the number of round trips the thing worth optimising.
+
+    Measuring this from a browser is useless: a merchant in Dar es Salaam
+    is ~90ms from anything in Europe, which swamps the signal entirely.
+    This measures the hop that actually matters, from the side that makes
+    it.
 
     The query is the cheapest one that proves the database answered: a
     single indexed id, one row, no joins, no counts. It is a read and it

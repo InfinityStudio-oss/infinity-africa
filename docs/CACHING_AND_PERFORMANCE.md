@@ -23,18 +23,28 @@ than averages.
 | Merchant in Dar es Salaam → API | **135 ms** | every click |
 | Merchant → `infinitypay.me` (Vercel) | 93 ms | every page |
 | Merchant → Supabase | 91 ms | auth only |
-| **API (Amsterdam) → Supabase (Frankfurt)** | **5–8 ms** | every query |
+| **API (Amsterdam) → Supabase (Frankfurt)** | **~57 ms** | every query |
 
-Two conclusions shaped everything below.
+> **That last number was predicted at 5–8 ms and measured at ~57 ms.**
+> Amsterdam to Frankfurt is ~400 km, so the network portion really is
+> 5–8 ms — but a Supabase REST query is not just network. It passes
+> through Supabase's own edge and gateway, PostgREST, and then Postgres,
+> and the measured floor for the most trivial possible query (one
+> indexed id, `limit 1`) is 56–60 ms. Warming the connection pool does
+> not help: twelve back-to-back probes floored at 56 ms, and a 30-second
+> idle gap cost only the first one. **Measure, then conclude.** The
+> original estimate was out by roughly eight times and pointed at the
+> wrong fix.
 
-**The API is the slowest thing a merchant touches**, and it is slow for a
-reason no server move fixes: Vercel and Supabase both sit behind a CDN
-that terminates TLS near the user, and the API does not. The browser
-negotiates all the way to Amsterdam.
+**The API is the slowest single hop a merchant touches**, and it is slow
+for a reason no server move fixes: Vercel and Supabase both sit behind a
+CDN that terminates TLS near the user, and the API does not.
 
-**The database is not the bottleneck.** A dashboard making ten queries
-spends ~70 ms on database round trips against 135 ms simply reaching the
-API. An application cache attacks the smaller number.
+**But per-query overhead, not distance, dominates anything that makes
+several queries.** At ~57 ms each, a ten-query dashboard spends ~570 ms
+in the database against 135 ms reaching the API. The round-trip *count*
+is therefore the most important performance variable on this platform —
+far more than indexes, and more than where the server sits.
 
 ---
 
@@ -42,10 +52,13 @@ API. An application cache attacks the smaller number.
 
 ### Fewer round trips
 
+**The highest-value lever, now that a query is known to cost ~57 ms.**
+
 `crud.fetch_in_chunks` batches `.in_()` lookups. Raising the chunk from
 200 to 300 took the wallet ledger from ~11 round trips to ~7 for a
-merchant with 883 entries — most of what co-locating the API with the
-database would have given, for a one-line change. The chunk size is
+merchant with 883 entries. At the measured cost that is roughly **230 ms
+saved** from one changed constant — not the ~15 ms the original estimate
+implied. The chunk size is
 bounded by a URL limit measured at 675 ids; see
 `tests/test_in_chunk_size.py`, which is what stops a future increase from
 quietly re-creating a production outage.
@@ -164,24 +177,34 @@ merchant id and a payment reference.
 
 ## Would Redis help?
 
-Not yet, on the evidence above. It attacks ~70 ms of database time while
-135 ms goes on reaching the API, and half the database time was removed
-by a one-line change.
+**The measurement reopened this.** The case against it rested on database
+time being ~70 ms against 135 ms of network. At ~57 ms per query the real
+figure for a multi-query endpoint is several hundred milliseconds, and
+the database is the dominant cost rather than the smaller half.
 
-It would also add a new production dependency, a new failure mode, and a
-staleness decision: a 15-second TTL on the overview means a merchant can
-wait 15 seconds to see a payment they have just been told about.
+What has not changed is the order of operations. Caching a result still
+costs a staleness decision — a 15-second TTL on the overview means a
+merchant can wait 15 seconds to see a payment they were just notified
+about — while **removing a query costs nothing and helps every caller,
+cached or not**. Seven round trips cached is still seven round trips on
+every miss, every invalidation and every first view.
 
-**Revisit when** `/health/db-latency` or the slow-query log shows real
-database pressure, or when a merchant's history is large enough that
-reports cannot be served inside a request. Add it with evidence, not
-ahead of it.
+So: finish the two round-trip reductions below first (they are bounded,
+testable, and need no new infrastructure), re-measure, and then size
+Redis against what is left. The evidence now says it is likely worth it —
+which is the opposite of what this document said before the number was
+measured, and the reason it was worth measuring.
 
 ---
 
 ## Future work, in the order it is likely to be worth doing
 
-1. **CDN in front of the API.** The only change that addresses the 135 ms.
+1. **Wallet ledger fast path and PostgREST embedding** — moved to the top
+   by the measurement. Each removed query is worth ~57 ms. See 2 and 3
+   below, which are now the highest-value work on this list.
+1. **CDN in front of the API.** Addresses the 135 ms, which is no longer
+   the largest term for a multi-query page but is still every page's
+   floor.
 2. **Wallet ledger fast path.** `_wallet_ledger_entries` replays a
    merchant's complete history on every page view to compute running
    balances. It no longer needs to for almost anyone: **8,067 ledger rows

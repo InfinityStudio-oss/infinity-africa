@@ -165,10 +165,10 @@ class Settings(BaseSettings):
     # naming the table (never the filters — those are phone numbers and
     # merchant ids). See app/database/session.py::_log_if_slow.
     #
-    # 400ms, not 50: the API runs in Amsterdam and the database in
-    # Frankfurt, so 5-8ms is the floor before Postgres does any work, and
-    # a legitimate report over a busy merchant's history is allowed to
-    # take a moment. The number is set to catch a query that has lost its
+    # 400ms, not 50: the measured floor for any Supabase REST query is
+    # 56-60ms (see /health/db-latency), so a threshold near that would
+    # fire on everything, and a legitimate report over a busy merchant's
+    # history is allowed to take a moment. The number is set to catch a query that has lost its
     # index or outgrown its access pattern, not to narrate normal
     # traffic — a threshold that fires constantly is one people filter
     # out. 0 disables it.
