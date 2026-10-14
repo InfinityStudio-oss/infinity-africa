@@ -95,10 +95,28 @@ def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = N
 # parse as an error document, so it surfaces as the uninformative
 # `APIError: JSON could not be generated`.
 #
-# 200 leaves room for longer base URLs, longer column names and whatever
-# margin the limit has on a different day. It is the same number
-# referral_commissions.py arrived at independently.
-IN_CHUNK_SIZE = 200
+# 300 keeps a wide margin under that measured 675 - about 11,600
+# characters against a limit that held at 25,054, so better than half the
+# budget spare - while cutting round trips against the 200 this started
+# at.
+#
+# 400 was tried first and rejected by tests/test_in_chunk_size.py for
+# leaving too thin a margin. It also bought nothing: 883 ids need three
+# requests at either size, so 300 is the same number of round trips with
+# considerably more room.
+#
+# The round trips are the point. Railway runs in Amsterdam and Supabase
+# in Frankfurt, so each one costs 5-8ms of travel that no amount of
+# database tuning removes. For a merchant with 883 ledger entries this
+# takes the wallet ledger from about eleven requests to about seven.
+#
+# Deliberately not larger. The measured limit is on the whole URL, and a
+# table with a longer name or a longer select clause spends more of it
+# before the ids start, so the margin is doing real work. Going further
+# than this means not sending an id list at all - PostgREST can embed the
+# related rows and do the join server-side - which is a better answer and
+# a bigger change than a constant.
+IN_CHUNK_SIZE = 300
 
 
 def fetch_in_chunks(query_factory, values, *, chunk_size: int = IN_CHUNK_SIZE) -> list[dict]:
