@@ -50,6 +50,7 @@ from app.services.checkout_reconciliation import reconcile_pending_checkout_coll
 from app.services.collection_expiry import expire_stale_pushes
 from app.services.disbursements import reconcile_pending_disbursements
 from app.services.referral_commissions import recalculate_open_referrals
+from app.services.scheduler_lease import acquire_lease, release_lease
 from app.services.webhook_delivery import deliver_pending_webhooks
 
 settings = get_settings()
@@ -138,7 +139,15 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
         await asyncio.sleep(interval_seconds)
         try:
             client = get_supabase_admin()
-            summary = await reconcile_pending_checkout_collections(client)
+            # One replica at a time. See app/services/scheduler_lease.py —
+            # two replicas sweeping the same queue would ask Selcom about
+            # the same collection twice.
+            if not acquire_lease(client, "checkout_reconciliation"):
+                continue
+            try:
+                summary = await reconcile_pending_checkout_collections(client)
+            finally:
+                release_lease(client, "checkout_reconciliation")
             logger.info("scheduled_checkout_reconciliation %s", summary)
         except Exception as exc:
             logger.exception("scheduled_checkout_reconciliation_failed")
@@ -154,8 +163,13 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
         # its own try so an expiry failure never stops reconciliation --
         # crediting wallets matters more than closing stale ones.
         try:
-            expiry_summary = await expire_stale_pushes(get_supabase_admin())
-            logger.info("scheduled_collection_expiry %s", expiry_summary)
+            expiry_client = get_supabase_admin()
+            if acquire_lease(expiry_client, "collection_expiry"):
+                try:
+                    expiry_summary = await expire_stale_pushes(expiry_client)
+                finally:
+                    release_lease(expiry_client, "collection_expiry")
+                logger.info("scheduled_collection_expiry %s", expiry_summary)
         except Exception as exc:
             logger.exception("scheduled_collection_expiry_failed")
             capture_exception(exc)
@@ -193,7 +207,12 @@ async def _disbursement_reconciliation_loop(interval_seconds: float) -> None:
         await asyncio.sleep(interval_seconds)
         try:
             client = get_supabase_admin()
-            summary = await reconcile_pending_disbursements(client)
+            if not acquire_lease(client, "disbursement_reconciliation"):
+                continue
+            try:
+                summary = await reconcile_pending_disbursements(client)
+            finally:
+                release_lease(client, "disbursement_reconciliation")
             logger.info("scheduled_disbursement_reconciliation %s", summary)
         except Exception as exc:
             logger.exception("scheduled_disbursement_reconciliation_failed")
@@ -232,7 +251,19 @@ async def _webhook_delivery_loop(interval_seconds: float) -> None:
             # the sweep — up to 50 sequential POSTs at an 8s timeout each.
             # That is survivable at a trickle and not at all survivable
             # during a billing run.
-            summary = await asyncio.to_thread(deliver_pending_webhooks, get_supabase_admin())
+            #
+            # The lease matters most here. deliver_event POSTs an event
+            # and only then records the outcome, so two replicas sweeping
+            # at once would both read the same pending row and both send
+            # it — a merchant receiving collection.success twice, which
+            # can activate a customer's service twice.
+            webhook_client = get_supabase_admin()
+            if not acquire_lease(webhook_client, "webhook_delivery"):
+                continue
+            try:
+                summary = await asyncio.to_thread(deliver_pending_webhooks, webhook_client)
+            finally:
+                release_lease(webhook_client, "webhook_delivery")
             # Only worth a line when it actually did something; an idle
             # queue every 30s would drown the log.
             if summary["due"]:
@@ -268,7 +299,13 @@ async def _referral_recalculation_loop(interval_seconds: float) -> None:
         try:
             # Off the event loop: the sweep is synchronous and walks every
             # open referral's transactions, which must not stall requests.
-            summary = await asyncio.to_thread(recalculate_open_referrals, get_supabase_admin())
+            referral_client = get_supabase_admin()
+            if not acquire_lease(referral_client, "referral_recalculation"):
+                continue
+            try:
+                summary = await asyncio.to_thread(recalculate_open_referrals, referral_client)
+            finally:
+                release_lease(referral_client, "referral_recalculation")
             if summary.get("processed"):
                 logger.info("scheduled_referral_recalculation %s", summary)
         except Exception as exc:

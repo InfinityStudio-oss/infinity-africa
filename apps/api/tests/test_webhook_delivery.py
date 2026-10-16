@@ -658,6 +658,20 @@ def main_module_file() -> str:
     return main_module.__file__
 
 
+@pytest.fixture(autouse=True)
+def _lease_is_available(monkeypatch):
+    """These tests are about delivery behaviour, not about which replica
+    runs the sweep. The lease has its own tests in
+    test_scheduler_lease.py.
+
+    Without this the loop tests would skip every tick: they monkeypatch
+    get_supabase_admin to a bare object, which has no .table(), so
+    acquire_lease catches the error and answers "someone else has it".
+    """
+    monkeypatch.setattr("app.main.acquire_lease", lambda _client, _name: True)
+    monkeypatch.setattr("app.main.release_lease", lambda _client, _name: None)
+
+
 # --- one merchant's backlog cannot starve another's -------------------------
 
 

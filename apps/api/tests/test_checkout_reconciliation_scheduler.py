@@ -19,6 +19,19 @@ from app.main import _checkout_reconciliation_loop, _start_checkout_reconciliati
 # genuinely broken/hung loop is allowed to block the test suite before failing.
 _WAIT_TIMEOUT = 10.0
 
+@pytest.fixture(autouse=True)
+def _lease_is_available(monkeypatch):
+    """These tests are about the loop's timing, not about which replica
+    runs it. The lease has its own tests in test_scheduler_lease.py.
+
+    Without this the loops would skip every tick: they monkeypatch
+    get_supabase_admin to a bare object, which has no .table(), so
+    acquire_lease catches the error and answers "someone else has it".
+    """
+    monkeypatch.setattr("app.main.acquire_lease", lambda _client, _name: True)
+    monkeypatch.setattr("app.main.release_lease", lambda _client, _name: None)
+
+
 
 async def _run_loop_until_n_calls(interval: float, target_calls: int, call_counter: list) -> None:
     """Runs the real loop and returns as soon as call_counter has grown to
