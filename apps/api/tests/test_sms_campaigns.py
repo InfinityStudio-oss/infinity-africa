@@ -28,7 +28,12 @@ from app.services.sms_campaigns import (
     preview_campaign,
     resolve_recipients,
 )
-from tests.factories import TEST_JWT_SECRET, auth_headers, create_merchant, make_super_admin
+from tests.factories import (
+    TEST_JWT_SECRET,
+    auth_headers,
+    create_merchant,
+    make_super_admin,
+)
 
 client = TestClient(app)
 _SECRET = "test-callback-secret-not-real"
@@ -115,14 +120,17 @@ def test_a_shared_number_receives_one_message(fake_client):
     assert EXCLUDED_DUPLICATE_NUMBER in resolved["excluded"][0]["reason"]
 
 
-def test_announcement_opt_out_does_not_affect_transactional_alerts(fake_client):
+def test_announcement_opt_out_does_not_affect_lifecycle_messages(fake_client):
     """Separate preferences, on purpose: a merchant who stops wanting
-    announcements must not thereby lose their own payment alerts."""
+    announcements must not thereby lose their welcome or their payout
+    confirmations. Those are transactional and Super-Admin-controlled;
+    announcements are marketing and merchant-controlled."""
     merchant = _merchant(fake_client, "Quiet", "255712000005", announcements=False)
-    from app.services.sms_messages import collection_sms_enabled_for
+    from app.services.sms_messages import resolve_recipient
 
-    assert collection_sms_enabled_for(fake_client, uuid.UUID(merchant["id"])) is True
-
+    phone, reason = resolve_recipient(fake_client, uuid.UUID(merchant["id"]))
+    assert reason is None
+    assert phone == "255712000005", "still reachable for transactional messages"
 
 def test_the_preview_reports_cost_as_an_estimate(fake_client):
     _merchant(fake_client, "Alpha", "255712000006")

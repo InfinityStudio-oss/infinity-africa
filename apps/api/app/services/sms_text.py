@@ -105,6 +105,88 @@ COLLECTION_ALERT_TEMPLATE = (
 )
 
 
+# Sent once, after a merchant's first approval. 145 ASCII characters, so
+# one GSM-7 part.
+#
+# Every claim in it is checked against what the platform actually does:
+#   "Pokea malipo, links na ankara" - collections, payment links and
+#       invoices all exist.
+#   "Tengeneza API keys na weka webhooks" - self-service since
+#       06eb6d1; no credential or secret is ever put in the message
+#       itself, only the fact that the merchant can create them.
+#   "Toa kwenda benki au simu" - both are real. Production has paid out
+#       to CRDB as well as M-Pesa, Mixx by Yas, Halopesa, Airtel and
+#       Selcom; DestinationCode lists twelve banks.
+#   "bila ada" - true only while withdrawals are actually free, which is
+#       why this sentence is conditional rather than baked in. See
+#       render_welcome.
+WELCOME_TEMPLATE_FREE = (
+    "Karibu InfinityPay! Akaunti imeidhinishwa. "
+    "Pokea malipo, links na ankara. "
+    "Tengeneza API keys na weka webhooks. "
+    "Toa kwenda benki au simu bila ada."
+)
+
+# The same message with the fee claim removed, for whenever withdrawals
+# are not free. Advertising free withdrawals to a merchant who is charged
+# for them is the one thing this message must never do.
+WELCOME_TEMPLATE_PAID = (
+    "Karibu InfinityPay! Akaunti imeidhinishwa. "
+    "Pokea malipo, links na ankara. "
+    "Tengeneza API keys na weka webhooks. "
+    "Toa kwenda benki au simu."
+)
+
+
+def render_welcome(*, withdrawals_are_free: bool) -> str:
+    """The welcome message, with the fee claim only when it is true.
+
+    `withdrawals_are_free` is answered by asking the real fee calculator
+    what this merchant would actually be charged, not by a constant - so
+    if withdrawal pricing ever changes, the wording follows it instead of
+    becoming a false advertisement.
+    """
+    return WELCOME_TEMPLATE_FREE if withdrawals_are_free else WELCOME_TEMPLATE_PAID
+
+
+# Sent once, after a payout is confirmed by the provider.
+#
+# "Umetoa" - you have withdrawn. The fee line renders the real charge,
+# so "Ada: TZS 0" appears only when the merchant was genuinely charged
+# nothing. "Salio baada ya muamala" is the balance after the wallet was
+# debited for this withdrawal - which happens at approval, when the funds
+# are reserved, not at payout completion.
+WITHDRAWAL_COMPLETE_TEMPLATE = (
+    "InfinityPay: Umetoa TZS {amount}. "
+    "Ada: TZS {fee}. "
+    "Salio baada ya muamala: TZS {closing_balance}. "
+    "Kumb: {reference}."
+)
+
+
+def render_withdrawal_complete(
+    *,
+    amount: Decimal,
+    fee_amount: Decimal,
+    closing_balance: Decimal,
+    reference: str,
+) -> str:
+    """A confirmed payout.
+
+    Every figure is read from a committed record: amount and fee from the
+    disbursement, closing_balance from the ledger entry that debited the
+    wallet for it, reference from the transaction. Nothing is derived
+    here, and the fee is rendered rather than assumed - a merchant who
+    was charged must never be told the withdrawal was free.
+    """
+    return WITHDRAWAL_COMPLETE_TEMPLATE.format(
+        amount=format_amount(amount),
+        fee=format_amount(fee_amount),
+        closing_balance=format_amount(closing_balance),
+        reference=reference,
+    )
+
+
 def render_collection_alert(
     *,
     gross_amount: Decimal,

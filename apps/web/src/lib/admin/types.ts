@@ -750,11 +750,19 @@ export interface AdminSmsMessageRow {
   merchant_id: string;
   business_name: string | null;
   merchant_code: string | null;
-  purpose: "collection_alert" | "announcement";
+  purpose: "welcome" | "withdrawal_complete" | "announcement" | "collection_alert";
   /** 'sent' means the gateway accepted it, NOT that a handset received it.
    * 'unknown' means we called the provider and never learned the outcome —
    * deliberately distinct from 'failed', which is safe to retry. */
-  status: "queued" | "sending" | "sent" | "pending" | "failed" | "skipped" | "unknown";
+  status:
+    | "queued"
+    | "sending"
+    | "sent"
+    | "pending"
+    | "failed"
+    | "skipped"
+    | "unknown"
+    | "cancelled";
   recipient_phone: string;
   body: string | null;
   skipped_reason: string | null;
@@ -813,6 +821,12 @@ export interface AdminSmsPreview {
 
 export interface AdminSmsSettings {
   enabled: boolean;
+  /** The two automatic messages, each switchable on its own. Collection
+   * alerts are absent because they were retired, not switched off. */
+  welcome_enabled?: boolean;
+  withdrawal_enabled?: boolean;
+  /** Tariff for cost estimates. Configuration, never financial logic. */
+  credit_cost_tzs?: string;
   sender_id: string | null;
   api_key_configured: boolean;
   callback_secret_configured: boolean;

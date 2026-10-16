@@ -166,9 +166,16 @@ def test_notifications_can_be_on_with_no_address(fake_client):
     assert response.json()["data"]["collection_notifications_enabled"] is True
 
 
-def test_an_sms_preference_saves_without_an_email_address(fake_client):
-    """The exact blocked flow: turning on SMS alerts on an account with
-    no notification email set."""
+def test_a_merchant_cannot_set_an_sms_preference_at_all(fake_client):
+    """Policy changed on 2026-10-17: SMS is a Super Admin control,
+    because every message spends from a shared provider account.
+
+    This test asserted the opposite a day earlier - that a merchant could
+    turn SMS on without an email address - and that was correct then. It
+    is kept, inverted, rather than deleted: the save path it exercises is
+    the one a merchant client would use, and a 403 here is what stops the
+    UI removal from being the only thing in the way.
+    """
     _merchant_id, user_id = _merchant_admin(fake_client)
 
     response = client.patch(
@@ -181,11 +188,8 @@ def test_an_sms_preference_saves_without_an_email_address(fake_client):
         },
     )
 
-    assert response.status_code == 200, response.text
-    data = response.json()["data"]
-    assert data["collection_sms_enabled"] is True
-    assert data["sms_notification_phone"] == "255747730270"
-
+    assert response.status_code == 403, response.text
+    assert "InfinityPay" in response.json()["error"]["message"]
 
 def test_emails_can_be_empty_when_notifications_disabled(fake_client):
     _merchant_id, user_id = _merchant_admin(fake_client)

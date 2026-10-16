@@ -77,6 +77,7 @@ from app.services.ledger import (
 )
 from app.services.notifications_service import notify_merchant
 from app.services.selcom_business.client import get_selcom_business_client
+from app.services.sms_messages import enqueue_withdrawal_complete_sms
 from app.services.webhooks import enqueue_webhook_event
 from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
 
@@ -1093,6 +1094,23 @@ async def _run_disbursement_provider(client: Client, disbursement: dict, transac
             event_name="disbursement.success",
             payload={"disbursement_id": str(disbursement_id), "amount": str(amount), "currency": currency},
         )
+        # The provider has confirmed the payout, the transaction is
+        # successful and the wallet was debited back at approval. This is
+        # the only moment a withdrawal SMS may be composed - never on
+        # request, reservation, OTP, approval, provider acceptance or a
+        # pending result.
+        #
+        # Enqueues a row; sending is a separate leased worker. The
+        # closing balance it quotes comes from the reservation posting's
+        # own immutable ledger entry, not from the wallet as it stands
+        # now - collections may well have landed in between. Nothing here
+        # debits anything a second time.
+        try:
+            enqueue_withdrawal_complete_sms(
+                client, disbursement=disbursement, transaction=transaction
+            )
+        except Exception:  # noqa: BLE001, S110 — never break a completed payout
+            pass
         # enqueue_webhook_event is a developer-facing webhook delivery, not
         # the in-app notifications table — success never called
         # notify_merchant() at all until this fix, so a merchant's
@@ -1196,6 +1214,23 @@ def _resolve_processing_disbursement(
             event_name="disbursement.success",
             payload={"disbursement_id": str(disbursement_id), "amount": str(amount), "currency": currency},
         )
+        # The provider has confirmed the payout, the transaction is
+        # successful and the wallet was debited back at approval. This is
+        # the only moment a withdrawal SMS may be composed - never on
+        # request, reservation, OTP, approval, provider acceptance or a
+        # pending result.
+        #
+        # Enqueues a row; sending is a separate leased worker. The
+        # closing balance it quotes comes from the reservation posting's
+        # own immutable ledger entry, not from the wallet as it stands
+        # now - collections may well have landed in between. Nothing here
+        # debits anything a second time.
+        try:
+            enqueue_withdrawal_complete_sms(
+                client, disbursement=disbursement, transaction=transaction
+            )
+        except Exception:  # noqa: BLE001, S110 — never break a completed payout
+            pass
         # enqueue_webhook_event is a developer-facing webhook delivery, not
         # the in-app notifications table — success never called
         # notify_merchant() at all until this fix, so a merchant's

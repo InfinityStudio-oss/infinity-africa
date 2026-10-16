@@ -48,7 +48,6 @@ from app.services.merchant_gate import require_approved_merchant
 from app.services.notifications_service import notify_admin, notify_merchant
 from app.services.selcom.client import get_selcom_client
 from app.services.selcom.schemas import CollectionResult
-from app.services.sms_messages import enqueue_collection_alert
 from app.services.webhooks import enqueue_webhook_event
 
 
@@ -418,7 +417,7 @@ def resolve_collection(client: Client, *, collection_id: uuid.UUID, result: Coll
 
     if final_status == "successful":
         update_row(client, "transactions", uuid.UUID(transaction["id"]), {"status": "successful"})
-        closing_balance = post_collection_entries(
+        post_collection_entries(
             client,
             transaction_id=uuid.UUID(transaction["id"]),
             merchant_id=merchant_id,
@@ -435,22 +434,6 @@ def resolve_collection(client: Client, *, collection_id: uuid.UUID, result: Coll
         # Enqueues a row; it does not send anything. Dispatch is a
         # separate worker, so a provider outage cannot delay the webhook
         # below or touch what was just posted.
-        # Belt and braces. enqueue_collection_alert already swallows its
-        # own failures, but by this line the money has moved, the
-        # transaction is marked successful and the ledger has committed -
-        # so the isolation has to be a property of *this* path, not of
-        # that function keeping its internal discipline through every
-        # future change. A text message must never be able to turn a
-        # completed payment into a request that appears to have failed.
-        try:
-            enqueue_collection_alert(
-                client,
-                collection=collection,
-                transaction=transaction,
-                closing_balance=closing_balance,
-            )
-        except Exception:  # noqa: BLE001, S110 — never break a credited payment
-            pass
         _apply_collection_success(client, collection, transaction)
         evaluate_collection(client, collection=collection, transaction=transaction, event="resolved")
         enqueue_webhook_event(
@@ -667,7 +650,7 @@ def finalize_pending_review_collection(client: Client, *, collection_id: uuid.UU
 
     collection = update_row(client, "collections", collection_id, {"status": "successful"})
     update_row(client, "transactions", uuid.UUID(transaction["id"]), {"status": "successful"})
-    closing_balance = post_collection_entries(
+    post_collection_entries(
         client,
         transaction_id=uuid.UUID(transaction["id"]),
         merchant_id=merchant_id,
@@ -676,18 +659,6 @@ def finalize_pending_review_collection(client: Client, *, collection_id: uuid.UU
         net_amount=Decimal(str(transaction["net_amount"])),
         currency=currency,
     )
-    # The other path that credits a merchant: a Super Admin clearing a
-    # self-payment risk alert. Held payments are real payments once
-    # released, so they alert like any other.
-    try:
-        enqueue_collection_alert(
-            client,
-            collection=collection,
-            transaction=transaction,
-            closing_balance=closing_balance,
-        )
-    except Exception:  # noqa: BLE001, S110 — never break a credited payment
-        pass
     _apply_collection_success(client, collection, transaction)
     notify_merchant(
         client,

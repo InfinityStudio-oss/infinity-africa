@@ -417,6 +417,12 @@ def sms_settings(admin: Annotated[AuthenticatedUser, Depends(require_super_admin
     return APIResponse(
         data={
             "enabled": settings.oasis_sms_enabled,
+            # The two automatic messages, each switchable on its own.
+            # Collection alerts are absent because they no longer exist -
+            # retired 2026-10-17 for cost, not switched off.
+            "welcome_enabled": settings.oasis_sms_welcome_enabled,
+            "withdrawal_enabled": settings.oasis_sms_withdrawal_enabled,
+            "credit_cost_tzs": str(settings.oasis_sms_credit_cost_tzs),
             "sender_id": settings.oasis_sms_sender_id or None,
             "api_key_configured": bool(settings.oasis_sms_api_key),
             "callback_secret_configured": bool(settings.oasis_sms_webhook_secret),

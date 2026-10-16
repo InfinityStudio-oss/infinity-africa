@@ -28,6 +28,7 @@ from fastapi import (
     File,
     Form,
     Header,
+    HTTPException,
     Query,
     Request,
     Response,
@@ -2350,6 +2351,28 @@ def update_my_notification_settings(
         [payload.primary_notification_email, payload.secondary_notification_email],
         enabled=payload.collection_notifications_enabled,
     )
+    # SMS is a Super Admin control, not a merchant one (policy,
+    # 2026-10-17): every message costs money from a shared provider
+    # account, so who receives one and at which number is decided by
+    # InfinityPay. Refused rather than ignored - a caller who sent a
+    # field and got a 200 would reasonably believe it took effect.
+    #
+    # Checked here rather than only in the UI, because the UI is not a
+    # permission. The same fields on the Super Admin route
+    # (app/routers/admin.py) are unchanged and still work.
+    if (
+        payload.collection_sms_enabled is not None
+        or payload.announcement_sms_enabled is not None
+        or payload.sms_notification_phone is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "SMS notification settings are managed by InfinityPay. "
+                "Contact support to change them."
+            ),
+        )
+
     row = upsert_notification_settings(
         client,
         membership.merchant_id,
@@ -2357,12 +2380,6 @@ def update_my_notification_settings(
         secondary_notification_email=emails[1] if len(emails) > 1 else None,
         collection_notifications_enabled=payload.collection_notifications_enabled,
         updated_by=membership.user_id,
-        # None for any of these means "not supplied" — an existing caller
-        # that only sends the email fields cannot switch a merchant's SMS
-        # alerts off by omission.
-        collection_sms_enabled=payload.collection_sms_enabled,
-        announcement_sms_enabled=payload.announcement_sms_enabled,
-        sms_notification_phone=payload.sms_notification_phone,
     )
     write_audit_log(
         client,

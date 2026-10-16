@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.main import app
 from app.services import sms_provider
-from app.services.sms_messages import collection_sms_enabled_for, resolve_recipient
 from app.services.sms_provider import SmsResult
 from tests.factories import (
     TEST_JWT_SECRET,
@@ -61,7 +60,12 @@ def _settings_row(fake_client, merchant_id):
 # --- the merchant's own control ----------------------------------------
 
 
-def test_a_merchant_can_turn_their_own_sms_alerts_on(fake_client):
+def test_a_merchant_cannot_turn_on_their_own_sms(fake_client):
+    """Policy, 2026-10-17: SMS costs money from a shared provider account,
+    so it is a Super Admin control. Refused rather than ignored - a
+    caller who sent the field and got a 200 would reasonably believe it
+    took effect. Checked at the endpoint, because hiding the UI is not a
+    permission."""
     merchant, user_id = _merchant(fake_client)
 
     response = client.patch(
@@ -76,110 +80,36 @@ def test_a_merchant_can_turn_their_own_sms_alerts_on(fake_client):
         headers=auth_headers(user_id),
     )
 
-    assert response.status_code == 200
-    row = _settings_row(fake_client, merchant["id"])
-    assert row["collection_sms_enabled"] is True
-    # Normalised on the way in, so the worker can trust what it reads.
-    assert row["sms_notification_phone"] == "255713111222"
-
-
-def test_omitting_the_sms_fields_leaves_them_alone(fake_client):
-    """The default-off trap. An older client, or any caller that only
-    knows about the email fields, must not silently switch a merchant's
-    payment alerts off."""
-    merchant, user_id = _merchant(fake_client)
-    fake_client.seed(
-        "merchant_notification_settings",
-        {
-            "merchant_id": merchant["id"],
-            "collection_notifications_enabled": True,
-            "collection_sms_enabled": True,
-            "sms_notification_phone": "255713111222",
-        },
-    )
-
-    client.patch(
-        "/v1/merchant/notification-settings",
-        json={
-            "primary_notification_email": "new@example.com",
-            "secondary_notification_email": None,
-            "collection_notifications_enabled": True,
-        },
-        headers=auth_headers(user_id),
-    )
-
-    row = _settings_row(fake_client, merchant["id"])
-    assert row["collection_sms_enabled"] is True
-    assert row["sms_notification_phone"] == "255713111222"
-
-
-def test_a_blank_number_falls_back_to_the_account_number(fake_client):
-    merchant, user_id = _merchant(fake_client, phone="0714999888")
-
-    response = client.patch(
-        "/v1/merchant/notification-settings",
-        json={
-            "primary_notification_email": "owner@example.com",
-            "secondary_notification_email": None,
-            "collection_notifications_enabled": True,
-            "collection_sms_enabled": True,
-            "sms_notification_phone": "",
-        },
-        headers=auth_headers(user_id),
-    )
-    assert response.status_code == 200
-
-    phone, reason = resolve_recipient(fake_client, uuid.UUID(merchant["id"]))
-    assert reason is None
-    assert phone == "255714999888"
-
-
-def test_an_unusable_number_is_refused_at_the_edge(fake_client):
-    """Better here, with a message the merchant can act on, than as a
-    skipped row they never see."""
-    _merchant_row, user_id = _merchant(fake_client)
-
-    response = client.patch(
-        "/v1/merchant/notification-settings",
-        json={
-            "primary_notification_email": "owner@example.com",
-            "secondary_notification_email": None,
-            "collection_notifications_enabled": True,
-            "collection_sms_enabled": True,
-            "sms_notification_phone": "12345",
-        },
-        headers=auth_headers(user_id),
-    )
-
-    assert response.status_code in (400, 422)
-
-
-def test_a_number_change_is_audit_logged(fake_client):
-    """It redirects where a merchant's payment alerts go, so it is
-    attributable."""
-    merchant, user_id = _merchant(fake_client)
-
-    client.patch(
-        "/v1/merchant/notification-settings",
-        json={
-            "primary_notification_email": "owner@example.com",
-            "secondary_notification_email": None,
-            "collection_notifications_enabled": True,
-            "collection_sms_enabled": True,
-            "sms_notification_phone": "0713111222",
-        },
-        headers=auth_headers(user_id),
-    )
-
-    entries = [
+    assert response.status_code == 403
+    rows = [
         r
-        for r in fake_client.table("audit_logs")._table.rows
-        if r["action"] == "notification_settings.updated"
+        for r in fake_client.table("merchant_notification_settings")._table.rows
+        if r["merchant_id"] == merchant["id"]
     ]
-    assert len(entries) == 1
-    assert entries[0]["merchant_id"] == merchant["id"]
-    row = _settings_row(fake_client, merchant["id"])
-    assert row["sms_phone_updated_by"] == str(user_id)
+    assert not rows or not rows[0].get("collection_sms_enabled")
+
+
+def test_a_merchant_can_still_change_their_email_preferences(fake_client):
+    """The refusal must be narrow. Everything a merchant does own on that
+    card keeps working."""
+    merchant, user_id = _merchant(fake_client)
+
+    response = client.patch(
+        "/v1/merchant/notification-settings",
+        json={
+            "primary_notification_email": "finance@example.com",
+            "secondary_notification_email": None,
+            "collection_notifications_enabled": True,
+        },
+        headers=auth_headers(user_id),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["primary_notification_email"] == "finance@example.com"
+
+
+
+
 
 
 # --- Super Admin turning it on merchant by merchant --------------------
@@ -204,7 +134,14 @@ def test_a_super_admin_can_enable_sms_for_one_merchant(fake_client):
     )
 
     assert response.status_code == 200
-    assert collection_sms_enabled_for(fake_client, uuid.UUID(merchant["id"])) is True
+    row = next(
+        r
+        for r in fake_client.table("merchant_notification_settings")._table.rows
+        if r["merchant_id"] == merchant["id"]
+    )
+    assert row["collection_sms_enabled"] is True
+    # Normalised on the way in, so the worker can trust what it reads.
+    assert row["sms_notification_phone"] == "255713111222"
 
 
 def test_a_merchant_cannot_change_another_merchants_settings(fake_client):

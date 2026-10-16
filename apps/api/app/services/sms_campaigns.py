@@ -20,6 +20,7 @@ finds the campaign already out of 'draft' and does nothing.
 
 import logging
 import uuid
+from decimal import Decimal
 
 from supabase import Client
 
@@ -136,6 +137,13 @@ def preview_campaign(client: Client, *, body: str, merchant_ids: list[str] | Non
         "segments_per_message": cost["segments"],
         # 1 credit per part per recipient, per the provider's pricing.
         "estimated_credits": cost["segments"] * count,
+        # What that is expected to cost, at the configured tariff. The
+        # tariff is configuration rather than a constant in the code: a
+        # price changes without a deploy, and a hardcoded figure silently
+        # becomes a lie. Nothing financial reads this.
+        "estimated_cost_tzs": str(
+            Decimal(cost["segments"] * count) * get_settings().oasis_sms_credit_cost_tzs
+        ),
         "estimate_only": True,
     }
 

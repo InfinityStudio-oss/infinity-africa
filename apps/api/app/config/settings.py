@@ -512,6 +512,25 @@ class Settings(BaseSettings):
     # 60-merchant blast cannot starve transactional alerts.
     oasis_sms_announcement_batch_size: int = 20
 
+    # The two automatic messages, each switchable on its own. Both
+    # default OFF: new automation that spends money per message is a
+    # deliberate decision, not something a deploy turns on.
+    #
+    # Collection alerts used to live here too. They were retired on
+    # 2026-10-17 for cost - 3,748 payments in sixteen days is roughly 230
+    # messages a day - and there is no flag for them any more because
+    # nothing enqueues them.
+    oasis_sms_welcome_enabled: bool = False
+    oasis_sms_withdrawal_enabled: bool = False
+
+    # What one message part costs, for the Super Admin cost estimates.
+    # Configurable rather than a constant in the code: a tariff is a
+    # commercial fact that changes without a deploy, and a hardcoded
+    # figure silently becomes a lie. Nothing financial reads this - it
+    # never touches a fee, a ledger entry or what a merchant is charged.
+    oasis_sms_credit_cost_tzs: Decimal = Decimal(25)
+
+
     # Hosted checkout (payment_gateway_url from create-order-minimal) —
     # confirmed broken on Selcom's own side as of 2026-08-23 (returns
     # "Page Not Found" for every order tested — see

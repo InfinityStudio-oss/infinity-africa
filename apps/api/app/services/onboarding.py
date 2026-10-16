@@ -46,6 +46,7 @@ from app.services.email import (
 from app.services.ledger import get_wallet_balance
 from app.services.merchant_code import generate_merchant_code
 from app.services.referrals import start_referral_period
+from app.services.sms_messages import enqueue_welcome_sms
 
 # Documents required by the system for a merchant to go live, checked at
 # approval time. Deliberately empty: KYC document upload was removed from
@@ -684,6 +685,24 @@ def approve_onboarding_submission(
         resource_id=submission_id,
         metadata={"custom_pricing_assigned": pricing is not None},
     )
+
+    # The welcome SMS, beside the welcome email below and for the same
+    # reason: approval is the moment a merchant can actually trade, which
+    # is why neither is sent at signup.
+    #
+    # Once per merchant, ever. The unique index on (merchant_id) where
+    # purpose = 'welcome' is what holds that - a retried approval, or a
+    # merchant suspended and later reactivated, inserts nothing. Enqueues
+    # a row; sending is a separate worker, so a provider outage cannot
+    # delay or fail an approval.
+    #
+    # Historical merchants are not backfilled: this only runs when an
+    # approval happens, and every existing merchant was approved before
+    # this existed.
+    try:
+        enqueue_welcome_sms(client, merchant_id=merchant_id)
+    except Exception:  # noqa: BLE001, S110 — never break an approval
+        pass
 
     # Welcome email is a courtesy, not part of approval itself — never let
     # it fail the approval (send_merchant_welcome_email already never

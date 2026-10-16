@@ -8,11 +8,14 @@ to get the debit/credit split right; the database refuses to commit if it
 doesn't.
 """
 
+import logging
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 from supabase import Client
+
+logger = logging.getLogger("infinity.ledger")
 
 from app.core.cache import invalidate_merchant_display
 from app.core.errors import InsufficientBalanceError
@@ -141,6 +144,57 @@ def wallet_balance_after(posted_entries: list[dict], wallet_account_id: uuid.UUI
     if not entry or entry.get("balance_after") is None:
         return None
     return Decimal(str(entry["balance_after"]))
+
+
+def committed_wallet_balance_after(
+    client: Client, *, transaction_id: uuid.UUID, merchant_id: uuid.UUID, currency: str
+) -> Decimal | None:
+    """The merchant wallet balance this transaction's posting produced,
+    read back from the committed ledger entry.
+
+    The counterpart to wallet_balance_after above, for callers who were
+    not the ones who posted. A withdrawal needs this: the wallet is
+    debited at *approval*, when funds are reserved
+    (_reserve_and_run_disbursement_provider), and the confirmation
+    message is composed later, when the provider confirms the payout. By
+    then the balance that withdrawal produced exists only on the entry.
+
+    Deliberately reads ledger_entries, not transactions.balance_after.
+    That column is documented (20260828030000) as tracking the *most
+    recent* posting for a transaction, so a later reversal rewrites it;
+    the ledger entry is immutable and append-only.
+
+    Returns None when there is no wallet leg or no snapshot on it -
+    callers must treat that as "not available" and never substitute a
+    current balance, which would be the balance at send time rather than
+    the balance this movement produced.
+    """
+    try:
+        account_id = _get_or_create_ledger_account(
+            client,
+            merchant_id=merchant_id,
+            purpose="merchant_wallet",
+            account_type="liability",
+            currency=currency,
+        )
+        rows = (
+            client.table("ledger_entries")
+            .select("balance_after,direction,created_at")
+            .eq("transaction_id", str(transaction_id))
+            .eq("ledger_account_id", str(account_id))
+            .order("created_at")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:  # noqa: BLE001 — a display figure never breaks a payout
+        logger.warning("wallet_snapshot_unavailable transaction_id=%s", transaction_id)
+        return None
+
+    for row in rows:
+        if row.get("balance_after") is not None:
+            return Decimal(str(row["balance_after"]))
+    return None
 
 
 def _record_wallet_snapshot(

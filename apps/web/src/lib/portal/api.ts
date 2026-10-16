@@ -614,14 +614,6 @@ export interface UpdateNotificationSettingsInput {
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
-  /** Omit to leave unchanged. The backend treats an absent value as "not
-   * supplied" rather than "off", so a caller that knows nothing about SMS
-   * cannot switch a merchant's alerts off by omission. */
-  collection_sms_enabled?: boolean;
-  announcement_sms_enabled?: boolean;
-  /** Empty string clears it and falls back to the account contact
-   * number. */
-  sms_notification_phone?: string;
 }
 
 export async function updateMyNotificationSettings(

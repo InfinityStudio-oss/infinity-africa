@@ -34,6 +34,15 @@ interface MerchantOption {
   merchant_code: string | null;
 }
 
+/** collection_alert is retired (2026-10-17, cost) but still appears on
+ * historical rows, so it keeps a label. */
+const PURPOSE_LABELS: Record<string, string> = {
+  welcome: "Welcome",
+  withdrawal_complete: "Withdrawal confirmed",
+  announcement: "Announcement",
+  collection_alert: "Payment alert (retired)",
+};
+
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "compose", label: "Compose" },
@@ -60,6 +69,8 @@ function statusBadge(status: string): { label: string; tone: BadgeTone } {
       return { label: "Outcome unknown", tone: "pending" };
     case "skipped":
       return { label: "Skipped", tone: "neutral" };
+    case "cancelled":
+      return { label: "Cancelled", tone: "neutral" };
     default:
       return { label: status, tone: "neutral" };
   }
@@ -712,7 +723,7 @@ function MessagesTable({
                   </td>
                   <td className={`${tdClass} font-mono text-xs`}>{m.recipient_phone}</td>
                   <td className={`${tdClass} text-xs text-on-surface-variant`}>
-                    {m.purpose === "collection_alert" ? "Payment alert" : "Announcement"}
+                    {PURPOSE_LABELS[m.purpose] ?? m.purpose}
                   </td>
                   <td className={tdClass}>
                     <StatusBadge {...statusBadge(m.status)} />
@@ -773,6 +784,21 @@ function SettingsTab({ settings }: { settings: AdminSmsSettings | null }) {
       label: "SMS dispatch",
       value: settings.enabled ? "On" : "Off",
       hint: "OASIS_SMS_ENABLED on the API service. Turning it off stops new sends and keeps all history.",
+    },
+    {
+      label: "Welcome SMS",
+      value: settings.welcome_enabled ? "On" : "Off",
+      hint: "One per merchant, after their first approval. OASIS_SMS_WELCOME_ENABLED.",
+    },
+    {
+      label: "Withdrawal SMS",
+      value: settings.withdrawal_enabled ? "On" : "Off",
+      hint: "One per payout, after the provider confirms it. OASIS_SMS_WITHDRAWAL_ENABLED.",
+    },
+    {
+      label: "Cost per part",
+      value: settings.credit_cost_tzs ? `TZS ${settings.credit_cost_tzs}` : "—",
+      hint: "Used for estimates only. Never touches a fee or a ledger entry.",
     },
     {
       label: "Sender ID",

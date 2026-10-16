@@ -91,8 +91,6 @@ describe("NotificationSettingsCard", () => {
       primary_notification_email: "new@example.com",
       secondary_notification_email: null,
       collection_notifications_enabled: true,
-      collection_sms_enabled: false,
-      sms_notification_phone: "",
     });
   });
 
@@ -168,7 +166,7 @@ describe("NotificationSettingsCard", () => {
 /** The merchant's own control over transactional SMS, and the number it
  * goes to. Both default off/empty: enabling SMS for 60 live merchants is
  * a cost and a consent decision, not something a deployment does. */
-describe("SMS alerts", () => {
+describe("SMS is not a merchant control", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getMyNotificationSettings.mockResolvedValue(settings);
@@ -180,52 +178,48 @@ describe("SMS alerts", () => {
     render(<NotificationSettingsCard />);
   }
 
-  it("is off until the merchant turns it on", async () => {
+  /** Policy, 2026-10-17: every SMS costs money from a shared provider
+   * account, so who receives one and at which number is InfinityPay's
+   * decision. The toggle and number field that shipped on 2026-10-16 are
+   * gone from the merchant portal; the backend refuses those fields too,
+   * because a hidden control is not a permission. */
+  it("offers no SMS toggle", async () => {
     await renderCard();
 
-    const toggle = await screen.findByLabelText(/Also send me an SMS/i);
-    expect(toggle).not.toBeChecked();
+    await waitFor(() => expect(screen.getByDisplayValue("owner@example.com")).toBeInTheDocument());
+    expect(screen.queryByLabelText(/Also send me an SMS/i)).not.toBeInTheDocument();
   });
 
-  it("saves the preference and the number together", async () => {
-    updateMyNotificationSettings.mockResolvedValue({
-      ...settings,
-      collection_sms_enabled: true,
-      sms_notification_phone: "255712345678",
-    });
+  it("offers no SMS number field", async () => {
     await renderCard();
 
-    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
-    fireEvent.change(screen.getByLabelText(/SMS number/i), {
-      target: { value: "0712345678" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Save/i }));
+    await waitFor(() => expect(screen.getByDisplayValue("owner@example.com")).toBeInTheDocument());
+    expect(screen.queryByLabelText(/SMS number/i)).not.toBeInTheDocument();
+  });
+
+  it("never sends an SMS field when saving", async () => {
+    updateMyNotificationSettings.mockResolvedValue(settings);
+    await renderCard();
+
+    await waitFor(() => expect(screen.getByDisplayValue("owner@example.com")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateMyNotificationSettings).toHaveBeenCalled());
+    const payload = updateMyNotificationSettings.mock.calls[0][0];
+    expect(Object.keys(payload).some((k) => k.includes("sms"))).toBe(false);
+  });
+
+  it("still saves the email preferences it does own", async () => {
+    updateMyNotificationSettings.mockResolvedValue(settings);
+    await renderCard();
+
+    await waitFor(() => expect(screen.getByDisplayValue("owner@example.com")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(updateMyNotificationSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          collection_sms_enabled: true,
-          sms_notification_phone: "0712345678",
-        }),
+        expect.objectContaining({ collection_notifications_enabled: true }),
       ),
     );
-  });
-
-  it("says where alerts go when no number is set", async () => {
-    getMyMerchant.mockResolvedValue({ contact_email: "owner@example.com", contact_phone: "255799000111" });
-    await renderCard();
-
-    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
-
-    expect(await screen.findByText(/255799000111/)).toBeInTheDocument();
-  });
-
-  it("warns when there is no number to send to at all", async () => {
-    getMyMerchant.mockResolvedValue({ contact_email: "owner@example.com", contact_phone: null });
-    await renderCard();
-
-    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
-
-    expect(await screen.findByText(/no number on your account/i)).toBeInTheDocument();
   });
 });
