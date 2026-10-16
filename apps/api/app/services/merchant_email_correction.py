@@ -28,7 +28,7 @@ from supabase import Client
 
 from app.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, ValidationAPIError
-from app.services.email import send_email_verification_email
+from app.services.email import auth_link_for, send_email_verification_email
 
 logger = logging.getLogger("infinity.onboarding")
 
@@ -108,7 +108,17 @@ def correct_merchant_contact_email(
             }
         )
         send_email_verification_email(
-            client, email=email, action_link=link.properties.action_link
+            client,
+            email=email,
+            # Our own callback route with the token as a query parameter.
+            # Supabase's action_link ignores redirect_to and returns the
+            # token in a URL fragment the server can never read - see
+            # auth_link_for.
+            action_link=auth_link_for(
+                link,
+                redirect_to=f"{settings.app_url}/auth/callback?next=/dashboard/overview",
+                link_type="magiclink",
+            ),
         )
         verification_sent = True
     except Exception:  # noqa: BLE001 — the address is corrected either way

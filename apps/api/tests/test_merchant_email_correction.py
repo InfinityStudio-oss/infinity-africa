@@ -120,6 +120,24 @@ def test_a_fresh_verification_link_goes_to_the_new_address(fake_client, fake_res
     assert "confirm" in sent[0]["subject"].lower()
 
 
+def test_the_link_points_at_our_own_callback(fake_client, fake_resend):
+    """Same reason as signup (test_merchant_signup.py): Supabase's
+    action_link ignores redirect_to and returns the token in a URL
+    fragment the server cannot read, so the merchant lands on the public
+    homepage. For a correction that would be especially cruel - this link
+    is the entire reason they were contacted."""
+    merchant, _owner_id, headers = _setup(fake_client)
+
+    _correct(merchant, headers, "hussensaid211@gmail.com")
+
+    html = next(c for c in fake_resend.calls if c["to"] == ["hussensaid211@gmail.com"])["html"]
+
+    assert "/auth/callback?next=/dashboard/overview" in html
+    assert "token_hash=" in html
+    assert "type=magiclink" in html
+    assert "fake.supabase.test" not in html
+
+
 def test_the_new_address_is_left_unverified(fake_client):
     """The merchant still has to click the link. If the correction
     confirmed the address outright, a Super Admin typo would hand the

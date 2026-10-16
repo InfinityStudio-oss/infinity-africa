@@ -415,9 +415,15 @@ def send_staff_invite_email(
 # --- 3. Password reset --------------------------------------------------------
 
 
-def _recovery_link_for(result: Any, *, redirect_to: str) -> str:
-    """Builds the reset link we actually email, pointing straight at our own
-    page with the token as a query parameter.
+def auth_link_for(result: Any, *, redirect_to: str, link_type: str = "recovery") -> str:
+    """Builds the link we actually email, pointing straight at our own page
+    with the token as a query parameter.
+
+    Used by every link we generate ourselves: password reset
+    (`recovery`), signup email verification (`signup`) and the Super Admin
+    email correction (`magiclink`). Measured against production Supabase
+    on 2026-10-16, all three return a usable `hashed_token` and all three
+    confirm the address when it is redeemed.
 
     `action_link` — Supabase's own `/auth/v1/verify?...` URL — is what this
     used to send, and it has two failure modes that both end with a reset
@@ -449,7 +455,7 @@ def _recovery_link_for(result: Any, *, redirect_to: str) -> str:
     if not hashed_token:
         return result.properties.action_link
     separator = "&" if "?" in redirect_to else "?"
-    return f"{redirect_to}{separator}token_hash={hashed_token}&type=recovery"
+    return f"{redirect_to}{separator}token_hash={hashed_token}&type={link_type}"
 
 
 def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -> dict | None:
@@ -472,7 +478,7 @@ def send_password_reset_email(client: Client, *, email: str, redirect_to: str) -
         # prevention), so every exception type is swallowed identically here.
         return None
 
-    reset_url = _recovery_link_for(result, redirect_to=redirect_to)
+    reset_url = auth_link_for(result, redirect_to=redirect_to)
     settings = get_settings()
     subject = "Reset your InfinityPay password"
     sender = settings.email_from

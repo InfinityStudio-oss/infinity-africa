@@ -38,6 +38,7 @@ from app.services.duplicate_signup import (
     find_existing_application,
 )
 from app.services.email import (
+    auth_link_for,
     send_email_verification_email,
     send_merchant_signup_notification_email,
     send_merchant_welcome_email,
@@ -367,8 +368,26 @@ async def signup_merchant(
                     "options": {"redirect_to": f"{settings.app_url}/auth/callback?next=/dashboard/overview"},
                 }
             )
-            action_link = link.properties.action_link
-            send_email_verification_email(client, email=payload.email, action_link=action_link)
+            # Our own /auth/callback with the token as a query parameter,
+            # not Supabase's action_link. Measured against production
+            # Supabase on 2026-10-16: action_link redirects to
+            # `https://infinitypay.me#access_token=...` - the configured
+            # redirect_to is ignored and the token rides back in a URL
+            # fragment, which the callback route cannot read because
+            # fragments are never sent to the server. The address did get
+            # confirmed, so merchants could still sign in afterwards, but
+            # they landed on the public homepage with nothing to show for
+            # the click. See auth_link_for for the full reasoning - the
+            # password reset flow already worked this way.
+            send_email_verification_email(
+                client,
+                email=payload.email,
+                action_link=auth_link_for(
+                    link,
+                    redirect_to=f"{settings.app_url}/auth/callback?next=/dashboard/overview",
+                    link_type="signup",
+                ),
+            )
         except Exception:  # noqa: BLE001, S110
             pass
 

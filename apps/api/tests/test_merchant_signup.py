@@ -195,6 +195,32 @@ def test_signup_does_not_send_approval_email(fake_client, fake_resend):
     assert verify_calls[0]["to"] != ["ceo@infinitypay.me"]
 
 
+def test_the_verification_link_points_at_our_own_callback(fake_client, fake_resend):
+    """Not Supabase's action_link.
+
+    Measured against production Supabase on 2026-10-16, action_link
+    redirects to `https://infinitypay.me#access_token=...`: the configured
+    redirect_to is ignored and the token comes back in a URL fragment,
+    which /auth/callback can never read because fragments are not sent to
+    the server. The address was still confirmed, so merchants could sign
+    in afterwards - they just landed on the public homepage with nothing
+    to show for the click, which looks exactly like a link that did not
+    work.
+
+    A token_hash in the query string survives every redirect, and the
+    callback route already knows how to redeem it.
+    """
+    _post(_form())
+
+    verify = next(c for c in fake_resend.calls if c["subject"] == "Confirm your email address")
+    html = verify["html"]
+
+    assert "/auth/callback?next=/dashboard/overview" in html
+    assert "token_hash=" in html
+    assert "type=signup" in html
+    assert "fake.supabase.test" not in html, "still sending Supabase's own verify URL"
+
+
 def test_signup_does_not_log_full_nida(fake_client, caplog):
     """A national ID must never reach a log file.
 
