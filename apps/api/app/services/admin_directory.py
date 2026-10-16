@@ -15,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from supabase import Client
 
+from app.services.crud import fetch_in_chunks
+
 
 def batch_merchant_names(client: Client, merchant_ids: set[str]) -> dict[str, str]:
     if not merchant_ids:
@@ -135,3 +137,28 @@ def batch_user_profiles(client: Client, user_ids: set[str]) -> dict[str, dict]:
     with ThreadPoolExecutor(max_workers=min(_PROFILE_FETCH_WORKERS, len(ids))) as pool:
         profiles = pool.map(lambda user_id: best_effort_user_profile(client, user_id), ids)
         return dict(zip(ids, profiles, strict=True))
+
+
+def merchants_with_live_keys(client: Client, merchant_ids: set[str]) -> set[str]:
+    """Of these merchants, which hold at least one active LIVE API key.
+
+    Batched rather than asked per row: this is called from the Super
+    Admin merchant list, and a query per merchant would make the page
+    slower the more businesses there are.
+
+    Sandbox keys are excluded deliberately. A merchant testing against
+    sandbox has no real customer waiting on a callback, and flagging
+    them would mean the warning fires on every new signup - which is how
+    a warning stops being read.
+    """
+    if not merchant_ids:
+        return set()
+    rows = fetch_in_chunks(
+        lambda batch: client.table("api_keys")
+        .select("merchant_id")
+        .in_("merchant_id", batch)
+        .eq("status", "active")
+        .eq("environment", "live"),
+        merchant_ids,
+    )
+    return {row["merchant_id"] for row in rows}

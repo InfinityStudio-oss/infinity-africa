@@ -27,6 +27,7 @@ function merchant(overrides: Partial<Merchant> = {}): Merchant {
     kyc_status: "verified",
     api_access_suspended: false,
     production_api_eligible: true,
+    live_api_without_webhook: false,
     available_balance: "0.00",
     created_at: "2026-10-01T09:00:00Z",
     ...overrides,
@@ -102,5 +103,37 @@ describe("MerchantsTable actions", () => {
     fireEvent.click(screen.getByTitle("Approve"));
 
     expect(await screen.findByText("No onboarding submission found.")).toBeInTheDocument();
+  });
+});
+
+/** A merchant taking live money whose partner is never told. Silent by
+ * nature: a wrong webhook URL fails loudly and alerts, while no URL
+ * queues nothing at all — so the only way anyone finds out is this
+ * badge. Two partners were in this state on 2026-10-16 with ten real
+ * customers between them. */
+describe("live API without webhook warning", () => {
+  it("warns when a merchant has a live key and no webhook", () => {
+    render(<MerchantsTable rows={[merchant({ live_api_without_webhook: true })]} />);
+
+    expect(screen.getByText("Live API, no webhook")).toBeInTheDocument();
+  });
+
+  it("stays quiet when a webhook is configured", () => {
+    render(<MerchantsTable rows={[merchant({ live_api_without_webhook: false })]} />);
+
+    expect(screen.queryByText("Live API, no webhook")).not.toBeInTheDocument();
+  });
+
+  it("warns on the affected merchant only, not the whole list", () => {
+    render(
+      <MerchantsTable
+        rows={[
+          merchant({ merchant_id: "ok", business_name: "Has Webhook", live_api_without_webhook: false }),
+          merchant({ merchant_id: "bad", business_name: "No Webhook", live_api_without_webhook: true }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("Live API, no webhook")).toHaveLength(1);
   });
 });

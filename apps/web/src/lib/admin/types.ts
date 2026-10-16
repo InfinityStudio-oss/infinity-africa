@@ -52,6 +52,10 @@ export interface Merchant {
    * a pricing rule resolves + not suspended) — there's no per-merchant
    * "enable production" switch anymore; production keys are self-service. */
   production_api_eligible: boolean;
+  /** Holds an active LIVE API key but has no webhook URL configured, so
+   * their system is never told a payment arrived. Silent by nature — a
+   * wrong URL fails loudly and alerts, no URL queues nothing at all. */
+  live_api_without_webhook: boolean;
   available_balance: string;
   created_at: string;
 }

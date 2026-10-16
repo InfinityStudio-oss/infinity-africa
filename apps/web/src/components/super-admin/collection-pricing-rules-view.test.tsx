@@ -28,6 +28,7 @@ const merchant: Merchant = {
   kyc_status: "verified",
   api_access_suspended: false,
   production_api_eligible: true,
+    live_api_without_webhook: false,
   available_balance: "0",
   created_at: "2026-08-01T00:00:00Z",
 };

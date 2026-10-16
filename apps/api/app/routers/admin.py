@@ -60,6 +60,7 @@ from app.services.admin_directory import (
     batch_merchant_names,
     batch_user_profiles,
     batch_wallet_balances,
+    merchants_with_live_keys,
 )
 from app.services.admin_overview import get_admin_overview
 from app.services.api_access import is_production_api_access_allowed
@@ -125,6 +126,8 @@ def list_admin_merchants(
 
     submission_by_merchant = {s["merchant_id"]: s for s in submissions}
     profiles = batch_user_profiles(client, set(owner_user_id_by_merchant.values()))
+    # One batched query, not one per row — see merchants_with_live_keys.
+    live_key_merchants = merchants_with_live_keys(client, merchant_ids)
 
     data = []
     for merchant in merchants:
@@ -145,6 +148,10 @@ def list_admin_merchants(
                 kyc_status=merchant["kyc_status"],
                 api_access_suspended=bool(merchant.get("api_access_suspended")),
                 production_api_eligible=is_production_api_access_allowed(client, merchant),
+                live_api_without_webhook=(
+                    merchant["id"] in live_key_merchants
+                    and not (merchant.get("webhook_url") or "").strip()
+                ),
                 available_balance=get_wallet_balance(
                     client, merchant_id=uuid.UUID(merchant["id"]), currency=merchant["currency"]
                 ),

@@ -105,6 +105,15 @@ class AdminMerchantResponse(BaseModel):
     kyc_status: str
     api_access_suspended: bool
     production_api_eligible: bool
+    # True when this merchant holds an active LIVE API key but has no
+    # webhook URL configured. They can take real money and their system
+    # is never told a payment arrived.
+    #
+    # This failure is silent by nature, which is why it needs a flag: a
+    # wrong URL fails loudly and alerts, while no URL queues nothing,
+    # attempts nothing and raises nothing. Two partners were found in
+    # this state on 2026-10-16 with ten real customers between them.
+    live_api_without_webhook: bool = False
     available_balance: Decimal
     created_at: datetime
 

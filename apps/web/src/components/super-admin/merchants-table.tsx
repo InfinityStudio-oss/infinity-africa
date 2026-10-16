@@ -253,6 +253,21 @@ export function MerchantsTable({ rows }: { rows: Merchant[] }) {
                           </div>
                           <div>
                             <div className="font-medium text-on-background">{merchant.business_name}</div>
+                            {merchant.live_api_without_webhook && (
+                              /* Taking real money with nowhere to send the
+                                 notification. Shown here rather than as an
+                                 alert because nothing fails - no URL means
+                                 nothing is ever queued, so there is no
+                                 delivery to report. The only way anyone
+                                 learns is by being told. */
+                              <div
+                                className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-error"
+                                title="Live API key but no webhook URL — this partner is never told when a payment succeeds"
+                              >
+                                <Icon name="warning" className="text-[14px]" />
+                                Live API, no webhook
+                              </div>
+                            )}
                             <div className="text-xs text-on-surface-variant">
                               {merchant.email}
                               {merchant.merchant_code && (
