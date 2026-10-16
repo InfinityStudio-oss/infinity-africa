@@ -140,8 +140,35 @@ def test_a_merchant_with_no_number_is_skipped_with_a_reason(fake_client):
     assert row["skipped_reason"] == SKIP_NO_NUMBER
 
 
-def test_a_merchant_who_switched_sms_off_is_skipped_with_a_reason(fake_client):
+def test_a_merchant_who_never_opted_in_produces_no_row_at_all(fake_client):
+    """Not even a skipped one.
+
+    SMS starts off for every merchant, and 3,748 payments succeeded in
+    the first sixteen days of October. A row per payment saying "this
+    merchant has SMS off" would add thousands a month that say nothing,
+    and would bury the skips that do mean something.
+    """
     merchant = _setup(fake_client, sms_enabled=False)
+
+    enqueue_collection_alert(
+        fake_client,
+        collection=_collection(merchant),
+        transaction=_transaction(),
+        closing_balance=Decimal("100.00"),
+    )
+
+    assert _rows(fake_client) == []
+
+
+def test_a_skipped_row_always_means_somebody_wanted_an_alert(fake_client):
+    """The property that makes the Super Admin skip list worth reading:
+    every row in it is a merchant who asked for alerts and did not get
+    one."""
+    merchant = create_merchant(fake_client, contact_phone=None)
+    fake_client.seed(
+        "merchant_notification_settings",
+        {"merchant_id": merchant["id"], "collection_sms_enabled": True},
+    )
 
     enqueue_collection_alert(
         fake_client,
@@ -152,7 +179,8 @@ def test_a_merchant_who_switched_sms_off_is_skipped_with_a_reason(fake_client):
 
     row = _rows(fake_client)[0]
     assert row["status"] == "skipped"
-    assert row["skipped_reason"] == SKIP_MERCHANT_DISABLED
+    assert row["skipped_reason"] == SKIP_NO_NUMBER
+    assert SKIP_MERCHANT_DISABLED != row["skipped_reason"]
 
 
 def test_nothing_is_queued_at_all_while_the_feature_is_off(fake_client, monkeypatch):

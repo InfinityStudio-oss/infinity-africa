@@ -1,9 +1,17 @@
 import json
+import logging
 from decimal import Decimal
 from functools import lru_cache
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("infinity.config")
+
+# What pydantic accepts, plus the words a person actually types into a
+# variable whose name ends in _ENABLED.
+_TRUE_WORDS = frozenset({"1", "true", "t", "yes", "y", "on", "enable", "enabled"})
+_FALSE_WORDS = frozenset({"0", "false", "f", "no", "n", "off", "disable", "disabled", ""})
 
 
 class Settings(BaseSettings):
@@ -801,6 +809,57 @@ class Settings(BaseSettings):
         unauthenticated caller). Disabling them only removes the docs UI
         itself — no actual endpoint depends on them being enabled."""
         return self.environment != "production"
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _tolerate_human_booleans(cls, value: object, info: ValidationInfo) -> object:
+        """A mistyped feature flag must not take the platform down.
+
+        On 2026-10-16 OASIS_SMS_ENABLED was set to the word "enabled".
+        Pydantic cannot read that as a boolean, so Settings() raised - and
+        because app/main.py builds settings at module import, the whole
+        API failed to boot. Every merchant lost payments for roughly
+        twenty minutes because of one word in a text-message toggle.
+
+        Two changes, in order of how much they matter:
+
+        **Unrecognised values fall back to the field's own default**
+        rather than raising. That default is exactly the state the
+        platform runs in when the variable is not set at all - the
+        configuration every fresh deploy starts from - so it is always a
+        known-good state. A typo can now degrade one feature; it can no
+        longer stop payments. It is logged at ERROR with the field name,
+        because a flag quietly not doing what someone intended still
+        needs finding.
+
+        **Common human spellings are accepted**: enabled/disabled, on/off,
+        y/n. Somebody typing "enabled" into a variable called *_ENABLED is
+        not making a mistake worth punishing.
+
+        Deliberately not applied to anything but booleans, and deliberately
+        does not soften _reject_wildcard_cors_outside_development below:
+        a wildcard CORS origin in production is a security hole, and
+        refusing to boot is the right answer to that. The difference is
+        that one is dangerous to run with, and this one is merely wrong.
+        """
+        field = cls.model_fields.get(info.field_name or "")
+        if field is None or field.annotation is not bool or isinstance(value, bool):
+            return value
+
+        text = str(value).strip().lower()
+        if text in _TRUE_WORDS:
+            return True
+        if text in _FALSE_WORDS:
+            return False
+
+        default = field.default
+        logger.error(
+            "settings_bool_unparsable field=%s value=%r falling_back_to=%s",
+            info.field_name,
+            str(value)[:40],
+            default,
+        )
+        return default
 
     @model_validator(mode="after")
     def _reject_wildcard_cors_outside_development(self) -> "Settings":

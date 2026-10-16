@@ -36,6 +36,9 @@ logger = logging.getLogger("infinity.sms")
 # surface in the Super Admin SMS screen; they are not error strings.
 SKIP_NO_NUMBER = "No notification number on file for this merchant"
 SKIP_INVALID_NUMBER = "The notification number on file is not a valid Tanzanian number"
+# Kept for the Super Admin filter labels and for tests that assert the
+# opt-out path writes nothing. No row is created with this reason - see
+# enqueue_collection_alert.
 SKIP_MERCHANT_DISABLED = "This merchant has collection SMS switched off"
 SKIP_NO_BALANCE_SNAPSHOT = (
     "No closing-balance snapshot exists for this posting, so the balance "
@@ -155,11 +158,20 @@ def enqueue_collection_alert(
         if not settings.oasis_sms_enabled:
             return None
 
-        # Past this point a row is always written, including for skips:
-        # once the feature is live, "this merchant is getting no alerts
-        # and here is why" is exactly what an operator needs to see.
+        # A merchant who has not opted in is not a fault, so it gets no
+        # row at all.
+        #
+        # This matters at the platform's actual volume: 3,748 payments
+        # succeeded in the first sixteen days of October, and SMS starts
+        # switched off for every merchant. Writing "this merchant has SMS
+        # off" once per payment would add thousands of rows a month that
+        # say nothing, and would bury the skips that do mean something -
+        # a merchant who wants alerts and is not getting them.
+        #
+        # So from here on a skipped row means exactly one thing: somebody
+        # asked for an alert and we could not send it.
         if not collection_sms_enabled_for(client, merchant_id):
-            return _skip(client, merchant_id, collection_id, transaction, SKIP_MERCHANT_DISABLED)
+            return None
 
         if not settings.oasis_sms_sender_id:
             return _skip(client, merchant_id, collection_id, transaction, SKIP_NO_SENDER)
