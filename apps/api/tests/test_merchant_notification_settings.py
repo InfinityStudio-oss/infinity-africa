@@ -143,7 +143,16 @@ def test_more_than_two_emails_are_rejected():
     assert exc_info.value.message == "You can add up to 2 notification emails only."
 
 
-def test_at_least_one_valid_email_required_when_notifications_enabled(fake_client):
+def test_notifications_can_be_on_with_no_address(fake_client):
+    """Blank means "use my account email", which is what
+    notification_recipient does and what the settings page promises in
+    words: "No address set, so confirmations go to your account email".
+
+    Refusing this contradicted both, and left a merchant who had never
+    set an address unable to change anything else on that card - they
+    had to invent an email they did not want first. Reported from
+    production on 2026-10-16 by a merchant trying to switch on SMS
+    alerts."""
     _merchant_id, user_id = _merchant_admin(fake_client)
 
     response = client.patch(
@@ -152,8 +161,30 @@ def test_at_least_one_valid_email_required_when_notifications_enabled(fake_clien
         json={"collection_notifications_enabled": True},
     )
 
-    assert response.status_code == 422, response.text
-    assert response.json()["error"]["message"] == "Enter a valid notification email."
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["primary_notification_email"] is None
+    assert response.json()["data"]["collection_notifications_enabled"] is True
+
+
+def test_an_sms_preference_saves_without_an_email_address(fake_client):
+    """The exact blocked flow: turning on SMS alerts on an account with
+    no notification email set."""
+    _merchant_id, user_id = _merchant_admin(fake_client)
+
+    response = client.patch(
+        "/v1/merchant/notification-settings",
+        headers=auth_headers(user_id),
+        json={
+            "collection_notifications_enabled": True,
+            "collection_sms_enabled": True,
+            "sms_notification_phone": "255747730270",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["collection_sms_enabled"] is True
+    assert data["sms_notification_phone"] == "255747730270"
 
 
 def test_emails_can_be_empty_when_notifications_disabled(fake_client):

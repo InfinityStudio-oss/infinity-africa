@@ -46,8 +46,18 @@ def validate_notification_emails(raw_emails: list[str | None], *, enabled: bool)
     skip it. See tests/test_merchant_notification_settings.py."""
     emails = [e.strip() for e in raw_emails if e and e.strip()]
 
-    if enabled and not emails:
-        raise ValidationAPIError("Enter a valid notification email.")
+    # No address, with notifications on, is a legitimate state meaning
+    # "send them to my account email" - which is exactly what
+    # notification_recipient() below does, and what the settings page
+    # tells the merchant in so many words ("No address set, so
+    # confirmations go to your account email, <address>").
+    #
+    # Refusing to save it contradicted both. A merchant who had never set
+    # an address could not change anything else on that card - including,
+    # once SMS arrived, turning on their payment alerts - without first
+    # inventing an email address they did not want. `enabled` is still
+    # taken and still meaningful; it just no longer forces a second,
+    # unrelated field to be filled in.
 
     if len(emails) > 2:
         raise ValidationAPIError("You can add up to 2 notification emails only.")
