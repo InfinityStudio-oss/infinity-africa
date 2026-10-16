@@ -470,14 +470,29 @@ async def create_qr_collection(
 @router.get("/{collection_id}", response_model=APIResponse[CollectionStatusResponse])
 def get_collection_status(
     collection_id: uuid.UUID,
-    merchant_id: uuid.UUID,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    merchant_id: uuid.UUID | None = None,
 ):
     """`collection_id` may be the id returned by any of the four create
     endpoints above — including a payment_links id from POST
     /v1/collections, resolved to its real linked collection once the
     customer has picked a method (see
-    app/services/collections_api.py::find_collection_by_external_id)."""
+    app/services/collections_api.py::find_collection_by_external_id).
+
+    `merchant_id` is optional for an API key and taken from the key, the
+    same as the four create endpoints above. It was required here until
+    2026-10-16, and the four create endpoints beside it were not - so a
+    partner could start a payment and then not be allowed to ask what
+    happened to it. Kinange Wifi hit that for 61 consecutive lookups
+    across five payments, while following the published integration
+    guide, which shows this call with no query string at all.
+
+    Dropping it tightens scoping rather than loosening it: the merchant
+    now comes from the credential instead of the URL, and a key that
+    names someone else's merchant_id is still refused by
+    authorize_merchant_action below.
+    """
+    merchant_id = _resolve_merchant_id(caller, merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:read")
     client = get_supabase_admin()
@@ -497,15 +512,21 @@ def get_collection_status(
 @router.post("/{collection_id}/refresh-status", response_model=APIResponse[CollectionStatusResponse])
 async def refresh_collection_status(
     collection_id: uuid.UUID,
-    merchant_id: uuid.UUID,
     caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    merchant_id: uuid.UUID | None = None,
 ):
     """Queries Selcom directly and applies the same reversal-safe
     completion logic the webhook uses
     (app/services/checkout_reconciliation.py) — safe to call repeatedly,
     never double-credits or double-reverses. A no-op (returns the
     current state unchanged) if `collection_id` names a payment page
-    with no method chosen yet — there's nothing to refresh."""
+    with no method chosen yet — there's nothing to refresh.
+
+    `merchant_id` optional and taken from the key, same as the lookup
+    above. Fixing only the lookup would leave a partner able to read a
+    status but not ask us to go and re-check it with the provider -
+    which is the one thing that helps when a callback was missed."""
+    merchant_id = _resolve_merchant_id(caller, merchant_id)
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
     require_api_key_scope(caller, "collections:write")
     client = get_supabase_admin()

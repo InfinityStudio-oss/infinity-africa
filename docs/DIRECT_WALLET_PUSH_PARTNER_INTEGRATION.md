@@ -202,6 +202,21 @@ GET https://api.infinitypay.me/v1/collections/{collection_id}
 Authorization: Bearer sk_live_YOUR_SECRET_KEY
 ```
 
+No query string and no `merchant_id` — your key already says which
+merchant you are. (Until 2026-10-16 this route wrongly required a
+`merchant_id` query parameter and returned `422` without it, while the
+create endpoints did not. If you see
+`{"loc": ["query", "merchant_id"], "msg": "Field required"}`, you are
+talking to an API build from before that fix.)
+
+**`{collection_id}` is the id we returned**, not your own reference. It
+arrives as `collection_id` in the create response and in every webhook
+delivery. Looking up your own `merchant_reference` instead — the value
+you sent us, like `ORDER-12345` — returns `404`, because it is your
+identifier for the payment and not ours. Store our `collection_id`
+against your order when you create the payment, and use it for every
+later lookup.
+
 Act only on the `status` in **our** reply. A forged webhook then achieves
 nothing: it makes you ask us a question, and we answer truthfully. The
 forger cannot fake the answer without your secret key.
