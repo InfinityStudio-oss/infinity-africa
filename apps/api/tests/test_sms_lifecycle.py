@@ -204,13 +204,17 @@ def test_the_welcome_is_sent_from_the_approval_path(fake_client):
     assert "enqueue_welcome_sms" in inspect.getsource(onboarding.approve_onboarding_submission)
 
 
-def test_the_welcome_fits_one_part_and_carries_no_secret(fake_client):
+def test_the_welcome_stays_in_the_cheap_encoding_and_carries_no_secret(fake_client):
+    """Two parts since the referral and support lines were added on
+    2026-10-17 - a deliberate trade, and cheap at once per merchant.
+    What must not slip is the encoding: one curly quote or emoji would
+    drop the part size from 160 characters to 70 and take this to four
+    parts."""
     text = render_welcome(withdrawals_are_free=True)
     cost = message_cost(text)
 
-    assert cost["segments"] == 1
     assert cost["encoding"] == "GSM-7"
-    assert len(text) == 145
+    assert cost["segments"] == 2
     for leak in ("sk_live", "inf_live", "secret", "whsec"):
         assert leak not in text.lower()
 
@@ -380,7 +384,7 @@ def test_the_amount_and_reference_come_from_committed_records(fake_client):
     row = _rows(fake_client, "withdrawal_complete")[0]
     assert row["gross_amount"] == "22000.00"
     assert row["reference"] == transaction["reference"]
-    assert "Umetoa TZS 22,000." in row["body"]
+    assert "Umepokea TZS 22,000 kutoka INFINITYPAY." in row["body"]
     assert transaction["reference"] in row["body"]
 
 
@@ -429,7 +433,11 @@ def test_the_two_switches_are_independent(fake_client, monkeypatch):
     assert _rows(fake_client, "withdrawal_complete") == []
 
 
-def test_the_withdrawal_message_fits_one_part(fake_client):
+def test_the_withdrawal_message_stays_in_the_cheap_encoding(fake_client):
+    """Two parts since the referral and support lines were added on
+    2026-10-17. The encoding is what must not slip: one curly quote or
+    emoji drops the part size from 160 characters to 70 and doubles this
+    again."""
     text = render_withdrawal_complete(
         amount=Decimal(1000000),
         fee_amount=Decimal(0),
@@ -438,8 +446,32 @@ def test_the_withdrawal_message_fits_one_part(fake_client):
     )
 
     cost = message_cost(text)
-    assert cost["segments"] == 1
     assert cost["encoding"] == "GSM-7"
+    assert cost["segments"] == 2
+
+
+
+
+
+
+def test_the_referral_and_support_tail_is_on_both_messages(fake_client):
+    """Added 2026-10-17. Referrals are a real feature, so the commission
+    offer is not an empty promise, and the support number is the one
+    route a merchant has when something looks wrong."""
+    from app.services.sms_text import MESSAGE_TAIL
+
+    welcome = render_welcome(withdrawals_are_free=True)
+    payout = render_withdrawal_complete(
+        amount=Decimal(1000),
+        fee_amount=Decimal(0),
+        closing_balance=Decimal(500),
+        reference="TXN-1",
+    )
+
+    for text in (welcome, payout):
+        assert MESSAGE_TAIL in text
+        assert "255747730270" in text
+        assert "help@infinitypay.me" in text
 
 
 # --- it must never touch money -----------------------------------------

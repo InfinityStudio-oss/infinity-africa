@@ -172,7 +172,15 @@ def test_revenue_counts_every_page_of_entries(fake_client):
     now = datetime.now(timezone.utc)
     entries = POSTGREST_DEFAULT_PAGE + 83
     for index in range(entries):
-        _credit(fake_client, account, "1", (now - timedelta(seconds=index)).isoformat())
+        # Microseconds, not seconds. A second apart spread these 1,083
+        # entries over eighteen minutes, so running the suite within
+        # eighteen minutes of midnight East Africa Time pushed the oldest
+        # ones into yesterday and platform_revenue_today legitimately
+        # counted fewer - this failed at 00:16 EAT on 2026-10-17 with
+        # 1,052 against 1,083, exactly the 31 entries before midnight.
+        # The test is about reading past one PostgREST page, not about
+        # time, so the span may as well be instantaneous.
+        _credit(fake_client, account, "1", (now - timedelta(microseconds=index)).isoformat())
 
     body = client.get("/v1/admin/overview", headers=auth_headers(admin_id)).json()["data"]
 
