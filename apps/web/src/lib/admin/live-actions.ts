@@ -19,6 +19,14 @@ import {
   refreshWithdrawalStatus,
   retryWithdrawalPayout,
   correctMerchantContactEmail,
+  createAdminSmsCampaign,
+  deleteAdminSmsCampaign,
+  dryRunAdminSms,
+  duplicateAdminSmsCampaign,
+  previewAdminSms,
+  retryAdminSmsMessage,
+  sendAdminSmsCampaign,
+  updateAdminSmsCampaign,
   reinstateMerchantApiAccess,
   rejectDocumentRequest,
   rejectIpAllowlistEntry,
@@ -110,6 +118,96 @@ export async function correctMerchantContactEmailAction(
     await correctMerchantContactEmail(merchantId, trimmed);
     return `Email changed to ${trimmed}. A verification link has been sent there.`;
   });
+}
+
+// --- Super Admin SMS ---------------------------------------------------
+
+export interface SmsActionState {
+  error: string | null;
+  ok: boolean;
+  message: string | null;
+}
+
+const SMS_IDLE: SmsActionState = { error: null, ok: false, message: null };
+
+async function runSmsAction(run: () => Promise<string>): Promise<SmsActionState> {
+  let message: string;
+  try {
+    message = await run();
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Something went wrong. Try again.", ok: false, message: null };
+  }
+  revalidatePath("/super-admin/sms");
+  return { error: null, ok: true, message };
+}
+
+/** Saves a draft. Sends nothing — that is the entire point of drafts. */
+export async function saveSmsDraftAction(input: {
+  title: string;
+  body: string;
+  merchantIds: string[] | null;
+}): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    await createAdminSmsCampaign({
+      title: input.title,
+      body: input.body,
+      merchant_ids: input.merchantIds,
+    });
+    return "Draft saved. Nothing has been sent.";
+  });
+}
+
+export async function updateSmsDraftAction(
+  campaignId: string,
+  input: { title: string; body: string; merchantIds: string[] | null },
+): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    await updateAdminSmsCampaign(campaignId, {
+      title: input.title,
+      body: input.body,
+      merchant_ids: input.merchantIds,
+    });
+    return "Draft updated. Nothing has been sent.";
+  });
+}
+
+export async function duplicateSmsDraftAction(campaignId: string): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    await duplicateAdminSmsCampaign(campaignId);
+    return "Copied to a new draft.";
+  });
+}
+
+export async function deleteSmsDraftAction(campaignId: string): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    await deleteAdminSmsCampaign(campaignId);
+    return "Draft deleted.";
+  });
+}
+
+/** The only action here that can cause an SMS to be sent. The backend
+ * refuses a second send, so a double-click reports a conflict rather than
+ * quietly queueing a second round. */
+export async function sendSmsCampaignAction(campaignId: string): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    const campaign = await sendAdminSmsCampaign(campaignId);
+    return `Queued for ${campaign.recipient_count} merchant${campaign.recipient_count === 1 ? "" : "s"}.`;
+  });
+}
+
+export async function retrySmsMessageAction(messageId: string): Promise<SmsActionState> {
+  return runSmsAction(async () => {
+    await retryAdminSmsMessage(messageId);
+    return "Requeued.";
+  });
+}
+
+export async function dryRunSmsAction(input: { body: string; merchantIds: string[] | null }) {
+  return dryRunAdminSms({ body: input.body, merchant_ids: input.merchantIds });
+}
+
+export async function previewSmsAction(input: { body: string; merchantIds: string[] | null }) {
+  return previewAdminSms({ body: input.body, merchant_ids: input.merchantIds });
 }
 
 export async function revokeAdminApiKeyAction(apiKeyId: string) {
@@ -501,6 +599,13 @@ export async function updateAdminMerchantNotificationSettingsAction(
       primary_notification_email: get("primary_notification_email"),
       secondary_notification_email: get("secondary_notification_email"),
       collection_notifications_enabled: formData.get("collection_notifications_enabled") === "on",
+      // Super Admin is how SMS is enabled merchant by merchant during
+      // rollout, so this form has to carry it. Sent explicitly rather
+      // than omitted, because the form knows the real state of both
+      // checkboxes — omitting would mean "leave unchanged" and the
+      // operator would not be able to turn anything off.
+      collection_sms_enabled: formData.get("collection_sms_enabled") === "on",
+      sms_notification_phone: String(formData.get("sms_notification_phone") ?? "").trim(),
     });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save notification settings. Try again." };

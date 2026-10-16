@@ -345,6 +345,11 @@ export interface AdminNotificationSettingsRow {
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
+  /** Transactional payment alerts by SMS. Optional for backwards
+   * compatibility with a response produced before these columns existed. */
+  collection_sms_enabled?: boolean;
+  announcement_sms_enabled?: boolean;
+  sms_notification_phone?: string | null;
   last_notification_sent_at: string | null;
   last_notification_status: "sent" | "failed" | "skipped" | null;
   failed_notification_count: number;
@@ -735,4 +740,97 @@ export interface AdminReferralSummary {
   pending_review_amount: string;
   approved_unpaid_amount: string;
   paid_amount: string;
+}
+
+/** One outbound SMS to a MERCHANT — never to a payer. `recipient_phone`
+ * arrives masked from the list endpoint (2557****5678); the backend keeps
+ * the full number. */
+export interface AdminSmsMessageRow {
+  id: string;
+  merchant_id: string;
+  business_name: string | null;
+  merchant_code: string | null;
+  purpose: "collection_alert" | "announcement";
+  /** 'sent' means the gateway accepted it, NOT that a handset received it.
+   * 'unknown' means we called the provider and never learned the outcome —
+   * deliberately distinct from 'failed', which is safe to retry. */
+  status: "queued" | "sending" | "sent" | "pending" | "failed" | "skipped" | "unknown";
+  recipient_phone: string;
+  body: string | null;
+  skipped_reason: string | null;
+  last_error: string | null;
+  attempts: number | null;
+  segments: number | null;
+  credits_used: number | null;
+  provider_ref: string | null;
+  provider_status: string | null;
+  reference: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
+
+export interface AdminSmsOverview {
+  enabled: boolean;
+  sender_id: string | null;
+  dispatch_interval_seconds: number;
+  counts: Record<string, number>;
+  oldest_waiting_at: string | null;
+  queue_depth: number;
+  provider_credits: number | null;
+  recent_errors: { error: string; at: string }[];
+  recent_skips: { reason: string; at: string }[];
+}
+
+export interface AdminSmsCampaignRow {
+  id: string;
+  title: string;
+  body: string;
+  status: "draft" | "sending" | "sent" | "cancelled";
+  recipient_count: number;
+  excluded_count: number;
+  estimated_segments: number | null;
+  estimated_credits: number | null;
+  created_by: string | null;
+  dispatched_by: string | null;
+  dispatched_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminSmsPreview {
+  recipient_count: number;
+  excluded_count: number;
+  excluded: { merchant_id: string; business_name: string | null; merchant_code: string | null; reason: string }[];
+  recipients: { merchant_id: string; business_name: string | null; merchant_code: string | null; phone: string }[];
+  encoding: string;
+  characters: number;
+  segments_per_message: number;
+  /** Our own figure from the rendered text, not a provider-confirmed
+   * quote — labelled as an estimate wherever it is shown. */
+  estimated_credits: number;
+  estimate_only: boolean;
+}
+
+export interface AdminSmsSettings {
+  enabled: boolean;
+  sender_id: string | null;
+  api_key_configured: boolean;
+  callback_secret_configured: boolean;
+  dispatch_interval_seconds: number;
+  rate_limit_per_minute: number;
+  batch_size: number;
+  announcement_batch_size: number;
+  max_attempts: number;
+  provider_credits: number | null;
+}
+
+/** A provider-confirmed quote, as opposed to AdminSmsPreview's own
+ * arithmetic. Costs nothing and sends nothing. */
+export interface AdminSmsDryRun {
+  confirmed_by_provider: boolean;
+  recipient_count: number;
+  segments_per_message: number | null;
+  credits_per_message: number | null;
+  credits_total: number | null;
+  enough_credits: boolean | null;
 }

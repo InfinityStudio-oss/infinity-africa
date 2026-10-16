@@ -116,6 +116,33 @@ def _post_entries(client: Client, entries: list[dict]) -> list[dict]:
     return result.data or []
 
 
+def wallet_balance_after(posted_entries: list[dict], wallet_account_id: uuid.UUID) -> Decimal | None:
+    """The merchant wallet's balance immediately after this posting.
+
+    Read from the posted ledger_entries row, which post_ledger_entries()
+    wrote under the same row lock as the balance check
+    (20260828020000) - so it is the balance after *this* posting, not
+    whatever the wallet holds by the time anyone asks.
+
+    That distinction is the whole reason this exists. The merchant SMS
+    quotes a closing balance, and a later withdrawal or a second payment
+    must not change the number in a message already composed. It is also
+    deliberately not transactions.balance_after, which that column's own
+    migration documents as tracking the most recent posting and therefore
+    being rewritten by a reversal.
+
+    None for a posting with no merchant-wallet leg, or for an entry
+    predating the snapshot columns. Callers must treat None as "not
+    available" and never substitute a current balance.
+    """
+    entry = next(
+        (e for e in posted_entries if e.get("ledger_account_id") == str(wallet_account_id)), None
+    )
+    if not entry or entry.get("balance_after") is None:
+        return None
+    return Decimal(str(entry["balance_after"]))
+
+
 def _record_wallet_snapshot(
     client: Client,
     *,
@@ -332,10 +359,15 @@ def post_collection_entries(
     fee_amount: Decimal,
     net_amount: Decimal,
     currency: str,
-) -> None:
+) -> Decimal | None:
     """A customer's payment lands in InfinityPay's settlement account; the
     merchant's wallet balance grows by the net amount, and the fee becomes
     platform revenue. Debit (settlement_clearing) == credits (wallet + fee).
+
+    Returns the merchant wallet's balance immediately after this posting,
+    or None if it was not captured. Nothing financial depends on the
+    return value - it exists so the merchant's SMS alert can quote a
+    closing balance that belongs to this transaction.
     """
     settlement_account_id = _get_or_create_ledger_account(
         client, merchant_id=None, purpose="settlement_clearing", account_type="asset", currency=currency
@@ -387,6 +419,10 @@ def post_collection_entries(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
     _invalidate_display_after_ledger_write(merchant_id)
+    # Returned, not stored anywhere new: the merchant SMS needs the
+    # balance *this* posting produced, and the only place it exists
+    # untouched is the row we just wrote.
+    return wallet_balance_after(posted, wallet_account_id)
 
 
 def post_disbursement_entries(

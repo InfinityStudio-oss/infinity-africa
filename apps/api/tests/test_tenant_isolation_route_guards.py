@@ -63,6 +63,15 @@ PUBLIC_ROUTES = {
     ("POST", "/v1/webhooks/selcom"),
     ("GET", "/v1/webhooks/selcom/checkout"),
     ("POST", "/v1/webhooks/selcom/checkout"),
+    # SMS delivery notifications from OasisTech. Same shape as the Selcom
+    # callbacks above: unauthenticated by necessity, authenticated by an
+    # HMAC-SHA256 over the raw request bytes against
+    # OASIS_SMS_WEBHOOK_SECRET, and refusing everything when that secret
+    # is unset. Carries no merchant scope because it carries no merchant
+    # identity - it names a provider message id, and the only row it can
+    # touch is the sms_messages row already holding that id. It cannot
+    # read or change a payment, a wallet or a ledger entry.
+    ("POST", "/v1/sms/callbacks/oasis"),
     # Pre-session flows.
     ("POST", "/v1/auth/forgot-password"),
     ("POST", "/v1/onboarding/signup"),

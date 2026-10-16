@@ -35,6 +35,12 @@ import type {
   MerchantAccountStatus,
   MerchantUserRow,
   PricingRuleRow,
+  AdminSmsCampaignRow,
+  AdminSmsDryRun,
+  AdminSmsMessageRow,
+  AdminSmsOverview,
+  AdminSmsPreview,
+  AdminSmsSettings,
 } from "./types";
 
 /**
@@ -165,6 +171,10 @@ export async function getAdminMerchantNotificationSettings(
 }
 
 export interface NotificationSettingsInput {
+  /** Omitted means "leave unchanged" on the backend, never "off". */
+  collection_sms_enabled?: boolean;
+  announcement_sms_enabled?: boolean;
+  sms_notification_phone?: string;
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
@@ -179,6 +189,83 @@ export async function updateAdminMerchantNotificationSettings(
     "PATCH",
     input,
   );
+}
+
+// --- Super Admin SMS ---------------------------------------------------
+// Every one of these is Super Admin only on the backend, including the
+// reads: an SMS list carries merchant phone numbers and message bodies.
+
+export async function getAdminSmsOverview(): Promise<AdminSmsOverview | null> {
+  return apiGet<AdminSmsOverview>("/v1/admin/sms/overview");
+}
+
+export async function getAdminSmsSettings(): Promise<AdminSmsSettings | null> {
+  return apiGet<AdminSmsSettings>("/v1/admin/sms/settings");
+}
+
+export async function listAdminSmsMessages(filters?: {
+  status?: string;
+  purpose?: string;
+  campaignId?: string;
+}): Promise<AdminSmsMessageRow[]> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status_filter", filters.status);
+  if (filters?.purpose) params.set("purpose", filters.purpose);
+  if (filters?.campaignId) params.set("campaign_id", filters.campaignId);
+  const query = params.toString();
+  return apiList<AdminSmsMessageRow>(`/v1/admin/sms/messages${query ? `?${query}` : ""}`);
+}
+
+export async function listAdminSmsCampaigns(): Promise<AdminSmsCampaignRow[]> {
+  return apiList<AdminSmsCampaignRow>("/v1/admin/sms/campaigns");
+}
+
+export async function previewAdminSms(input: {
+  body: string;
+  merchant_ids?: string[] | null;
+}): Promise<AdminSmsPreview> {
+  return apiWrite<AdminSmsPreview>("/v1/admin/sms/preview", "POST", input);
+}
+
+/** Asks the provider to price the message. Sends nothing, charges
+ * nothing and consumes no idempotency key. */
+export async function dryRunAdminSms(input: {
+  body: string;
+  merchant_ids?: string[] | null;
+}): Promise<AdminSmsDryRun> {
+  return apiWrite<AdminSmsDryRun>("/v1/admin/sms/dry-run", "POST", input);
+}
+
+export async function createAdminSmsCampaign(input: {
+  title: string;
+  body: string;
+  merchant_ids?: string[] | null;
+}): Promise<AdminSmsCampaignRow> {
+  return apiWrite<AdminSmsCampaignRow>("/v1/admin/sms/campaigns", "POST", input);
+}
+
+export async function updateAdminSmsCampaign(
+  campaignId: string,
+  input: { title: string; body: string; merchant_ids?: string[] | null },
+): Promise<AdminSmsCampaignRow> {
+  return apiWrite<AdminSmsCampaignRow>(`/v1/admin/sms/campaigns/${campaignId}`, "PATCH", input);
+}
+
+export async function duplicateAdminSmsCampaign(campaignId: string): Promise<AdminSmsCampaignRow> {
+  return apiWrite<AdminSmsCampaignRow>(`/v1/admin/sms/campaigns/${campaignId}/duplicate`, "POST");
+}
+
+export async function deleteAdminSmsCampaign(campaignId: string): Promise<void> {
+  await apiWrite(`/v1/admin/sms/campaigns/${campaignId}`, "DELETE");
+}
+
+/** The only call here that can cause an SMS to be sent. */
+export async function sendAdminSmsCampaign(campaignId: string): Promise<AdminSmsCampaignRow> {
+  return apiWrite<AdminSmsCampaignRow>(`/v1/admin/sms/campaigns/${campaignId}/send`, "POST");
+}
+
+export async function retryAdminSmsMessage(messageId: string): Promise<void> {
+  await apiWrite(`/v1/admin/sms/messages/${messageId}/retry`, "POST");
 }
 
 export async function correctMerchantContactEmail(merchantId: string, email: string): Promise<void> {

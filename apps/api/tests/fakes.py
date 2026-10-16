@@ -328,6 +328,52 @@ class _FakeTable:
         now = datetime.now(timezone.utc).isoformat()
         row.setdefault("created_at", now)
         row.setdefault("updated_at", now)
+        if self.name == "sms_messages":
+            # Two real constraints from
+            # 20261017090000_merchant_sms_notifications.sql. Without them
+            # the duplicate-protection tests would pass against a store
+            # that cannot duplicate anything, which is the same trap the
+            # CHECK-constraint gap left in this fake before: green here,
+            # broken in production.
+            #
+            # 1. the partial unique index on
+            #    (collection_id, merchant_id, purpose) for alerts, which
+            #    is what stops a Selcom callback and the reconciliation
+            #    sweep both alerting on one collection.
+            if row.get("purpose") == "collection_alert" and row.get("collection_id"):
+                clash = any(
+                    r.get("purpose") == "collection_alert"
+                    and r.get("collection_id") == row["collection_id"]
+                    and r.get("merchant_id") == row.get("merchant_id")
+                    for r in self.rows
+                )
+                if clash:
+                    raise Exception(  # noqa: TRY002
+                        "duplicate key value violates unique constraint "
+                        "sms_messages_one_alert_per_collection"
+                    )
+            # 2. the unique idempotency key.
+            if row.get("idempotency_key") and any(
+                r.get("idempotency_key") == row["idempotency_key"] for r in self.rows
+            ):
+                raise Exception(  # noqa: TRY002
+                    "duplicate key value violates unique constraint "
+                    "sms_messages_idempotency_key_key"
+                )
+            # next_attempt_at is `not null default now()` in the migration.
+            row.setdefault("next_attempt_at", now)
+            row.setdefault("attempts", 0)
+        if self.name == "sms_provider_events":
+            # event_id is unique in the migration, and that uniqueness is
+            # the entire deduplication mechanism for provider callbacks -
+            # the provider retries the same event at 1min, 5min, 30min,
+            # 2h and 12h. Without it here, the dedupe test would pass
+            # against a store that cannot reject anything.
+            if any(r.get("event_id") == row.get("event_id") for r in self.rows):
+                raise Exception(  # noqa: TRY002
+                    "duplicate key value violates unique constraint "
+                    "sms_provider_events_event_id_key"
+                )
         if self.name == "invoice_items":
             # Mirrors invoice_items.line_total, a Postgres
             # `generated always as (quantity * unit_price) stored` column —

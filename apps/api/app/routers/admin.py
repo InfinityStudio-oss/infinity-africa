@@ -657,6 +657,12 @@ def update_admin_merchant_notification_settings(
         secondary_notification_email=emails[1] if len(emails) > 1 else None,
         collection_notifications_enabled=payload.collection_notifications_enabled,
         updated_by=admin.id,
+        # None for any of these means "not supplied" — an existing caller
+        # that only sends the email fields cannot switch a merchant's SMS
+        # alerts off by omission.
+        collection_sms_enabled=payload.collection_sms_enabled,
+        announcement_sms_enabled=payload.announcement_sms_enabled,
+        sms_notification_phone=payload.sms_notification_phone,
     )
     write_audit_log(
         client,

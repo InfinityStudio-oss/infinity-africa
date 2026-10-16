@@ -77,6 +77,14 @@ export interface NotificationSettings {
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
+  /** Transactional payment alerts by SMS. Separate from the email flag
+   * above and from announcements — a merchant turning one off must not
+   * silently turn off the others. */
+  collection_sms_enabled: boolean;
+  announcement_sms_enabled: boolean;
+  /** The merchant's own number. Null falls back to the account contact
+   * number. Never a paying customer's number. */
+  sms_notification_phone: string | null;
   created_at: string;
   updated_at: string;
   updated_by: string | null;

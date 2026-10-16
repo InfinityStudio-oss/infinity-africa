@@ -91,6 +91,32 @@ export function NotificationSettingsCard({
             />
             Collection notifications enabled
           </label>
+
+          {/* How SMS is turned on merchant by merchant during rollout.
+              Off by default for every merchant — enabling it for all 60
+              at once is a cost and a consent decision. */}
+          <label className="flex items-center gap-2 text-sm text-on-surface">
+            <input
+              type="checkbox"
+              name="collection_sms_enabled"
+              defaultChecked={settings.collection_sms_enabled ?? false}
+            />
+            Payment alerts by SMS
+          </label>
+          <div>
+            <label className={labelClass}>SMS number</label>
+            <input
+              name="sms_notification_phone"
+              type="tel"
+              defaultValue={settings.sms_notification_phone ?? ""}
+              placeholder="Blank uses the account contact number"
+              className={inputClass}
+            />
+            <p className="mt-1 text-xs text-on-surface-variant">
+              The merchant&apos;s own number. Changing it redirects their payment alerts, so it is
+              recorded in the audit log.
+            </p>
+          </div>
           {state.error && <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">{state.error}</div>}
           <SubmitButton />
         </form>
@@ -108,6 +134,18 @@ export function NotificationSettingsCard({
             <span className="text-on-surface-variant">Status</span>
             <span className={settings.collection_notifications_enabled ? "text-primary font-medium" : "text-on-surface-variant"}>
               {settings.collection_notifications_enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-on-surface-variant">SMS alerts</span>
+            <span className={settings.collection_sms_enabled ? "text-primary font-medium" : "text-on-surface-variant"}>
+              {settings.collection_sms_enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-on-surface-variant">SMS number</span>
+            <span className="text-on-background">
+              {settings.sms_notification_phone ?? "Account contact number"}
             </span>
           </div>
           <div className="flex items-center justify-between">

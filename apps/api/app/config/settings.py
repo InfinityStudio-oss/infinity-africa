@@ -448,6 +448,62 @@ class Settings(BaseSettings):
     # polling, and webhook delivery is outbound to merchants, not Selcom.
     webhook_delivery_interval_seconds: int = 0
 
+    # --- Merchant SMS (OasisTech BulkSMS) ---------------------------------
+    #
+    # Server-only, all of it. None of these may ever appear in apps/web or
+    # apps/mobile: a sender ID is harmless, but an API key in a browser
+    # bundle is an account anyone can spend.
+    #
+    # The master switch. False (the default) means the dispatch worker
+    # never starts and nothing is ever offered to the provider - rows are
+    # still enqueued, so turning it on later sends what accumulated, and
+    # turning it OFF is the rollback: dispatch stops, history is kept, no
+    # financial record changes.
+    oasis_sms_enabled: bool = False
+    oasis_sms_api_key: str = ""
+    # Must be an approved sender ID on the provider account, 3-20 chars.
+    # An unapproved one is a 403 on every send, not a silent failure.
+    oasis_sms_sender_id: str = ""
+    # Only needed if provider callbacks are registered. Blank means the
+    # callback endpoint rejects everything, which is the safe default for
+    # an endpoint whose whole job is to accept unauthenticated POSTs.
+    oasis_sms_webhook_secret: str = ""
+
+    oasis_sms_base_url: str = "https://bulksms.oasistech.co.tz"
+
+    # 0 (the default) disables the dispatch loop, exactly like
+    # webhook_delivery_interval_seconds above - so local dev and tests
+    # never reach a real provider in the background. 30 is the intended
+    # production value.
+    oasis_sms_dispatch_interval_seconds: int = 0
+
+    # The documented account-wide limit is 300 send requests/minute, with a
+    # separate per-IP guard of 600. 240 leaves a fifth of the account's
+    # capacity for anything else sharing these credentials - the brief
+    # explicitly asks for that headroom, and we do not control what else
+    # the account is used for.
+    #
+    # This is enforced in-process, which is only equivalent to an
+    # account-wide limit because the dispatch sweep holds the
+    # 'sms_dispatch' scheduler lease and therefore runs in exactly one
+    # replica at a time. Remove that lease and this becomes a per-replica
+    # limit silently.
+    oasis_sms_rate_limit_per_minute: int = 240
+
+    # The provider documents a client timeout of at least 180 seconds.
+    # Below that, a slow-but-successful send looks like a timeout, and a
+    # timeout is the one outcome we cannot safely retry with a new key.
+    oasis_sms_timeout_seconds: int = 180
+
+    # How many messages one sweep may dispatch. Bounded so a large
+    # announcement cannot occupy the worker indefinitely while collection
+    # alerts wait behind it.
+    oasis_sms_batch_size: int = 50
+
+    # Announcements never take more than this share of a batch, so a
+    # 60-merchant blast cannot starve transactional alerts.
+    oasis_sms_announcement_batch_size: int = 20
+
     # Hosted checkout (payment_gateway_url from create-order-minimal) —
     # confirmed broken on Selcom's own side as of 2026-08-23 (returns
     # "Page Not Found" for every order tested — see

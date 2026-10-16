@@ -26,6 +26,7 @@ from app.routers import (
     admin_pricing,
     admin_referrals,
     admin_risk,
+    admin_sms,
     admin_withdrawals,
     auth_actions,
     collections,
@@ -51,6 +52,7 @@ from app.services.collection_expiry import expire_stale_pushes
 from app.services.disbursements import reconcile_pending_disbursements
 from app.services.referral_commissions import recalculate_open_referrals
 from app.services.scheduler_lease import acquire_lease, release_lease
+from app.services.sms_dispatch import dispatch_pending_sms
 from app.services.webhook_delivery import deliver_pending_webhooks
 
 settings = get_settings()
@@ -285,6 +287,62 @@ def _start_webhook_delivery_task() -> asyncio.Task | None:
     return asyncio.create_task(_webhook_delivery_loop(interval))
 
 
+async def _sms_dispatch_loop(interval_seconds: float) -> None:
+    """Drains the queued merchant SMS on a timer.
+
+    Holds the 'sms_dispatch' lease for two reasons, not one. The obvious
+    one is the same as webhook delivery: two replicas claiming the same
+    row would send a merchant the same payment alert twice. The less
+    obvious one is that the provider's 300-requests-per-minute limit is
+    enforced here by an in-process counter, which is only equivalent to an
+    account-wide limit while exactly one replica is sending.
+
+    Nothing in the sweep can affect a payment - it reads and writes
+    sms_messages and talks to the SMS provider, and touches no ledger,
+    transaction or collection row.
+    """
+    logger.info("sms_dispatch_loop_running interval_seconds=%s", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            # Off the event loop, like every other sweep here:
+            # dispatch_pending_sms is synchronous and the provider
+            # documents a 180 second client timeout, so calling it inline
+            # could stall this API for minutes.
+            sms_client = get_supabase_admin()
+            if not acquire_lease(sms_client, "sms_dispatch"):
+                continue
+            try:
+                summary = await asyncio.to_thread(dispatch_pending_sms, sms_client)
+            finally:
+                release_lease(sms_client, "sms_dispatch")
+            if summary["alerts"] or summary["announcements"] or summary["reclaimed"]:
+                logger.info("scheduled_sms_dispatch %s", summary)
+        except Exception as exc:
+            logger.exception("scheduled_sms_dispatch_failed")
+            capture_exception(exc)
+
+
+def _start_sms_dispatch_task() -> asyncio.Task | None:
+    """Two switches, both of which must be on.
+
+    OASIS_SMS_ENABLED is the feature flag and the rollback: turning it off
+    stops dispatch while leaving every queued row and all history intact.
+    The interval is the same opt-in shape as the other sweeps, so tests
+    and local dev never reach a real SMS provider in the background.
+    """
+    interval = settings.oasis_sms_dispatch_interval_seconds
+    if not settings.oasis_sms_enabled or interval <= 0:
+        logger.info(
+            "sms_dispatch_scheduler_disabled interval_seconds=%s oasis_sms_enabled=%s",
+            interval,
+            settings.oasis_sms_enabled,
+        )
+        return None
+    logger.info("sms_dispatch_scheduler_started interval_seconds=%s", interval)
+    return asyncio.create_task(_sms_dispatch_loop(interval))
+
+
 async def _referral_recalculation_loop(interval_seconds: float) -> None:
     """Revalues open referral commissions on a timer.
 
@@ -352,6 +410,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             _start_disbursement_reconciliation_task(),
             _start_webhook_delivery_task(),
             _start_referral_recalculation_task(),
+            _start_sms_dispatch_task(),
         )
         if task is not None
     ]
@@ -420,6 +479,8 @@ app.include_router(webhooks.callback_router, prefix="/v1")
 app.include_router(developer_docs.router, prefix="/v1")
 app.include_router(admin_referrals.router, prefix="/v1")
 app.include_router(merchant_webhooks.router, prefix="/v1")
+app.include_router(admin_sms.router, prefix="/v1")
+app.include_router(admin_sms.callback_router, prefix="/v1")  # /v1/sms/callbacks/oasis
 app.include_router(system.router, prefix="/v1")
 app.include_router(auth_actions.router, prefix="/v1")
 app.include_router(public_inquiries.router, prefix="/v1")

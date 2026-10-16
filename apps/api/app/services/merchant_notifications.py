@@ -18,6 +18,8 @@ from typing import Any
 from supabase import Client
 
 from app.core.errors import ValidationAPIError
+from app.core.phone import InvalidPhoneNumberError, normalize_tz_phone
+from app.core.time import utc_now_iso
 from app.services.crud import execute_maybe_single, insert_row, update_row
 
 # Same convention as app/schemas/auth.py's _EMAIL_PATTERN / app/schemas/
@@ -91,6 +93,9 @@ def upsert_notification_settings(
     secondary_notification_email: str | None,
     collection_notifications_enabled: bool,
     updated_by: uuid.UUID | None,
+    collection_sms_enabled: bool | None = None,
+    announcement_sms_enabled: bool | None = None,
+    sms_notification_phone: str | None = None,
 ) -> dict:
     data: dict[str, Any] = {
         "primary_notification_email": primary_notification_email,
@@ -98,6 +103,31 @@ def upsert_notification_settings(
         "collection_notifications_enabled": collection_notifications_enabled,
         "updated_by": str(updated_by) if updated_by else None,
     }
+    # None means "not supplied", so a caller that knows nothing about SMS
+    # cannot silently switch a merchant's alerts off by omission.
+    if collection_sms_enabled is not None:
+        data["collection_sms_enabled"] = collection_sms_enabled
+    if announcement_sms_enabled is not None:
+        data["announcement_sms_enabled"] = announcement_sms_enabled
+    if sms_notification_phone is not None:
+        # Validated and normalised to E.164 here rather than at the edge,
+        # so every route that can set it goes through the same check and
+        # the worker can trust what it reads. Blank clears it.
+        cleaned = sms_notification_phone.strip()
+        # normalize_tz_phone, not validate_and_normalize_phone: that
+        # wrapper exists to raise a bare ValueError for Pydantic field
+        # validators, and a bare ValueError escaping a service is a 500.
+        # A merchant typing their number slightly wrong deserves a
+        # message telling them so.
+        try:
+            data["sms_notification_phone"] = normalize_tz_phone(cleaned) if cleaned else None
+        except InvalidPhoneNumberError as exc:
+            raise ValidationAPIError(
+                "Enter a valid Tanzanian phone number for SMS alerts "
+                "(e.g. 0712 345 678)."
+            ) from exc
+        data["sms_phone_updated_by"] = str(updated_by) if updated_by else None
+        data["sms_phone_updated_at"] = utc_now_iso()
     existing = get_notification_settings(client, merchant_id)
     if existing:
         return update_row(client, "merchant_notification_settings", uuid.UUID(existing["id"]), data) or existing

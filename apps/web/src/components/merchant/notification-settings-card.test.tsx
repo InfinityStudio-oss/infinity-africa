@@ -19,6 +19,9 @@ const settings: NotificationSettings = {
   primary_notification_email: "owner@example.com",
   secondary_notification_email: null,
   collection_notifications_enabled: true,
+  collection_sms_enabled: false,
+  announcement_sms_enabled: true,
+  sms_notification_phone: null,
   created_at: "2026-08-01T00:00:00Z",
   updated_at: "2026-08-01T00:00:00Z",
   updated_by: null,
@@ -79,10 +82,17 @@ describe("NotificationSettingsCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(screen.getByText("Notification settings saved.")).toBeInTheDocument());
+    // The card now saves the email and SMS preferences in one request,
+    // so the payload carries both. Still asserted exactly rather than
+    // partially: the secondary address being explicitly null is the
+    // point of the test above it, and a partial match would stop
+    // catching it.
     expect(updateMyNotificationSettings).toHaveBeenCalledWith({
       primary_notification_email: "new@example.com",
       secondary_notification_email: null,
       collection_notifications_enabled: true,
+      collection_sms_enabled: false,
+      sms_notification_phone: "",
     });
   });
 
@@ -152,5 +162,70 @@ describe("NotificationSettingsCard", () => {
 
     await waitFor(() => expect(getMyNotificationSettings).toHaveBeenCalled());
     expect(screen.queryByText(/confirmations go to your account email/)).not.toBeInTheDocument();
+  });
+});
+
+/** The merchant's own control over transactional SMS, and the number it
+ * goes to. Both default off/empty: enabling SMS for 60 live merchants is
+ * a cost and a consent decision, not something a deployment does. */
+describe("SMS alerts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getMyNotificationSettings.mockResolvedValue(settings);
+    getMyMerchant.mockResolvedValue({ contact_email: "owner@shop.co.tz", contact_phone: "255799000111" });
+  });
+
+  async function renderCard() {
+    const { NotificationSettingsCard } = await import("./notification-settings-card");
+    render(<NotificationSettingsCard />);
+  }
+
+  it("is off until the merchant turns it on", async () => {
+    await renderCard();
+
+    const toggle = await screen.findByLabelText(/Also send me an SMS/i);
+    expect(toggle).not.toBeChecked();
+  });
+
+  it("saves the preference and the number together", async () => {
+    updateMyNotificationSettings.mockResolvedValue({
+      ...settings,
+      collection_sms_enabled: true,
+      sms_notification_phone: "255712345678",
+    });
+    await renderCard();
+
+    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
+    fireEvent.change(screen.getByLabelText(/SMS number/i), {
+      target: { value: "0712345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save/i }));
+
+    await waitFor(() =>
+      expect(updateMyNotificationSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          collection_sms_enabled: true,
+          sms_notification_phone: "0712345678",
+        }),
+      ),
+    );
+  });
+
+  it("says where alerts go when no number is set", async () => {
+    getMyMerchant.mockResolvedValue({ contact_email: "owner@example.com", contact_phone: "255799000111" });
+    await renderCard();
+
+    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
+
+    expect(await screen.findByText(/255799000111/)).toBeInTheDocument();
+  });
+
+  it("warns when there is no number to send to at all", async () => {
+    getMyMerchant.mockResolvedValue({ contact_email: "owner@example.com", contact_phone: null });
+    await renderCard();
+
+    fireEvent.click(await screen.findByLabelText(/Also send me an SMS/i));
+
+    expect(await screen.findByText(/no number on your account/i)).toBeInTheDocument();
   });
 });

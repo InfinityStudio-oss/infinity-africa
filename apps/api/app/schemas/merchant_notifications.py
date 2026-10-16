@@ -26,6 +26,17 @@ class MerchantNotificationSettingsUpdate(BaseModel):
     secondary_notification_email: str | None = None
     collection_notifications_enabled: bool = True
 
+    # SMS. Separate flags from the email ones above and from each other:
+    # a merchant who stops wanting announcements must not thereby lose
+    # their own payment alerts. Both are optional here so an existing
+    # caller that only sends the email fields keeps working unchanged -
+    # None means "leave as it is", not "turn off".
+    collection_sms_enabled: bool | None = None
+    announcement_sms_enabled: bool | None = None
+    # The merchant's own number. Blank clears it and falls back to
+    # merchants.contact_phone. Never a payer's number.
+    sms_notification_phone: str | None = None
+
 
 class MerchantNotificationSettingsResponse(BaseModel):
     id: uuid.UUID
@@ -33,6 +44,9 @@ class MerchantNotificationSettingsResponse(BaseModel):
     primary_notification_email: str | None = None
     secondary_notification_email: str | None = None
     collection_notifications_enabled: bool
+    collection_sms_enabled: bool = False
+    announcement_sms_enabled: bool = True
+    sms_notification_phone: str | None = None
     created_at: datetime
     updated_at: datetime
     updated_by: uuid.UUID | None = None
