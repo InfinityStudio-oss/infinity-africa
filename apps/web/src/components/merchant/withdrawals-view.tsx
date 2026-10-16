@@ -27,7 +27,7 @@ import {
   type WithdrawalOtpChallenge,
 } from "@/lib/portal/api";
 import { disbursementBadge } from "@/lib/portal/status-tones";
-import type { Disbursement, FeeBreakdown } from "@/lib/portal/types";
+import type { Disbursement } from "@/lib/portal/types";
 
 const METHOD_CARDS: Array<{ method: DisbursementMethod; icon: string; description: string; settlement: string }> = [
   { method: DisbursementMethod.SELCOM_PESA, icon: "bolt", description: "Instant transfers within network. Priority routing for high-volume payouts.", settlement: "< 1 minute" },
@@ -99,16 +99,10 @@ export function WithdrawalsView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [quote, setQuote] = useState<FeeBreakdown | null>(null);
+  // True while Continue is fetching the server quote and a fresh balance.
+  // There is no stored quote any more: it is fetched as part of continuing
+  // and used immediately, so it can never be stale.
   const [quoting, setQuoting] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  // Any change to method/destination/amount invalidates the current quote —
-  // the merchant must always see a breakdown matching what they're about to
-  // submit, never a stale one from a previous amount.
-  const [quotedFor, setQuotedFor] = useState<{ method: string; destinationCode: string; amount: string } | null>(null);
-  const quoteIsStale =
-    !quotedFor || quotedFor.method !== method || quotedFor.destinationCode !== destinationCode || quotedFor.amount !== amount;
-  const exceedsBalance = Boolean(quote && !quoteIsStale && Number(quote.total_reserved_amount) > Number(balance));
 
   useEffect(() => {
     listDisbursements().then(setDisbursements);
@@ -118,61 +112,68 @@ export function WithdrawalsView() {
   function handleMethodChange(nextMethod: DisbursementMethod) {
     setMethod(nextMethod);
     setDestinationCode(DESTINATION_CODES_BY_METHOD[nextMethod][0]);
-    setQuote(null);
   }
 
-  async function handleCalculateCharges() {
-    setQuoteError(null);
-    if (!amount || Number(amount) <= 0) {
-      setQuoteError("Enter an amount first.");
-      return;
-    }
-    if (!recipientIdentifier) {
-      setQuoteError("Enter the recipient's phone or account number first.");
-      return;
-    }
-    setQuoting(true);
-    try {
-      const breakdown = await calculateWithdrawalCharges({
-        amount,
-        method,
-        destination_code: destinationCode,
-        destination_identifier: recipientIdentifier,
-        // No name is sent: the merchant no longer types one, and there is
-        // no provider name lookup to resolve a real one from.
-        recipient_name: null,
-      });
-      setQuote(breakdown);
-      setQuotedFor({ method, destinationCode, amount });
-    } catch (err) {
-      setQuoteError(withdrawalErrorMessage(err, "Couldn't check your balance. Try again."));
-    } finally {
-      setQuoting(false);
-    }
-  }
-
-  /** Validates locally and opens the review step. Deliberately makes no
-   * request: the merchant should see exactly what they are about to submit
-   * before anything is sent, and before a code lands in their inbox. */
-  function handleSubmit(event: React.FormEvent) {
+  /** Validates, fetches the server quote and a fresh balance, then opens
+   * the review step.
+   *
+   * The quote used to be a separate "Check Balance" button the merchant
+   * had to press before Request Withdrawal would even enable. Merchants
+   * read that card as an error or an extra required step and rang support
+   * about it, so the request it made now happens here, as part of
+   * continuing. Nothing is submitted and no code is sent - that is still
+   * the review step's job.
+   *
+   * Fetching the balance again rather than trusting the one loaded on
+   * mount makes this check *fresher* than it was: a collection or another
+   * withdrawal may have moved the wallet since the page opened. It is
+   * still only a friendly pre-check. The real protection is the backend's
+   * own validation and the atomic ledger posting, neither of which this
+   * touches.
+   */
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    if (!recipientIdentifier || !amount) return;
+    if (!recipientIdentifier) {
+      setError("Enter the recipient's phone or account number.");
+      return;
+    }
     // Send a plain decimal to the API, never a formatted "TZS 1,000" string.
     // The <input type="number"> already keeps this numeric; this is a
     // defensive guard so a bad value fails with a clear message rather than
     // a backend 422 hidden behind the generic error.
     const amountValue = Number(amount);
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    if (!amount || !Number.isFinite(amountValue) || amountValue <= 0) {
       setError("Enter a valid withdrawal amount.");
       return;
     }
-    if (!quote || quoteIsStale) {
-      setError("Check your balance before confirming this withdrawal.");
+
+    setQuoting(true);
+    let totalReserved: string;
+    let freshBalance: string;
+    try {
+      [{ total_reserved_amount: totalReserved }, freshBalance] = await Promise.all([
+        calculateWithdrawalCharges({
+          amount,
+          method,
+          destination_code: destinationCode,
+          destination_identifier: recipientIdentifier,
+          // No name is sent: the merchant no longer types one, and there is
+          // no provider name lookup to resolve a real one from.
+          recipient_name: null,
+        }),
+        getAvailableBalance(),
+      ]);
+      setBalance(freshBalance);
+    } catch (err) {
+      setError(withdrawalErrorMessage(err, "Couldn't check your balance. Try again."));
       return;
+    } finally {
+      setQuoting(false);
     }
-    if (exceedsBalance) {
+
+    if (Number(totalReserved) > Number(freshBalance)) {
       setError("This amount exceeds your available balance.");
       return;
     }
@@ -304,10 +305,7 @@ export function WithdrawalsView() {
               <select
                 className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm"
                 value={destinationCode}
-                onChange={(event) => {
-                  setDestinationCode(event.target.value);
-                  setQuote(null);
-                }}
+                onChange={(event) => setDestinationCode(event.target.value)}
               >
                 {DESTINATION_CODES_BY_METHOD[method].map((code) => (
                   <option key={code} value={code}>
@@ -323,10 +321,7 @@ export function WithdrawalsView() {
                 placeholder="+255 7XX XXX XXX or account no."
                 type="text"
                 value={recipientIdentifier}
-                onChange={(event) => {
-                  setRecipientIdentifier(event.target.value);
-                  setQuote(null);
-                }}
+                onChange={(event) => setRecipientIdentifier(event.target.value)}
               />
             </div>
           </div>
@@ -343,12 +338,18 @@ export function WithdrawalsView() {
                   type="number"
                   min="1"
                   value={amount}
-                  onChange={(event) => {
-                    setAmount(event.target.value);
-                    setQuote(null);
-                  }}
+                  onChange={(event) => setAmount(event.target.value)}
                 />
               </div>
+              {/* The balance, stated once and plainly. It used to live in a
+                  "Review Withdrawal" card beside a "Check Balance" button,
+                  which merchants read as an error or a step they had
+                  missed. Here it is simply a fact about their account,
+                  next to the field it constrains. */}
+              <p className="mt-1.5 text-xs text-on-surface-variant">
+                Available balance:{" "}
+                <span className="font-semibold text-on-background">{formatCurrency(balance, "TZS")}</span>
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Notes (optional)</label>
@@ -359,47 +360,6 @@ export function WithdrawalsView() {
                 onChange={(event) => setNotes(event.target.value)}
               />
             </div>
-          </div>
-
-          <div className="bg-surface-container-low rounded-lg px-4 py-3 text-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Review Withdrawal</p>
-              <button
-                type="button"
-                onClick={handleCalculateCharges}
-                disabled={quoting}
-                className="text-xs font-semibold text-primary hover:underline disabled:opacity-60"
-              >
-                {quoting ? "Checking…" : "Check Balance"}
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-on-surface-variant">Available Balance</span>
-              <span className="font-semibold text-on-background">{formatCurrency(balance, "TZS")}</span>
-            </div>
-            {quoteError && <p className="text-xs text-error">{quoteError}</p>}
-            {quote && !quoteIsStale ? (
-              <>
-                <div className="flex items-center justify-between border-t border-surface-container-highest pt-2">
-                  <span className="text-on-surface-variant">Withdrawal Amount</span>
-                  <span className="font-semibold text-on-background">{formatCurrency(quote.withdrawal_amount, "TZS")}</span>
-                </div>
-                <p className="text-xs text-on-surface-variant flex items-center gap-1">
-                  <Icon name="check_circle" className="text-[14px] text-primary" />
-                  You receive the full amount.
-                </p>
-                {exceedsBalance && (
-                  <p className="text-xs text-error flex items-center gap-1 border-t border-surface-container-highest pt-2">
-                    <Icon name="error" className="text-[14px]" />
-                    This amount exceeds your available balance.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-xs text-on-surface-variant">
-                Enter an amount and destination, then check your balance before submitting.
-              </p>
-            )}
           </div>
 
           {success && (
@@ -417,10 +377,10 @@ export function WithdrawalsView() {
           <button
             className="w-full sm:w-auto bg-primary-container text-on-primary text-sm font-medium py-3 px-8 rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-60"
             type="submit"
-            disabled={submitting || reviewing || !quote || quoteIsStale || exceedsBalance}
+            disabled={submitting || reviewing || quoting}
           >
             <Icon name="send" className="text-[20px]" />
-            Request Withdrawal
+            {quoting ? "Checking your balance…" : "Request Withdrawal"}
           </button>
         </form>
       </Card>
@@ -493,8 +453,6 @@ export function WithdrawalsView() {
             setRecipientIdentifier("");
             setAmount("");
             setNotes("");
-            setQuote(null);
-            setQuotedFor(null);
             // Reported the same way either way. The merchant-facing
             // difference between an automated and a reviewed payout is
             // only how long it takes, and the backend status drives the

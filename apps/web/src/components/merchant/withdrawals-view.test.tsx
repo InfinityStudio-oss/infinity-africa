@@ -26,6 +26,9 @@ const breakdown: FeeBreakdown = {
 
 const calculateWithdrawalCharges = vi.fn().mockResolvedValue(breakdown);
 const createDisbursement = vi.fn();
+// Referenceable so a test can assert it is re-read when continuing, and
+// vary it to exercise the insufficient-balance path.
+const getAvailableBalance = vi.fn().mockResolvedValue("500000.00");
 
 const verifyWithdrawalOtp = vi.fn();
 const resendWithdrawalOtp = vi.fn();
@@ -33,7 +36,7 @@ const resolveWithdrawalRecipient = vi.fn();
 
 vi.mock("@/lib/portal/api", () => ({
   listDisbursements: vi.fn().mockResolvedValue([]),
-  getAvailableBalance: vi.fn().mockResolvedValue("500000.00"),
+  getAvailableBalance,
   calculateWithdrawalCharges,
   createDisbursement,
   verifyWithdrawalOtp: (...args: unknown[]) => verifyWithdrawalOtp(...args),
@@ -52,16 +55,15 @@ const CHALLENGE = {
   max_attempts: 5,
 };
 
-/** Fill the form and get past the mandatory "Check Balance" gate so the
- * "Request Withdrawal" button is enabled. No recipient name is entered —
- * the field no longer exists. */
-async function fillFormAndCheckBalance() {
+/** Fill the form. There is no longer a "Check Balance" gate to get past:
+ * the quote that button used to fetch is now fetched by Request
+ * Withdrawal itself. No recipient name is entered — the field does not
+ * exist. */
+function fillForm() {
   fireEvent.change(screen.getByPlaceholderText("+255 7XX XXX XXX or account no."), {
     target: { value: "255657878545" },
   });
   fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
-  fireEvent.click(screen.getByText("Check Balance"));
-  await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
 }
 
 /** Request Withdrawal now opens a review step; the code is only sent once
@@ -76,13 +78,100 @@ describe("WithdrawalsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resolveWithdrawalRecipient.mockResolvedValue(null);
+    // clearAllMocks drops the implementations set at declaration, so the
+    // two calls Request Withdrawal makes have to be restored per test.
+    getAvailableBalance.mockResolvedValue("500000.00");
+    calculateWithdrawalCharges.mockResolvedValue(breakdown);
   });
 
-  it("shows a Check Balance button", async () => {
+  /** Merchants read the "REVIEW WITHDRAWAL" card as an error or a step
+   * they had missed, and rang support about it. The card, its Check
+   * Balance button and its instruction line are gone; the balance it
+   * carried is now a plain line beside the amount field. */
+  it("shows no Review Withdrawal card and no Check Balance button", async () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await waitFor(() => expect(screen.getByText("Check Balance")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Request Withdrawal")).toBeInTheDocument());
+    expect(screen.queryByText("Check Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Review Withdrawal")).not.toBeInTheDocument();
+    expect(screen.queryByText(/check your balance before submitting/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Enter an amount first.")).not.toBeInTheDocument();
+  });
+
+  it("states the available balance once, beside the amount", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText(/Available balance:/i)).toBeInTheDocument());
+    expect(screen.getAllByText(/Available balance:/i)).toHaveLength(1);
+  });
+
+  it("shows nothing resembling an error before the merchant has done anything", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+
+    await waitFor(() => expect(screen.getByText("Request Withdrawal")).toBeInTheDocument());
+    expect(screen.queryByText(/exceeds your available balance/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enter a valid withdrawal amount/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enter the recipient/i)).not.toBeInTheDocument();
+  });
+
+  it("fetches the server quote as part of Request Withdrawal", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+    await waitFor(() => expect(screen.getByText("Request Withdrawal")).toBeInTheDocument());
+
+    fillForm();
+    expect(calculateWithdrawalCharges).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() => expect(calculateWithdrawalCharges).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("Review your withdrawal details")).toBeInTheDocument());
+  });
+
+  it("re-reads the balance when continuing, not just on load", async () => {
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+    await waitFor(() => expect(getAvailableBalance).toHaveBeenCalledTimes(1));
+
+    fillForm();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() => expect(getAvailableBalance).toHaveBeenCalledTimes(2));
+  });
+
+  it("refuses an amount above the balance and never reaches the review", async () => {
+    getAvailableBalance.mockResolvedValue("1000");
+    calculateWithdrawalCharges.mockResolvedValueOnce({ ...breakdown, total_reserved_amount: "100000" });
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+    await waitFor(() => expect(screen.getByText("Request Withdrawal")).toBeInTheDocument());
+
+    fillForm();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() =>
+      expect(screen.getByText("This amount exceeds your available balance.")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Review your withdrawal details")).not.toBeInTheDocument();
+    expect(createDisbursement).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a quote failure instead of opening the review", async () => {
+    calculateWithdrawalCharges.mockRejectedValueOnce(new Error("network down"));
+    const { WithdrawalsView } = await import("./withdrawals-view");
+    render(<WithdrawalsView />);
+    await waitFor(() => expect(screen.getByText("Request Withdrawal")).toBeInTheDocument());
+
+    fillForm();
+    fireEvent.click(screen.getByText("Request Withdrawal"));
+
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't check your balance. Try again.")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Review your withdrawal details")).not.toBeInTheDocument();
   });
 
   it("shows the withdrawal amount but never a fee or charge breakdown", async () => {
@@ -93,10 +182,10 @@ describe("WithdrawalsView", () => {
       target: { value: "+255700000000" },
     });
     fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
-    fireEvent.click(screen.getByText("Check Balance"));
+    fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await waitFor(() => expect(calculateWithdrawalCharges).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Review your withdrawal details")).toBeInTheDocument());
 
     // The old fee-breakdown rows must be gone entirely — this is the
     // point of the MVP pricing change, not just an added message.
@@ -118,7 +207,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
 
     await waitFor(() =>
@@ -137,7 +226,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
 
     await waitFor(() =>
@@ -154,7 +243,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
 
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
@@ -186,7 +275,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
@@ -211,7 +300,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
@@ -230,7 +319,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
 
@@ -272,7 +361,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await waitFor(() => expect(screen.getByText("Review your withdrawal details")).toBeInTheDocument());
@@ -284,7 +373,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -299,7 +388,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -310,7 +399,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -324,7 +413,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
     await screen.findByRole("dialog", { name: "Review withdrawal" });
 
@@ -343,7 +432,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
     await screen.findByRole("dialog", { name: "Review withdrawal" });
     expect(createDisbursement).not.toHaveBeenCalled();
@@ -370,7 +459,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     const { container } = render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "123456" } });
@@ -398,7 +487,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
     await waitFor(() => expect(screen.getByText("Enter the 6-digit code")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("6-digit verification code"), { target: { value: "123456" } });
@@ -444,7 +533,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     await requestAndConfirmReview();
 
     await waitFor(() => expect(createDisbursement).toHaveBeenCalledTimes(1));
@@ -464,9 +553,6 @@ describe("WithdrawalsView", () => {
       target: { value: "0123456789" },
     });
     fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
-    fireEvent.click(screen.getByText("Check Balance"));
-    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
-
     await requestAndConfirmReview();
 
     await waitFor(() => expect(createDisbursement).toHaveBeenCalledTimes(1));
@@ -485,8 +571,6 @@ describe("WithdrawalsView", () => {
       target: { value: "0123456789" },
     });
     fireEvent.change(screen.getByPlaceholderText("500,000"), { target: { value: "100000" } });
-    fireEvent.click(screen.getByText("Check Balance"));
-    await waitFor(() => expect(screen.getByText("You receive the full amount.")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -503,7 +587,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -516,7 +600,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await waitFor(() => expect(resolveWithdrawalRecipient).toHaveBeenCalledTimes(1));
@@ -532,7 +616,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -546,7 +630,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     await screen.findByRole("dialog", { name: "Review withdrawal" });
@@ -561,7 +645,7 @@ describe("WithdrawalsView", () => {
     const { WithdrawalsView } = await import("./withdrawals-view");
     render(<WithdrawalsView />);
 
-    await fillFormAndCheckBalance();
+    fillForm();
     fireEvent.click(screen.getByText("Request Withdrawal"));
 
     const dialog = await screen.findByRole("dialog", { name: "Review withdrawal" });
