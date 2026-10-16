@@ -161,6 +161,18 @@ class Settings(BaseSettings):
     # httpx's 5s and start failing slow-but-fine queries.
     supabase_client_timeout_seconds: int = 120
 
+    # How many payment prompts one customer may be sent by one merchant
+    # inside the window (app/core/push_throttle.py).
+    #
+    # 5 in 10 minutes, which is generous on purpose: a customer whose
+    # first prompt fails and who tries again immediately is an ordinary
+    # customer, not a loop, and blocking them would cost a real sale. It
+    # is set to stop the pathological case - one number on MAXTON'S WIFI
+    # was sent 52 prompts in two hours on 2026-10-12, none completed -
+    # not to police normal retrying. 0 disables it.
+    collection_push_per_customer_limit: int = 5
+    collection_push_per_customer_window_seconds: int = 600
+
     # --- Cache (app/core/cache.py) ------------------------------------
     #
     # Off unless both of these say otherwise, and off by default. The

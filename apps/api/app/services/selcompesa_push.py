@@ -23,6 +23,7 @@ from decimal import Decimal
 from supabase import Client
 
 from app.core.payment_minimums import assert_amount_allowed
+from app.core.push_throttle import assert_customer_push_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.services.checkout_orders import (
@@ -68,6 +69,9 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
     # payment, so it is refused here rather than spending a provider
     # attempt on it. See app/core/payment_minimums.py.
     assert_amount_allowed(Decimal(str(payment_link["amount"])), customer_phone=buyer_phone)
+    assert_customer_push_allowed(
+        merchant_id=payment_link["merchant_id"], customer_phone=buyer_phone
+    )
 
     payment_link_id = payment_link["id"]
 
@@ -197,6 +201,7 @@ async def execute_selcompesa_push_collection(
     # payment, so it is refused here rather than spending a provider
     # attempt on it. See app/core/payment_minimums.py.
     assert_amount_allowed(amount, customer_phone=customer_phone)
+    assert_customer_push_allowed(merchant_id=merchant_id, customer_phone=customer_phone)
 
     buyer_name = customer_name or "InfinityPay Customer"
     buyer_email = customer_email or f"collection-{uuid.uuid4()}@{_PLACEHOLDER_BUYER_EMAIL_DOMAIN}"

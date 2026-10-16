@@ -55,7 +55,9 @@ class _InMemoryRateLimiter:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
 
-    def check(self, bucket_key: str, *, limit: int, window_seconds: float) -> None:
+    def check(
+        self, bucket_key: str, *, limit: int, window_seconds: float, message: str | None = None
+    ) -> None:
         now = time.monotonic()
         with self._lock:
             hits = self._hits[bucket_key]
@@ -66,7 +68,11 @@ class _InMemoryRateLimiter:
                 # the earliest moment the caller could succeed.
                 retry_after = max(1, int(window_seconds - (now - hits[0])) + 1)
                 raise RateLimitExceededError(
-                    "Too many requests. Please try again in a few minutes.",
+                    # A caller-supplied message where the generic one would
+                    # waste the only chance to tell someone what to do. A
+                    # customer whose push keeps expiring needs "check your
+                    # balance", not "too many requests".
+                    message or "Too many requests. Please try again in a few minutes.",
                     retry_after=retry_after,
                 )
             hits.append(now)
@@ -100,7 +106,13 @@ def rate_limit(*, scope: str, limit: int | Callable[[], int], window_seconds: fl
     return _dependency
 
 def enforce_rate_limit(
-    *, scope: str, key: str, limit: int, window_seconds: float, request: Request | None = None
+    *,
+    scope: str,
+    key: str,
+    limit: int,
+    window_seconds: float,
+    request: Request | None = None,
+    message: str | None = None,
 ) -> None:
     """Apply a limit from inside a handler, keyed on something the
     dependency layer cannot see.
@@ -124,4 +136,4 @@ def enforce_rate_limit(
     bucket = f"{scope}:{digest}"
     if request is not None:
         bucket = f"{bucket}:{client_ip(request) or 'unknown'}"
-    _limiter.check(bucket, limit=limit, window_seconds=window_seconds)
+    _limiter.check(bucket, limit=limit, window_seconds=window_seconds, message=message)

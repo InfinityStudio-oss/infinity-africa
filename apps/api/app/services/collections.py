@@ -27,6 +27,7 @@ from supabase import Client
 from app.core.analytics import amount_band, track
 from app.core.errors import InsufficientBalanceError
 from app.core.payment_minimums import assert_amount_allowed
+from app.core.push_throttle import assert_customer_push_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
 from app.schemas.enums import CollectionMethod, NotificationType
@@ -278,6 +279,7 @@ async def initiate_collection(
     # the customer's own network floor can only come back failed. See
     # app/core/payment_minimums.py.
     assert_amount_allowed(amount, customer_phone=customer_phone)
+    assert_customer_push_allowed(merchant_id=merchant_id, customer_phone=customer_phone)
 
     collection = await create_processing_collection(
         client,
