@@ -181,6 +181,10 @@ export async function updateAdminMerchantNotificationSettings(
   );
 }
 
+export async function correctMerchantContactEmail(merchantId: string, email: string): Promise<void> {
+  await apiWrite(`/v1/admin/merchants/${merchantId}/correct-contact-email`, "POST", { email });
+}
+
 export async function suspendMerchantApiAccess(merchantId: string): Promise<void> {
   await apiWrite(`/v1/admin/merchants/${merchantId}/api-access/suspend`, "POST");
 }

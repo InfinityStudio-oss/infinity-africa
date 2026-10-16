@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import {
   approveMerchantAction,
+  correctMerchantContactEmailAction,
   setMerchantStatusAction,
   type MerchantActionState,
 } from "@/lib/admin/live-actions";
@@ -134,6 +135,74 @@ function SuspendMerchantForm({ merchantId, businessName }: { merchantId: string;
           <Icon name="block" className="text-[18px]" />
         </button>
       )}
+      <ActionFeedback state={state} />
+    </>
+  );
+}
+
+/** Fix a mistyped signup email.
+ *
+ * Every duplicate business in production was one merchant who mistyped
+ * their address on the Get Started form, never received the verification
+ * link, and signed up again - because "Resend verification email" was the
+ * only thing on offer and it resends to the address that was already
+ * wrong. Signup now refuses that second attempt, so this is the way out,
+ * and it has to live where support is already looking at the business.
+ *
+ * Takes a typed address rather than a one-click action: there is nothing
+ * to guess, and the new address stays unverified until the merchant
+ * clicks the link, so a typo here fails closed. */
+function CorrectEmailForm({ merchantId, currentEmail }: { merchantId: string; currentEmail: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [email, setEmail] = useState("");
+  const [state, formAction] = useActionState<MerchantActionState, FormData>(
+    () => correctMerchantContactEmailAction(merchantId, email),
+    MERCHANT_ACTION_IDLE,
+  );
+
+  if (!editing) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            setEmail(currentEmail ?? "");
+            setEditing(true);
+          }}
+          title="Correct signup email"
+          className="p-1.5 text-on-surface-variant hover:text-primary"
+        >
+          <Icon name="alternate_email" className="text-[18px]" />
+        </button>
+        <ActionFeedback state={state} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <form action={formAction} className="inline-flex items-center gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="correct@email.com"
+          aria-label="Correct signup email"
+          className="w-52 rounded-md border border-outline-variant bg-surface px-2 py-1 text-xs text-on-surface"
+        />
+        <TextSubmit
+          idleLabel="Save"
+          pendingLabel="Saving…"
+          className="px-2 py-1 rounded-md bg-primary-container text-on-surface text-xs font-semibold"
+        />
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="px-2 py-1 rounded-md border border-surface-container-highest text-xs"
+        >
+          Cancel
+        </button>
+      </form>
       <ActionFeedback state={state} />
     </>
   );
@@ -301,6 +370,10 @@ export function MerchantsTable({ rows }: { rows: Merchant[] }) {
                         {merchant.account_status === "suspended" && (
                           <ReactivateMerchantForm merchantId={merchant.merchant_id} />
                         )}
+                        <CorrectEmailForm
+                          merchantId={merchant.merchant_id}
+                          currentEmail={merchant.email ?? null}
+                        />
                       </td>
                     </tr>
                   );

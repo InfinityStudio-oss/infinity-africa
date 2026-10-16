@@ -5,10 +5,12 @@ import type { Merchant } from "@/lib/admin/types";
 
 const approveMerchantAction = vi.fn();
 const setMerchantStatusAction = vi.fn();
+const correctMerchantContactEmailAction = vi.fn();
 
 vi.mock("@/lib/admin/live-actions", () => ({
   approveMerchantAction: (...args: unknown[]) => approveMerchantAction(...args),
   setMerchantStatusAction: (...args: unknown[]) => setMerchantStatusAction(...args),
+  correctMerchantContactEmailAction: (...args: unknown[]) => correctMerchantContactEmailAction(...args),
 }));
 
 import { MerchantsTable } from "./merchants-table";
@@ -135,5 +137,67 @@ describe("live API without webhook warning", () => {
     );
 
     expect(screen.getAllByText("Live API, no webhook")).toHaveLength(1);
+  });
+});
+
+/** Every duplicate business in production was one merchant who mistyped
+ * their email at signup, never got the verification link, and signed up
+ * again. Signup now refuses the second attempt, so this button is the
+ * only remaining way out - if it does not work, those merchants are
+ * stuck, which is worse than the duplicates it replaced. */
+describe("MerchantsTable correct signup email", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("prefills the address currently on the account, so support can see the typo", () => {
+    render(<MerchantsTable rows={[merchant({ email: "huseinsaid211@gmail.com" })]} />);
+
+    fireEvent.click(screen.getByTitle("Correct signup email"));
+
+    expect(screen.getByLabelText("Correct signup email")).toHaveValue("huseinsaid211@gmail.com");
+  });
+
+  it("sends the corrected address", async () => {
+    correctMerchantContactEmailAction.mockResolvedValue({ error: null, ok: true, message: "Email changed." });
+    render(<MerchantsTable rows={[merchant({ email: "huseinsaid211@gmail.com" })]} />);
+
+    fireEvent.click(screen.getByTitle("Correct signup email"));
+    fireEvent.change(screen.getByLabelText("Correct signup email"), {
+      target: { value: "hussensaid211@gmail.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(correctMerchantContactEmailAction).toHaveBeenCalledWith("merchant-1", "hussensaid211@gmail.com"),
+    );
+  });
+
+  it("does not fire on opening the field", () => {
+    render(<MerchantsTable rows={[merchant()]} />);
+
+    fireEvent.click(screen.getByTitle("Correct signup email"));
+
+    expect(correctMerchantContactEmailAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the failure instead of looking like it worked", async () => {
+    correctMerchantContactEmailAction.mockResolvedValue({
+      error: "Another account already uses that email address.",
+      ok: false,
+      message: null,
+    });
+    render(<MerchantsTable rows={[merchant()]} />);
+
+    fireEvent.click(screen.getByTitle("Correct signup email"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/Another account already uses/)).toBeInTheDocument();
+  });
+
+  it("is offered for a suspended business too", () => {
+    render(<MerchantsTable rows={[merchant({ account_status: "suspended" })]} />);
+
+    expect(screen.getByTitle("Correct signup email")).toBeInTheDocument();
   });
 });

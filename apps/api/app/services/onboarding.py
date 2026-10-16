@@ -33,6 +33,10 @@ from app.schemas.withdrawals import PricingRuleCreate
 from app.services.admin_directory import best_effort_user_profile
 from app.services.audit import write_audit_log
 from app.services.crud import get_by_id, insert_row, update_row
+from app.services.duplicate_signup import (
+    duplicate_signup_message,
+    find_existing_application,
+)
 from app.services.email import (
     send_email_verification_email,
     send_merchant_signup_notification_email,
@@ -281,7 +285,7 @@ async def signup_merchant(
     # *before* an auth user or any row is created (create_merchant_onboarding
     # re-validates NIDA too — cheap, and it keeps that function correct for
     # its other callers).
-    normalize_nida(payload.nida_number)
+    nida = normalize_nida(payload.nida_number)
     if (
         tin_certificate is not None
         and tin_certificate.filename
@@ -289,6 +293,18 @@ async def signup_merchant(
     ):
         raise ValidationAPIError("TIN certificate must be a PDF, JPG, or PNG file")
     phone = validate_and_normalize_phone(payload.contact_phone)
+
+    # One business, one account. Checked *before* the auth user is
+    # created, so a refused duplicate leaves nothing behind - creating the
+    # user first and failing after would leave an orphaned Supabase Auth
+    # account that blocks the address for the real signup.
+    #
+    # See app/services/duplicate_signup.py for why this exists: every
+    # duplicate in production was one merchant mistyping their email,
+    # never getting the link, and signing up again.
+    existing = find_existing_application(client, nida=nida, phone=phone)
+    if existing is not None:
+        raise ConflictError(duplicate_signup_message(existing))
 
     try:
         created = client.auth.admin.create_user(

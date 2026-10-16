@@ -18,6 +18,7 @@ import {
   reconcilePendingWithdrawals,
   refreshWithdrawalStatus,
   retryWithdrawalPayout,
+  correctMerchantContactEmail,
   reinstateMerchantApiAccess,
   rejectDocumentRequest,
   rejectIpAllowlistEntry,
@@ -89,6 +90,25 @@ export async function setMerchantStatusAction(
   return runMerchantAction(async () => {
     await updateMerchantStatus(merchantId, status);
     return MERCHANT_STATUS_DONE[status];
+  });
+}
+
+/** Fix a mistyped signup email instead of the merchant creating a second
+ * account. Every duplicate business in production was one merchant who
+ * mistyped their address, never got the verification link, and signed up
+ * again - signup now refuses that second attempt, so this is the way out.
+ * The new address stays unverified until the merchant clicks the link. */
+export async function correctMerchantContactEmailAction(
+  merchantId: string,
+  email: string,
+): Promise<MerchantActionState> {
+  const trimmed = email.trim();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { error: "Enter a valid email address.", ok: false, message: null };
+  }
+  return runMerchantAction(async () => {
+    await correctMerchantContactEmail(merchantId, trimmed);
+    return `Email changed to ${trimmed}. A verification link has been sent there.`;
   });
 }
 

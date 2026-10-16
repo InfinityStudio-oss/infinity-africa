@@ -149,9 +149,22 @@ def test_signup_rejects_malformed_nida(fake_client):
 
 
 def test_signup_duplicate_email_conflicts(fake_client):
+    """A *different* business reusing an address already registered.
+
+    The NIDA and phone are deliberately different from the first
+    signup's: with the shared _NIDA they would trip the duplicate-identity
+    guard instead (test_duplicate_signup.py) and this test would pass
+    without the duplicate-email path ever running.
+    """
     form = _form()
     assert _post(form).status_code == 201
-    second = _post(_form(email=form["email"]))
+    second = _post(
+        _form(
+            email=form["email"],
+            nida_number="19880202-54321-54321-21",
+            contact_phone="+255700000111",
+        )
+    )
     assert second.status_code == 409
     assert len(fake_client.table("merchants")._table.rows) == 1
 

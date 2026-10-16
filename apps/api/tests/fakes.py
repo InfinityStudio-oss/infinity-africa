@@ -477,6 +477,31 @@ class _FakeAuthAdmin:
         self.seed_user(user_id, email=email, full_name=full_name, email_confirmed_at=confirmed_at)
         return _FakeGetUserResult(self._users[user_id])
 
+    def update_user_by_id(self, user_id: str, attributes: dict) -> _FakeGetUserResult:
+        """Mirrors supabase_auth's admin update_user_by_id for
+        app/services/merchant_email_correction.py.
+
+        Two real behaviours matter and both are here: a 404 for an unknown
+        user, and refusing an email that already belongs to somebody else
+        - which is the one case where the email correction must not go
+        ahead, because two merchants would end up fighting over one login.
+        """
+        user = self._users.get(str(user_id))
+        if user is None:
+            raise Exception(f"User {user_id} not found")  # noqa: TRY002
+        email = attributes.get("email")
+        if email is not None:
+            if any(u.email == email and u.id != str(user_id) for u in self._users.values()):
+                raise Exception(f"A user with email {email} already registered")  # noqa: TRY002
+            user.email = email
+            # email_confirm absent or False leaves the new address
+            # unverified, exactly as the real API does - the behaviour the
+            # correction flow depends on.
+            user.email_confirmed_at = (
+                "2026-01-01T00:00:00+00:00" if attributes.get("email_confirm") else None
+            )
+        return _FakeGetUserResult(user)
+
     def get_user_by_id(self, user_id: str) -> _FakeGetUserResult:
         user = self._users.get(str(user_id))
         if user is None:
@@ -523,10 +548,13 @@ class _FakeAuthAdmin:
             full_name = (options.get("data") or {}).get("full_name")
             self.seed_user(user_id, email=email, full_name=full_name)
             user = self._users[user_id]
-        elif link_type in ("recovery", "signup"):
+        elif link_type in ("recovery", "signup", "magiclink"):
             # "signup" (email-verification link for the combined signup
-            # flow) and "recovery" both require an *existing* user and
-            # raise if none matches — the real API's behaviour.
+            # flow), "magiclink" (the link sent when a Super Admin
+            # corrects a mistyped signup address - there is no password to
+            # pass, so it cannot be a "signup" link) and "recovery" all
+            # require an *existing* user and raise if none matches — the
+            # real API's behaviour.
             user = next((u for u in self._users.values() if u.email == email), None)
             if user is None:
                 raise Exception(f"User {email} not found")  # noqa: TRY002

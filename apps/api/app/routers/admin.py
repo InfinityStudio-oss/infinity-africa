@@ -31,6 +31,7 @@ from app.schemas.admin import (
     AdminCustomerSummaryResponse,
     AdminInquiryResponse,
     AdminInvoiceResponse,
+    AdminMerchantEmailCorrection,
     AdminMerchantOptionResponse,
     AdminMerchantResponse,
     AdminMerchantUserResponse,
@@ -67,8 +68,10 @@ from app.services.api_access import is_production_api_access_allowed
 from app.services.audit import write_audit_log
 from app.services.checkout_reconciliation import refresh_checkout_collection_status
 from app.services.crud import execute_maybe_single, get_by_id, update_row
+from app.services.duplicate_signup import mask_email
 from app.services.email import batch_latest_email_deliveries
 from app.services.ledger import get_wallet_balance
+from app.services.merchant_email_correction import correct_merchant_contact_email
 from app.services.merchant_notifications import (
     get_or_create_notification_settings,
     notification_delivery_summary,
@@ -310,6 +313,59 @@ def reinstate_merchant_api_access(
         action="merchant.api_access_reinstated",
         resource_type="merchant",
         resource_id=merchant_id,
+    )
+    return get_admin_merchant(merchant_id, admin)
+
+
+@router.post(
+    "/merchants/{merchant_id}/correct-contact-email",
+    response_model=APIResponse[AdminMerchantResponse],
+)
+def correct_admin_merchant_contact_email(
+    merchant_id: uuid.UUID,
+    payload: AdminMerchantEmailCorrection,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """Fix a mistyped signup email instead of the merchant creating a
+    second account.
+
+    Every duplicate account in production was one business that mistyped
+    its email on the Get Started form, never received the verification
+    link, and signed up again - because "Resend verification email" was
+    the only thing on offer and it resends to the same wrong address.
+    Signup now refuses the second application
+    (app/services/duplicate_signup.py); this is what makes that refusal
+    fair.
+
+    Changes one email address on the merchant and on the Supabase Auth
+    user behind it, then sends a fresh verification link. The new address
+    is left unverified, so a typo in the correction fails closed. Touches
+    no wallet, ledger, collection or API key. Always audit-logged.
+    """
+    client = get_supabase_admin()
+    merchant = get_by_id(client, "merchants", merchant_id)
+    if not merchant:
+        raise NotFoundError("Merchant not found")
+
+    result = correct_merchant_contact_email(
+        client, merchant_id=merchant_id, new_email=payload.email
+    )
+    write_audit_log(
+        client,
+        actor_id=admin.id,
+        actor_type="user",
+        merchant_id=merchant_id,
+        action="merchant.contact_email_corrected",
+        resource_type="merchant",
+        resource_id=merchant_id,
+        # Masked on both sides. An audit log is readable by every Super
+        # Admin and exportable; the entry needs to prove what happened,
+        # not to carry two personal email addresses in clear text.
+        metadata={
+            "from": mask_email(merchant.get("contact_email")),
+            "to": mask_email(result["email"]),
+            "verification_sent": result["verification_sent"],
+        },
     )
     return get_admin_merchant(merchant_id, admin)
 

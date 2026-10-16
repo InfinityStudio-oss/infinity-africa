@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminOverviewResponse(BaseModel):
@@ -90,6 +90,17 @@ class AdminMerchantOptionResponse(BaseModel):
     merchant_id: uuid.UUID
     business_name: str
     merchant_code: str | None = None
+
+
+class AdminMerchantEmailCorrection(BaseModel):
+    """Body for POST /v1/admin/merchants/{id}/correct-contact-email.
+
+    The address a merchant meant to type at signup. Validated here only
+    for shape - whether it is really theirs is settled by the
+    verification link, which is why the correction leaves the account
+    unverified (app/services/merchant_email_correction.py)."""
+
+    email: str = Field(min_length=3, max_length=320, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class AdminMerchantResponse(BaseModel):
