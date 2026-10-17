@@ -105,18 +105,16 @@ COLLECTION_ALERT_TEMPLATE = (
 )
 
 
-# The tail both automatic messages carry: the referral invitation and
-# where to get help. Referrals are a real feature (start_referral_period
-# runs on approval), so the commission offer is not an empty promise.
+# The tail both automatic messages carry.
 #
-# It costs exactly one extra message part on each template, which is the
-# whole reason it is a named constant - changing it changes the cost of
-# every welcome and every payout confirmation, and that should be visible
-# in one place rather than buried twice.
-MESSAGE_TAIL = (
-    "Alika wafanyabiashara kujiunga na INFINITYPAY ujipatie kamisheni. "
-    "Kwa msaada: 255747730270 au help@infinitypay.me"
-)
+# A named constant because it is the cheapest thing to make expensive:
+# every character is paid for on every welcome and every payout
+# confirmation. A referral invitation and the support email address lived
+# here briefly and were removed on 2026-10-17 - between them they pushed
+# both messages past 160 characters, the GSM-7 limit for a single part,
+# so each cost two parts instead of one. The phone number is what a
+# merchant actually reaches for when something looks wrong.
+MESSAGE_TAIL = "Kwa msaada: 255747730270"
 
 # Sent once, after a merchant's first approval.
 #
@@ -125,48 +123,37 @@ MESSAGE_TAIL = (
 #   "tengeneza API keys na weka webhooks" - self-service since 06eb6d1.
 #       The message says a merchant *can* create them; it never carries a
 #       key or a signing secret.
-#   "Toa pesa kwenda benki au simu" - both real. Production has paid out
-#       to CRDB as well as M-Pesa, Mixx by Yas, Halopesa, Airtel and
-#       Selcom; DestinationCode lists twelve banks.
-#   "bila ada" - true only while withdrawals are actually free, which is
-#       why this one sentence is conditional rather than baked in.
-_WELCOME_OPENING = (
+#
+# It used to end "Toa pesa kwenda benki au simu bila ada", and that one
+# clause needed a whole mechanism behind it: the fee claim was only true
+# while withdrawals were actually free, so the text was chosen at send
+# time by asking the real fee calculator. The sentence was dropped on
+# 2026-10-17 and the mechanism went with it - there is no claim left to
+# get wrong, and nothing to keep in step with pricing.
+WELCOME_TEMPLATE = (
     "Karibu InfinityPay! Akaunti yako imeidhinishwa. "
-    "Pokea malipo, tengeneza API keys na weka webhooks. "
+    "Pokea malipo, tengeneza API keys na weka webhooks. " + MESSAGE_TAIL
 )
-WELCOME_TEMPLATE_FREE = _WELCOME_OPENING + "Toa pesa kwenda benki au simu bila ada. " + MESSAGE_TAIL
-# The same message with the fee claim removed, for whenever withdrawals
-# are not free. Advertising free withdrawals to a merchant who is charged
-# for them is the one thing this message must never do.
-WELCOME_TEMPLATE_PAID = _WELCOME_OPENING + "Toa pesa kwenda benki au simu. " + MESSAGE_TAIL
 
 
-def render_welcome(*, withdrawals_are_free: bool) -> str:
-    """The welcome message, with the fee claim only when it is true.
+def render_welcome() -> str:
+    """The welcome message.
 
-    `withdrawals_are_free` is answered by asking the real fee calculator
-    what this merchant would actually be charged, not by a constant - so
-    if withdrawal pricing ever changes, the wording follows it instead of
-    becoming a false advertisement.
+    Takes no arguments now. It took `withdrawals_are_free` while it
+    advertised free withdrawals, because telling a merchant something is
+    free when they are charged for it is the one mistake this message
+    must never make. With the claim gone, so is the question.
     """
-    return WELCOME_TEMPLATE_FREE if withdrawals_are_free else WELCOME_TEMPLATE_PAID
+    return WELCOME_TEMPLATE
 
 
-# Sent once, after a payout is confirmed by the provider.
-#
-# Written from the merchant's side of the movement: they have *received*
-# money from InfinityPay into their bank or phone, which is how a mobile
-# money receipt reads and how they will recognise it. "Salio baada ya
-# muamala" is their InfinityPay wallet balance afterwards - the balance
-# the wallet debit produced at approval, not a reading taken now.
-#
-# No provider receipt code. One was briefly included (selcom_receipt,
-# e.g. SB1016W6ZYN) because it is the one figure a merchant could check
-# against their mobile money statement, and removed at the owner's
-# request - `reference` already identifies the payout in the portal and
-# in support conversations.
+
+# No "InfinityPay:" prefix. The sender ID the message arrives from is
+# already INFINITYPAY, so the name appeared twice on the handset before
+# the first full stop - and those are the characters this message can
+# least afford.
 WITHDRAWAL_COMPLETE_TEMPLATE = (
-    "InfinityPay: Imethibitishwa. "
+    "Imethibitishwa. "
     "Umepokea TZS {amount} kutoka INFINITYPAY. "
     "Ada: TZS {fee}. "
     "Salio baada ya muamala: TZS {closing_balance}. "

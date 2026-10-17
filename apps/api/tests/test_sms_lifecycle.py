@@ -30,7 +30,6 @@ from app.services.sms_messages import (
     SKIP_NO_NUMBER,
     enqueue_welcome_sms,
     enqueue_withdrawal_complete_sms,
-    withdrawals_are_free,
 )
 from app.services.sms_provider import SmsResult
 from app.services.sms_text import (
@@ -293,70 +292,31 @@ def test_the_welcome_is_sent_from_the_approval_path(fake_client):
     assert "enqueue_welcome_sms" in inspect.getsource(onboarding.approve_onboarding_submission)
 
 
-def test_the_welcome_stays_in_the_cheap_encoding_and_carries_no_secret(fake_client):
-    """Two parts since the referral and support lines were added on
-    2026-10-17 - a deliberate trade, and cheap at once per merchant.
-    What must not slip is the encoding: one curly quote or emoji would
-    drop the part size from 160 characters to 70 and take this to four
-    parts."""
-    text = render_welcome(withdrawals_are_free=True)
+def test_the_welcome_fits_one_part_and_carries_no_secret(fake_client):
+    """Back to a single part on 2026-10-17, once the referral line, the
+    support email and the withdrawal sentence came out. One part is half
+    the cost of two, on a message every approved merchant receives."""
+    text = render_welcome()
     cost = message_cost(text)
 
     assert cost["encoding"] == "GSM-7"
-    assert cost["segments"] == 2
+    assert cost["segments"] == 1
     for leak in ("sk_live", "inf_live", "secret", "whsec"):
         assert leak not in text.lower()
 
 
-def test_the_free_withdrawal_claim_is_dropped_when_withdrawals_cost_money(fake_client):
-    """The claim this message must never get wrong."""
-    free = render_welcome(withdrawals_are_free=True)
-    paid = render_welcome(withdrawals_are_free=False)
+def test_the_welcome_makes_no_claim_about_fees(fake_client):
+    """It used to end "bila ada", which was only true while withdrawals
+    were free and needed the real fee calculator consulted at send time
+    to stay honest. The sentence is gone, so there is nothing left to get
+    wrong - and nothing may quietly reintroduce it."""
+    text = render_welcome()
 
-    assert "bila ada" in free
-    assert "bila ada" not in paid
-    assert "benki au simu" in paid, "the destinations are still true, only the fee claim goes"
-
-
-def test_the_fee_claim_is_checked_against_the_real_calculator(fake_client):
-    """Not a constant. Today withdrawals are free by policy, and this is
-    what proves the message follows the policy rather than asserting it."""
-    merchant = _merchant(fake_client)
-
-    assert withdrawals_are_free(fake_client, uuid.UUID(merchant["id"])) is True
-
-    enqueue_welcome_sms(fake_client, merchant_id=uuid.UUID(merchant["id"]))
-    assert "bila ada" in _rows(fake_client, "welcome")[0]["body"]
-
-
-def test_a_broken_fee_lookup_drops_the_claim_rather_than_guessing(fake_client, monkeypatch):
-    """Patched at the calculator rather than the database on purpose.
-
-    calculate_withdrawal_fee deliberately consults nothing - it returns
-    zero unconditionally under the MVP pricing policy - so a broken
-    client never reaches it and would answer True quite correctly. The
-    guard exists for the day that calculator starts reading pricing
-    rules again, and this is what exercises it.
-    """
-    import app.services.withdrawals.fee_calculator as fee_module
-
-    def _explode(*_args, **_kwargs):
-        raise RuntimeError("pricing lookup down")
-
-    monkeypatch.setattr(fee_module, "calculate_withdrawal_fee", _explode)
-
-    assert withdrawals_are_free(fake_client, uuid.uuid4()) is False
-
-
-def test_the_fee_claim_survives_a_database_outage(fake_client):
-    """Today the answer needs no database at all, so an unreachable one
-    cannot make the welcome message wrong."""
-    class _Broken:
-        def table(self, _name):
-            raise RuntimeError("down")
-
-    assert withdrawals_are_free(_Broken(), uuid.uuid4()) is True
-
+    # "bila ada", not "ada" - the support line contains "msaada", which
+    # a substring check on "ada" matches. Caught by this test failing on
+    # its own first draft.
+    assert "bila ada" not in text.lower()
+    assert "bure" not in text.lower()
 
 def test_the_welcome_respects_its_own_switch(fake_client, monkeypatch):
     monkeypatch.setenv("OASIS_SMS_WELCOME_ENABLED", "false")
@@ -543,13 +503,15 @@ def test_the_withdrawal_message_stays_in_the_cheap_encoding(fake_client):
 
 
 
-def test_the_referral_and_support_tail_is_on_both_messages(fake_client):
-    """Added 2026-10-17. Referrals are a real feature, so the commission
-    offer is not an empty promise, and the support number is the one
-    route a merchant has when something looks wrong."""
+def test_the_support_number_is_on_both_messages(fake_client):
+    """All that is left of the tail. A referral invitation and a support
+    email address were here on 2026-10-17 and came out the same day:
+    between them they pushed both messages past 160 GSM-7 characters, so
+    each cost two parts instead of one. The number is what a merchant
+    reaches for when something looks wrong."""
     from app.services.sms_text import MESSAGE_TAIL
 
-    welcome = render_welcome(withdrawals_are_free=True)
+    welcome = render_welcome()
     payout = render_withdrawal_complete(
         amount=Decimal(1000),
         fee_amount=Decimal(0),
@@ -560,11 +522,9 @@ def test_the_referral_and_support_tail_is_on_both_messages(fake_client):
     for text in (welcome, payout):
         assert MESSAGE_TAIL in text
         assert "255747730270" in text
-        assert "help@infinitypay.me" in text
-
-
-# --- it must never touch money -----------------------------------------
-
+        # Removed for cost; neither may creep back without this failing.
+        assert "@" not in text
+        assert "kamisheni" not in text.lower()
 
 def test_nothing_here_writes_to_a_financial_table(fake_client):
     merchant = _merchant(fake_client)

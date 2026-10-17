@@ -173,40 +173,6 @@ def _skip(
 # --- welcome -----------------------------------------------------------
 
 
-def withdrawals_are_free(client: Client, merchant_id: uuid.UUID) -> bool:
-    """Would this merchant actually be charged to withdraw?
-
-    Asked of the real fee calculator rather than assumed, because the
-    welcome message claims withdrawals are free and that claim must not
-    outlive the policy behind it. Today calculate_withdrawal_fee returns
-    zero unconditionally (MVP pricing, 2026-08-31) and production bears
-    it out: every one of the 54 payouts since 2026-08-30 was charged
-    nothing, while the 20 before it were charged between TZS 5 and 530.
-    If the policy changes, the wording follows it instead of becoming a
-    false advertisement.
-
-    Any failure answers False, which drops the fee claim. Saying less
-    than we offer is recoverable; telling a merchant withdrawals are free
-    when they are charged for them is not.
-    """
-    try:
-        from app.schemas.enums import DestinationCode, DisbursementMethod
-        from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
-
-        breakdown = calculate_withdrawal_fee(
-            client,
-            merchant_id=merchant_id,
-            # A representative payout. Percentage pricing would show up
-            # in this as readily as a flat fee would.
-            amount=Decimal(10000),
-            channel=DisbursementMethod.MOBILE_MONEY,
-            destination_code=DestinationCode.MPESA,
-        )
-        return Decimal(str(breakdown.total_charges)) == 0
-    except Exception:  # noqa: BLE001 — understate rather than mis-advertise
-        logger.warning("withdrawal_fee_check_failed merchant_id=%s", merchant_id)
-        return False
-
 
 def enqueue_welcome_sms(client: Client, *, merchant_id: uuid.UUID) -> dict | None:
     """Queue the one welcome message, after a merchant's first approval.
@@ -231,7 +197,7 @@ def enqueue_welcome_sms(client: Client, *, merchant_id: uuid.UUID) -> dict | Non
         if skip_reason or not phone:
             return _skip(client, merchant_id, "welcome", key, skip_reason or SKIP_NO_NUMBER)
 
-        body = render_welcome(withdrawals_are_free=withdrawals_are_free(client, merchant_id))
+        body = render_welcome()
         return _insert(
             client,
             {
