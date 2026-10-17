@@ -38,6 +38,15 @@ from app.services.sms_provider import (
 
 logger = logging.getLogger("infinity.sms")
 
+# Every purpose the worker will dispatch, most urgent first. Must stay in
+# step with the purposes app/services/sms_messages.py enqueues and the
+# check constraint in 20261017140000 - a purpose missing from here is a
+# message that queues and is never sent.
+#
+# 'collection_alert' is absent deliberately: retired 2026-10-17, and the
+# migration cancels what was queued. Historical rows stay readable.
+DISPATCHED_PURPOSES = ("welcome", "withdrawal_complete", "announcement")
+
 _WORKER = f"sms-{uuid.uuid4().hex[:8]}"
 
 # Long enough for the provider's own 180s timeout plus room to save the
@@ -241,8 +250,18 @@ def dispatch_pending_sms(client: Client) -> dict:
         settings.oasis_sms_announcement_batch_size, settings.oasis_sms_batch_size
     )
 
+    # Transactional messages first, announcements after, so a bulk send
+    # can never leave a merchant's payout confirmation waiting behind it.
+    #
+    # This list is the one place the worker learns which purposes exist.
+    # It named 'collection_alert' for a day after that purpose was retired
+    # and the two lifecycle purposes replaced it, so welcome and
+    # withdrawal_complete rows were enqueued correctly and then never
+    # claimed by anyone - a real payout confirmation sat queued until it
+    # was noticed. Adding a purpose means adding it here.
     for purpose, budget, key in (
-        ("collection_alert", alert_budget, "alerts"),
+        ("welcome", alert_budget, "alerts"),
+        ("withdrawal_complete", alert_budget, "alerts"),
         ("announcement", announcement_budget, "announcements"),
     ):
         if budget <= 0:

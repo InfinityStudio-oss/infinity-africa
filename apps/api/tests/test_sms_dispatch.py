@@ -40,8 +40,12 @@ def _queue(fake_client, **overrides) -> dict:
     merchant = create_merchant(fake_client)
     row = {
         "merchant_id": merchant["id"],
-        "purpose": "collection_alert",
-        "collection_id": str(uuid.uuid4()),
+        # A transactional message. Was "collection_alert" until that
+        # purpose was retired on 2026-10-17; these tests are about the
+        # worker's mechanics - claiming, retrying, throttling - not about
+        # which kind of message it happens to be carrying.
+        "purpose": "withdrawal_complete",
+        "disbursement_id": str(uuid.uuid4()),
         "recipient_phone": "255712000001",
         "sender_id": "INFINITYPAY",
         "body": "InfinityPay: Umepokea TZS 10,000.",
@@ -320,10 +324,10 @@ def test_the_batch_is_bounded(fake_client, monkeypatch):
     assert len(calls) == 2
 
 
-def test_collection_alerts_are_drained_before_announcements(fake_client, monkeypatch):
-    """A 60-merchant announcement must not leave a merchant's payment
-    alert waiting behind it."""
-    _queue(fake_client, purpose="announcement", collection_id=None, body="announcement")
+def test_transactional_messages_are_drained_before_announcements(fake_client, monkeypatch):
+    """A 60-merchant announcement must not leave a merchant's payout
+    confirmation waiting behind it."""
+    _queue(fake_client, purpose="announcement", disbursement_id=None, body="announcement")
     _queue(fake_client, body="alert")
     order: list[str] = []
 

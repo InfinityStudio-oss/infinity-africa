@@ -32,6 +32,7 @@ from app.services.sms_messages import (
     enqueue_withdrawal_complete_sms,
     withdrawals_are_free,
 )
+from app.services.sms_provider import SmsResult
 from app.services.sms_text import (
     message_cost,
     render_welcome,
@@ -158,6 +159,94 @@ def test_the_worker_never_claims_a_cancelled_message(fake_client, monkeypatch):
     dispatch_pending_sms(fake_client)
 
     assert calls == [], "a cancelled message must never be offered to the provider"
+
+
+def test_the_worker_actually_sends_every_purpose_it_is_given(fake_client, monkeypatch):
+    """The gap that let a real payout confirmation sit queued.
+
+    The enqueue side was changed to welcome/withdrawal_complete and the
+    worker's purpose list was left naming the retired collection_alert,
+    so both new kinds were written correctly and then never claimed by
+    anyone. Every enqueue test passed throughout - they only ever checked
+    that a row appeared.
+
+    This asserts the two halves agree, for each purpose in turn.
+    """
+    from app.services.sms_dispatch import DISPATCHED_PURPOSES, dispatch_pending_sms
+
+    sent: list[str] = []
+    monkeypatch.setattr(
+        "app.services.sms_dispatch.send_sms",
+        lambda **kw: sent.append(kw["message"]) or SmsResult(outcome="sent", status_code=200),
+    )
+
+    for purpose in DISPATCHED_PURPOSES:
+        merchant = create_merchant(fake_client, contact_phone="255713000009")
+        fake_client.seed(
+            "sms_messages",
+            {
+                "merchant_id": merchant["id"],
+                "purpose": purpose,
+                "recipient_phone": "255713000009",
+                "sender_id": "INFINITYPAY",
+                "body": f"body for {purpose}",
+                "status": "queued",
+                "idempotency_key": f"ipay-x-{uuid.uuid4().hex}",
+            },
+        )
+
+    dispatch_pending_sms(fake_client)
+
+    for purpose in DISPATCHED_PURPOSES:
+        assert f"body for {purpose}" in sent, f"{purpose} was queued and never dispatched"
+
+
+def test_the_worker_dispatches_a_real_welcome_end_to_end(fake_client, monkeypatch):
+    """Enqueue and dispatch together, through the real functions rather
+    than a seeded row."""
+    from app.services.sms_dispatch import dispatch_pending_sms
+
+    sent: list[str] = []
+    monkeypatch.setattr(
+        "app.services.sms_dispatch.send_sms",
+        lambda **kw: sent.append(kw["message"]) or SmsResult(outcome="sent", status_code=200),
+    )
+    merchant = _merchant(fake_client)
+
+    enqueue_welcome_sms(fake_client, merchant_id=uuid.UUID(merchant["id"]))
+    dispatch_pending_sms(fake_client)
+
+    assert len(sent) == 1
+    assert "Karibu InfinityPay!" in sent[0]
+    assert _rows(fake_client, "welcome")[0]["status"] == "sent"
+
+
+def test_the_worker_dispatches_a_real_payout_confirmation_end_to_end(fake_client, monkeypatch):
+    from app.services.sms_dispatch import dispatch_pending_sms
+
+    sent: list[str] = []
+    monkeypatch.setattr(
+        "app.services.sms_dispatch.send_sms",
+        lambda **kw: sent.append(kw["message"]) or SmsResult(outcome="sent", status_code=200),
+    )
+    merchant = _merchant(fake_client)
+    disbursement, transaction, _c = _payout(fake_client, merchant)
+
+    enqueue_withdrawal_complete_sms(
+        fake_client, disbursement=disbursement, transaction=transaction
+    )
+    dispatch_pending_sms(fake_client)
+
+    assert len(sent) == 1
+    assert "Umepokea TZS" in sent[0]
+    assert _rows(fake_client, "withdrawal_complete")[0]["status"] == "sent"
+
+
+def test_a_retired_purpose_is_not_dispatched(fake_client, monkeypatch):
+    """collection_alert rows that somehow survive must not be sent."""
+    from app.services.sms_dispatch import DISPATCHED_PURPOSES
+
+    assert "collection_alert" not in DISPATCHED_PURPOSES
 
 
 # --- welcome -----------------------------------------------------------
