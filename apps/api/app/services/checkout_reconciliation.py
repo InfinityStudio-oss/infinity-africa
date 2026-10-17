@@ -30,10 +30,12 @@ leave money movement pending, never to guess.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from supabase import Client
 
+from app.config import get_settings
 from app.core.errors import ConflictError, NotFoundError
 from app.schemas.enums import NotificationType
 from app.services.audit import write_audit_log
@@ -43,6 +45,7 @@ from app.services.notifications_service import notify_merchant
 from app.services.provider_references import (
     update_collection_tolerating_repeated_reference,
 )
+from app.services.reconciliation_schedule import next_check_at
 from app.services.selcom.schemas import CollectionResult, ProviderStatus
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
@@ -395,6 +398,22 @@ async def resolve_checkout_collection_from_webhook_hint(
     return await _query_and_complete_checkout_collection(client, collection=collection, order_id=order_id)
 
 
+def _schedule_next_check(client: Client, row: dict, now: datetime) -> None:
+    """Book when this collection may be asked about again.
+
+    Best-effort: a scheduling write that fails must never abort a sweep
+    or a completion. The worst case is that the row stays due and is
+    asked about again next tick, which is exactly what happened before
+    this column existed.
+    """
+    try:
+        client.table("collections").update(
+            {"next_check_at": next_check_at(row.get("created_at") or now, now=now)}
+        ).eq("id", row["id"]).execute()
+    except Exception:  # noqa: BLE001, S110 — scheduling, never correctness
+        pass
+
+
 async def reconcile_pending_checkout_collections(client: Client) -> dict:
     """Backend-initiated, webhook-independent reconciliation sweep —
     called on a timer from app/main.py's lifespan startup task (see
@@ -416,7 +435,32 @@ async def reconcile_pending_checkout_collections(client: Client) -> dict:
     guard means only the first call to actually observe "successful" ever
     credits anything; every other concurrent/later call for the same
     collection just re-confirms the same already-settled outcome."""
-    rows = (client.table("collections").select("id, checkout_order_id, status").eq("status", "processing").execute()).data or []
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+
+    # Only the payments actually due. Until 2026-10-17 this selected every
+    # `processing` row and asked Selcom about all of them on every tick,
+    # which tied provider load to the sweep interval: halving the interval
+    # doubled the questions asked about every pending payment, including
+    # the 42% that never resolve and simply wait out
+    # collection_push_expiry_minutes.
+    #
+    # next_check_at separates the two. See
+    # app/services/reconciliation_schedule.py for the measured numbers
+    # behind the tiers.
+    #
+    # Bounded, ordered oldest-due-first: a backlog drains in order rather
+    # than letting whatever the database happened to return go first, and
+    # one sweep can never make an unbounded number of provider calls.
+    rows = (
+        client.table("collections")
+        .select("id, checkout_order_id, status, created_at")
+        .eq("status", "processing")
+        .lte("next_check_at", now.isoformat())
+        .order("next_check_at")
+        .limit(settings.selcom_reconcile_batch_size)
+        .execute()
+    ).data or []
     pending_with_order = [row for row in rows if row.get("checkout_order_id")]
     # Logged every sweep, even 0/0 — the point is being able to tell from
     # Railway logs alone whether the sweep ran and what it found, without
@@ -435,6 +479,11 @@ async def reconcile_pending_checkout_collections(client: Client) -> dict:
     still_pending = 0
     for row in pending_with_order:
         collection_id = uuid.UUID(row["id"])
+        # Booked before the call, not after. A sweep that dies mid-call -
+        # or a provider that hangs until the lease expires - must not
+        # leave this row due again immediately and spend the next sweep's
+        # budget on the same question.
+        _schedule_next_check(client, row, now)
         try:
             outcome = await refresh_checkout_collection_status(client, collection_id=collection_id)
         except (NotFoundError, ConflictError) as exc:

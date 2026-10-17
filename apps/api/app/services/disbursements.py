@@ -76,6 +76,7 @@ from app.services.ledger import (
     reverse_disbursement_entries,
 )
 from app.services.notifications_service import notify_merchant
+from app.services.reconciliation_schedule import next_check_at
 from app.services.selcom_business.client import get_selcom_business_client
 from app.services.sms_messages import enqueue_withdrawal_complete_sms
 from app.services.webhooks import enqueue_webhook_event
@@ -1323,8 +1324,15 @@ async def reconcile_pending_disbursements(client: Client) -> dict:
     isn't just a bare loop."""
     rows = (
         client.table("disbursements")
-        .select("id, status")
+        .select("id, status, created_at")
         .in_("status", ["PROCESSING", "NEEDS_RECONCILIATION"])
+        # Due-only and bounded, the same shape as the collection sweep.
+        # This sweep has far less to do - zero rows in a reconcilable
+        # state at the time of writing - but an unbounded query on a
+        # ten second timer is a habit worth not having.
+        .lte("next_check_at", datetime.now(timezone.utc).isoformat())
+        .order("next_check_at")
+        .limit(get_settings().selcom_reconcile_batch_size)
         .execute()
     ).data or []
     logger.info("disbursement_reconciliation_sweep_starting pending_total=%s", len(rows))
@@ -1333,6 +1341,19 @@ async def reconcile_pending_disbursements(client: Client) -> dict:
     still_pending = 0
     for row in rows:
         disbursement_id = uuid.UUID(row["id"])
+        # Booked before the call. A sweep that dies mid-call must not
+        # leave this payout due again immediately.
+        #
+        # Scheduling only: when we next *ask* about a payout. It is never
+        # a reason to resubmit one, to release a reservation, or to treat
+        # an unanswered question as an answer. A payout that stays
+        # unresolved stays unresolved.
+        try:
+            client.table("disbursements").update(
+                {"next_check_at": next_check_at(row.get("created_at") or utc_now_iso())}
+            ).eq("id", row["id"]).execute()
+        except Exception:  # noqa: BLE001, S110 — scheduling, never correctness
+            pass
         try:
             outcome = await refresh_disbursement_status(client, disbursement_id=disbursement_id)
         except (NotFoundError, ConflictError) as exc:

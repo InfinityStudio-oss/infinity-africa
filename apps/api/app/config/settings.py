@@ -444,6 +444,23 @@ class Settings(BaseSettings):
     # Railway to actually enable it.
     selcom_disbursement_reconcile_interval_seconds: int = 0
 
+    # How many payments one reconciliation sweep may ask the provider
+    # about. The sweeps were unbounded until 2026-10-17: they selected
+    # every pending row and called Selcom for each, so the sweep interval
+    # and the provider load were the same dial.
+    #
+    # Sized against the measured peak of 78 simultaneously pending
+    # collections. A batch of 40 drains that in two ticks at a ten second
+    # interval while capping any single sweep's provider calls, so a
+    # backlog cannot turn one tick into hundreds of requests.
+    #
+    # Shared by both sweeps. Collections and disbursements each get their
+    # own batch rather than a pooled one, so a collection backlog can
+    # never starve payout reconciliation - the two have very different
+    # urgencies and a stuck payout is the more expensive to leave.
+    selcom_reconcile_batch_size: int = 40
+
+
     # Outbound merchant webhook delivery sweep — see
     # app/services/webhook_delivery.py and app/main.py's lifespan task.
     # enqueue_webhook_event has always written webhook_events rows;

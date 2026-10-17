@@ -374,6 +374,14 @@ class _FakeTable:
                     "duplicate key value violates unique constraint "
                     "sms_provider_events_event_id_key"
                 )
+        if self.name in ("collections", "disbursements"):
+            # `not null default now()` in
+            # 20261017160000_reconciliation_next_check.sql. Without this
+            # every seeded row would be missing the column the sweeps
+            # filter on, and the due-only queries would silently match
+            # nothing - which reads exactly like "the sweep found no
+            # work" rather than like a broken test.
+            row.setdefault("next_check_at", now)
         if self.name == "invoice_items":
             # Mirrors invoice_items.line_total, a Postgres
             # `generated always as (quantity * unit_price) stored` column —
