@@ -38,6 +38,7 @@ skipping this would crash the first time that resolution actually
 happens, not at push time.
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -62,9 +63,13 @@ from app.services.provider_references import (
     insert_collection_tolerating_repeated_reference,
 )
 from app.services.selcom_checkout.client import (
+    SelcomCheckoutError,
     SelcomCheckoutHTTPClient,
     get_selcom_checkout_credentials,
 )
+from app.services.selcom_checkout.schemas import WalletPaymentResult
+
+logger = logging.getLogger("infinity.collections")
 
 # collections.method must be one of USSD_PUSH/STK_PUSH/SELCOM_PESA_PUSH/
 # DYNAMIC_QR (DB CHECK constraint) — Selcom's wallet-payment call itself
@@ -76,6 +81,40 @@ from app.services.selcom_checkout.client import (
 # not a claim that Selcom always uses STK specifically — worth revisiting
 # if collections.method ever needs a genuinely channel-agnostic value.
 _WALLET_PUSH_METHOD_LABEL = "STK_PUSH"
+
+
+def _unanswered_push(transid: str, exc: Exception) -> WalletPaymentResult:
+    """What to record when Selcom never answered the push.
+
+    From production, 2026-10-19: Selcom slowed down and 30 payment starts
+    across seven merchants timed out after ~33 seconds. The order had
+    already been created, the push call then raised, the exception
+    escaped the request, and the collection row - written only *after*
+    the push returned - was never created at all. The partner got a 502
+    and we were left holding a Selcom order that nothing tracked, because
+    reconciliation sweeps collections, not orders.
+
+    Nobody lost money that day: all 37 orphaned orders were still
+    `created`. But that is luck rather than design. The push is the call
+    that sends the prompt, so a timeout on it means we genuinely do not
+    know whether the customer was asked to pay - and an order nothing
+    tracks is an order nothing will ever ask Selcom about.
+
+    "ambiguous" is exactly the right answer to "did this happen?", and
+    this codebase already knows what to do with it: the collection is
+    written as `processing`, linked to the order, and reconciliation asks
+    Selcom until there is a real answer. The same machinery that already
+    handles a push Selcom accepted but has not yet confirmed.
+    """
+    logger.warning("wallet_push_unanswered transid=%s error=%s", transid, type(exc).__name__)
+    return WalletPaymentResult(
+        reference="",
+        resultcode="",
+        result="",
+        message="No response from Selcom; awaiting reconciliation.",
+        status="ambiguous",
+        raw_response={"error": type(exc).__name__},
+    )
 
 
 async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: dict, buyer_phone: str) -> dict:
@@ -158,9 +197,15 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
 
     transid = generate_reference("TXN")
     checkout_client = SelcomCheckoutHTTPClient(credentials=get_selcom_checkout_credentials())
-    result = await checkout_client.process_wallet_payment(
-        transid=transid, order_id=order["order_id"], msisdn=buyer_phone
-    )
+    try:
+        result = await checkout_client.process_wallet_payment(
+            transid=transid, order_id=order["order_id"], msisdn=buyer_phone
+        )
+    except SelcomCheckoutError as exc:
+        # Never let this escape. The order exists on Selcom's side by
+        # now, so an exception here loses the only row that would have
+        # made it findable again. See _unanswered_push.
+        result = _unanswered_push(transid, exc)
 
     # "successful"/"ambiguous" both stay "processing" here deliberately
     # — see module docstring. Only Selcom's own clearly-failed codes move
@@ -306,9 +351,15 @@ async def execute_wallet_push_collection(
 
     transid = generate_reference("TXN")
     checkout_client = SelcomCheckoutHTTPClient(credentials=get_selcom_checkout_credentials())
-    result = await checkout_client.process_wallet_payment(
-        transid=transid, order_id=order["order_id"], msisdn=customer_phone
-    )
+    try:
+        result = await checkout_client.process_wallet_payment(
+            transid=transid, order_id=order["order_id"], msisdn=customer_phone
+        )
+    except SelcomCheckoutError as exc:
+        # Never let this escape. The order exists on Selcom's side by
+        # now, so an exception here loses the only row that would have
+        # made it findable again. See _unanswered_push.
+        result = _unanswered_push(transid, exc)
 
     collection_status = "failed" if result.status == "failed" else "processing"
 

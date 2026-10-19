@@ -17,6 +17,7 @@ the webhook or a manual status refresh
 (app/services/checkout_reconciliation.py, app/routers/webhooks.py).
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -42,12 +43,39 @@ from app.services.provider_references import (
     insert_collection_tolerating_repeated_reference,
 )
 from app.services.selcom_checkout.client import (
+    SelcomCheckoutError,
     SelcomCheckoutHTTPClient,
     get_selcom_checkout_credentials,
 )
+from app.services.selcom_checkout.schemas import SelcomPesaPaymentResult
+
+logger = logging.getLogger("infinity.collections")
 
 _METHOD_LABEL = "SELCOM_PESA_PUSH"
 _PLACEHOLDER_BUYER_EMAIL_DOMAIN = "customers.infinitypay.me"
+
+
+def _unanswered_push(transid: str, exc: Exception) -> SelcomPesaPaymentResult:
+    """What to record when Selcom never answered the push.
+
+    Same gap, same fix, as wallet_push._unanswered_push - see that
+    docstring for the 2026-10-19 production incident behind it. The order
+    exists on Selcom's side by the time this call is made, so letting the
+    exception escape loses the only row that would have made it findable
+    again: reconciliation sweeps collections, not orders.
+
+    "ambiguous" keeps the collection `processing` and linked to the
+    order, so reconciliation asks Selcom until there is a real answer.
+    """
+    logger.warning("selcompesa_push_unanswered transid=%s error=%s", transid, type(exc).__name__)
+    return SelcomPesaPaymentResult(
+        reference="",
+        resultcode="",
+        result="",
+        message="No response from Selcom; awaiting reconciliation.",
+        status="ambiguous",
+        raw_response={"error": type(exc).__name__},
+    )
 
 
 async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_link: dict, buyer_phone: str) -> dict:
@@ -126,7 +154,13 @@ async def execute_selcompesa_push_for_payment_link(client: Client, *, payment_li
 
     transid = generate_reference("TXN")
     checkout_client = SelcomCheckoutHTTPClient(credentials=get_selcom_checkout_credentials())
-    result = await checkout_client.selcompesa_payment(transid=transid, order_id=order["order_id"], msisdn=buyer_phone)
+    try:
+        result = await checkout_client.selcompesa_payment(
+            transid=transid, order_id=order["order_id"], msisdn=buyer_phone
+        )
+    except SelcomCheckoutError as exc:
+        # Never let this escape - see _unanswered_push.
+        result = _unanswered_push(transid, exc)
 
     # Same convention as wallet_push.py: "successful"/"ambiguous" both
     # stay "processing" deliberately — only Selcom's own clearly-failed
@@ -251,7 +285,13 @@ async def execute_selcompesa_push_collection(
 
     transid = generate_reference("TXN")
     checkout_client = SelcomCheckoutHTTPClient(credentials=get_selcom_checkout_credentials())
-    result = await checkout_client.selcompesa_payment(transid=transid, order_id=order["order_id"], msisdn=customer_phone)
+    try:
+        result = await checkout_client.selcompesa_payment(
+            transid=transid, order_id=order["order_id"], msisdn=customer_phone
+        )
+    except SelcomCheckoutError as exc:
+        # Never let this escape - see _unanswered_push.
+        result = _unanswered_push(transid, exc)
 
     collection_status = "failed" if result.status == "failed" else "processing"
 
