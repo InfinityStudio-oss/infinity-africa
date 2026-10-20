@@ -26,6 +26,24 @@ from app.services.webhooks import enqueue_webhook_event
 _ALLOWED_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png"}
 _BUCKET = "dispute-evidence"
 
+# Bounds on an upload path that anyone on the internet can reach.
+#
+# /v1/public/disputes/report takes no authentication - a customer
+# reporting a problem has no account - and read the whole of every
+# attached file into memory with no limit at all. The dispute-evidence
+# bucket also carries no file_size_limit of its own, so nothing anywhere
+# bounded this. Five requests a minute, each with any number of files of
+# any size, is enough to exhaust the container's memory or run up storage
+# cost, without a login.
+#
+# Same ceiling as onboarding's _MAX_DOCUMENT_BYTES, and for the same
+# reason: generous for a photographed receipt or a scanned statement,
+# small enough that a flood cannot take the box down. Kept identical so a
+# customer is not refused here for a file size that would be accepted
+# elsewhere.
+_MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
+_MAX_EVIDENCE_FILES = 5
+
 
 def _extension_for(file: UploadFile) -> str:
     if file.filename and "." in file.filename:
@@ -34,11 +52,23 @@ def _extension_for(file: UploadFile) -> str:
 
 
 async def _upload_evidence(client: Client, *, dispute_id: uuid.UUID, files: list[UploadFile]) -> list[dict]:
+    if len(files) > _MAX_EVIDENCE_FILES:
+        raise ValidationAPIError(
+            f"Attach at most {_MAX_EVIDENCE_FILES} evidence files"
+        )
+
     uploaded = []
     for file in files:
         if file.content_type not in _ALLOWED_MIME_TYPES:
             raise ValidationAPIError("Evidence files must be PDF, JPG, or PNG")
-        content = await file.read()
+        # Bounded read: one byte past the limit is enough to know it is too
+        # large, without pulling the whole thing into memory first.
+        content = await file.read(_MAX_EVIDENCE_BYTES + 1)
+        if len(content) > _MAX_EVIDENCE_BYTES:
+            raise ValidationAPIError(
+                f"Each evidence file must be smaller than "
+                f"{_MAX_EVIDENCE_BYTES // (1024 * 1024)} MB"
+            )
         if not content:
             continue
         path = f"{dispute_id}/{uuid.uuid4().hex}{_extension_for(file)}"

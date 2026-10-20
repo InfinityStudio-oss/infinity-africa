@@ -18,6 +18,11 @@ from app.services.crud import get_by_id, insert_row, update_row
 from app.services.notifications_service import notify_admin, notify_merchant
 
 _ALLOWED_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+
+# Same ceiling as onboarding's _MAX_DOCUMENT_BYTES: a merchant uploading a
+# requested document here should not meet a different limit from the one
+# they met during onboarding.
+_MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 _BUCKET = "document-requests"
 
 
@@ -108,7 +113,15 @@ async def register_document_request_file(
     if file.content_type not in _ALLOWED_MIME_TYPES:
         raise ValidationAPIError(f"{document_label} must be a PDF, JPG, or PNG file")
 
-    content = await file.read()
+    # Bounded read: one byte past the limit is enough to know it is too
+    # large, without pulling the whole thing into memory first. This path is
+    # authenticated, unlike the public dispute form, but the bucket carries
+    # no file_size_limit of its own so nothing else bounds it.
+    content = await file.read(_MAX_DOCUMENT_BYTES + 1)
+    if len(content) > _MAX_DOCUMENT_BYTES:
+        raise ValidationAPIError(
+            f"{document_label} must be smaller than {_MAX_DOCUMENT_BYTES // (1024 * 1024)} MB"
+        )
     if not content:
         raise ValidationAPIError(f"{document_label} file is empty")
 

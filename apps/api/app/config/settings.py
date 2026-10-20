@@ -13,6 +13,29 @@ logger = logging.getLogger("infinity.config")
 _TRUE_WORDS = frozenset({"1", "true", "t", "yes", "y", "on", "enable", "enabled"})
 _FALSE_WORDS = frozenset({"0", "false", "f", "no", "n", "off", "disable", "disabled", ""})
 
+# Boolean settings where an unreadable value must NOT degrade to the field's
+# own default, because that default is the *insecure* state.
+#
+# The tolerant boolean parsing below exists so a mistyped feature flag cannot
+# take the platform down - it falls back to the field default, which is the
+# state a fresh deploy already runs in. That reasoning is right for a feature
+# flag and wrong for a security control: for REQUIRE_SUPER_ADMIN_MFA the
+# default is False, so `REQUIRE_SUPER_ADMIN_MFA=ture` would have quietly
+# turned off the second factor on withdrawal approval and logged one ERROR
+# line nobody was watching for.
+#
+# For these fields an unreadable value resolves to whichever value fails
+# CLOSED. Explicit values are still honoured exactly as before, in every
+# environment - only garbage behaves differently.
+#
+# Failing closed here is safe to do: MFA enrolment and verification happen in
+# the browser against Supabase directly, not through this API, so an admin
+# caught by this can still enrol and get back in. It delays withdrawal
+# approval; it does not lock anybody out permanently.
+_SECURITY_CRITICAL_BOOLEANS: dict[str, bool] = {
+    "require_super_admin_mfa": True,
+}
+
 
 class Settings(BaseSettings):
     """Application configuration, loaded from environment variables / .env."""
@@ -883,10 +906,25 @@ class Settings(BaseSettings):
             return value
 
         text = str(value).strip().lower()
+        secure_value = _SECURITY_CRITICAL_BOOLEANS.get(info.field_name or "")
+
         if text in _TRUE_WORDS:
             return True
-        if text in _FALSE_WORDS:
+        # An empty string counts as a deliberate "false" for a feature flag,
+        # but for a security control it is indistinguishable from someone
+        # blanking the variable by accident, so it is not accepted as an
+        # explicit opt-out there.
+        if text in _FALSE_WORDS and not (secure_value is not None and text == ""):
             return False
+
+        if secure_value is not None:
+            logger.critical(
+                "settings_security_bool_unparsable field=%s value=%r failing_closed_to=%s",
+                info.field_name,
+                str(value)[:40],
+                secure_value,
+            )
+            return secure_value
 
         default = field.default
         logger.error(
@@ -896,6 +934,61 @@ class Settings(BaseSettings):
             default,
         )
         return default
+
+    @model_validator(mode="after")
+    def _security_controls_default_closed_in_production(self) -> "Settings":
+        """In production, a missing security flag means "on", not "off".
+
+        The field defaults are chosen for a fresh deploy, where turning MFA
+        on before anybody has enrolled would stop withdrawal approval. That
+        is the right default for an unconfigured project and the wrong one
+        for the live platform, where the variable being absent is far more
+        likely to be an oversight - or a variable deleted during unrelated
+        configuration work - than a considered decision to run without a
+        second factor on the accounts that approve payouts.
+
+        `model_fields_set` is what makes this precise: it holds the fields an
+        environment variable or .env entry actually supplied, so an explicit
+        `REQUIRE_SUPER_ADMIN_MFA=false` is distinguishable from the variable
+        not being there at all. An explicit false is honoured, loudly. Only
+        absence changes meaning, and only in production.
+
+        **Startup impact.** This cannot stop the API booting - it only
+        changes one boolean - but on the first production deploy after this
+        ships, if REQUIRE_SUPER_ADMIN_MFA is not set, MFA becomes enforced on
+        every /v1/admin route. Admins without a second factor would be unable
+        to approve withdrawals until they enrol, which they can do in the
+        browser without this API. **Set the variable explicitly in Railway
+        before deploying this code** - `true` once admins are enrolled, or
+        `false` to defer the change deliberately.
+
+        Deliberately not a refusal to start. The 2026-10-16 outage was a
+        settings error at module import taking the whole API down, and a
+        security control that can cause that is a worse bargain than the
+        thing it protects against.
+        """
+        if self.environment != "production":
+            return self
+
+        for name, secure_value in _SECURITY_CRITICAL_BOOLEANS.items():
+            if name in self.model_fields_set:
+                if getattr(self, name) != secure_value:
+                    logger.warning(
+                        "settings_security_control_explicitly_relaxed field=%s value=%s "
+                        "environment=production",
+                        name,
+                        getattr(self, name),
+                    )
+                continue
+            logger.critical(
+                "settings_security_control_defaulted_closed field=%s value=%s "
+                "reason=not_set_in_production",
+                name,
+                secure_value,
+            )
+            object.__setattr__(self, name, secure_value)
+
+        return self
 
     @model_validator(mode="after")
     def _reject_wildcard_cors_outside_development(self) -> "Settings":

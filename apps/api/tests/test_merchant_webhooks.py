@@ -138,7 +138,11 @@ def test_send_test_webhook_reports_unreachable_endpoint(fake_client, monkeypatch
     client.patch(
         "/v1/merchant/webhook-config",
         headers=auth_headers(user_id),
-        json={"webhook_url": "https://example.com/hooks/infinity"},
+        # regenerate_secret because a new endpoint is no longer allowed to
+        # be created unsigned (see test_webhook_signing_requirement.py).
+        # This test is about reporting an unreachable endpoint, so it just
+        # needs a valid endpoint to exist.
+        json={"webhook_url": "https://example.com/hooks/infinity", "regenerate_secret": True},
     )
 
     def _fake_post(url, *, content, headers, timeout):

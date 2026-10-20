@@ -232,6 +232,14 @@ SECURITY_TESTS = [
     "tests/test_selcom_checkout_webhook.py", "tests/test_selcom_signature.py",
     "tests/test_super_admin_mfa.py", "tests/test_webhook_delivery.py",
     "tests/test_webhooks.py", "tests/test_merchant_webhooks.py",
+    # Added 2026-10-20 with the controls they cover.
+    "tests/test_security_control_defaults.py",
+    "tests/test_webhook_signing_requirement.py",
+    "tests/test_webhook_receiver_reference.py",
+    "tests/test_upload_size_limits.py",
+    "tests/test_security_daily_check.py",
+    "tests/test_tenant_isolation_route_guards.py",
+    "tests/test_admin_route_guards.py",
 ]
 
 

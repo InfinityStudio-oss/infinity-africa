@@ -94,6 +94,15 @@ def update_webhook_config(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_DEVELOPER))],
 ):
     client = get_supabase_admin()
+
+    # Read the prior state before writing: whether this merchant already has
+    # an endpoint is what separates "setting one up for the first time" from
+    # "adjusting one a receiver is already live against", and those two cases
+    # get deliberately different treatment below.
+    existing = get_by_id(client, "merchants", membership.merchant_id)
+    had_endpoint = bool(existing.get("webhook_url")) if existing else False
+    had_secret = bool(existing.get("webhook_secret_encrypted")) if existing else False
+
     update_data: dict = {}
     if payload.webhook_url is not None:
         # The server fetches this URL on every event, so a merchant
@@ -110,9 +119,26 @@ def update_webhook_config(
         new_secret = uuid.uuid4().hex + uuid.uuid4().hex  # 64 hex chars, shown once, never stored raw
         update_data["webhook_secret_encrypted"] = encrypt_secret(new_secret)
 
-    merchant = update_row(client, "merchants", membership.merchant_id, update_data) if update_data else get_by_id(
-        client, "merchants", membership.merchant_id
-    )
+    # A webhook endpoint created from here on must be signed from its first
+    # delivery. Without a secret the delivery carries no X-Infinity-Signature
+    # at all, so the receiver cannot tell our event from any other POST to
+    # the same URL - and for a receiver that activates service on a payment
+    # event, that is the whole security of the integration.
+    #
+    # Scoped to *new* endpoints on purpose. Merchants already live without a
+    # secret keep working: they are mid-migration, their receivers are
+    # running, and refusing their next save - to add an event, or correct a
+    # URL - would break a working integration to improve a different one.
+    # They are warned in the portal instead, and can add a secret whenever
+    # they are ready without losing their endpoint or subscribed events.
+    if update_data.get("webhook_url") and not had_endpoint and not had_secret and not new_secret:
+        raise ValidationAPIError(
+            "Generate a signing secret before saving a webhook URL. Without one we cannot "
+            "sign deliveries, and your server has no way to verify an event came from "
+            "InfinityPay."
+        )
+
+    merchant = update_row(client, "merchants", membership.merchant_id, update_data) if update_data else existing
 
     return APIResponse(
         data=WebhookConfigUpdateResponse(
@@ -145,6 +171,15 @@ def send_test_webhook(
     headers = {
         "Content-Type": "application/json",
         "X-Infinity-Event": "webhook.test",
+        # X-Infinity-Delivery was missing here while every real delivery
+        # sends it (app/services/webhook_delivery.py). A receiver that
+        # deduplicates on it - which the integration guide tells them to do -
+        # would reject or mishandle the test while passing live traffic,
+        # which is exactly the mismatch the comment below promises not to
+        # create. A fresh id per test: each one is a genuinely new delivery,
+        # so a receiver that has already seen the previous test does not
+        # discard this one as a duplicate.
+        "X-Infinity-Delivery": str(uuid.uuid4()),
         "X-Infinity-Timestamp": str(int(time.time())),
     }
     if webhook_secret:

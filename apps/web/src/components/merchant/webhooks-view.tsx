@@ -69,11 +69,29 @@ export function WebhooksView() {
     setSaving(true);
     setError(null);
     try {
+      // Setting up an endpoint for the first time: generate the signing
+      // secret in the same request and reveal it, because the server now
+      // refuses to save a brand-new webhook URL that would be delivered
+      // unsigned. Doing it here rather than making the merchant press two
+      // buttons in the right order is the difference between a requirement
+      // and an obstacle.
+      //
+      // Deliberately only for a genuinely new endpoint. A merchant already
+      // live without a secret keeps their existing behaviour when they save
+      // - generating one here would start signing deliveries their receiver
+      // has not been told about, and coordinating that is their call, not a
+      // side effect of editing their subscribed events.
+      const firstTimeSetup = !config?.webhook_url && !config?.has_secret;
+
       const updated = await updateWebhookConfig({
         webhook_url: webhookUrl,
         subscribed_events: allEvents ? [] : selectedEvents,
+        ...(firstTimeSetup ? { regenerate_secret: true } : {}),
       });
       setConfig(updated);
+      if (firstTimeSetup && updated.secret) {
+        setRevealedSecret(updated.secret);
+      }
     } catch (err) {
       setError(messageFor(err, "Couldn't save your webhook settings. Try again."));
     } finally {

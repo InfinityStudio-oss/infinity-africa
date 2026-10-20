@@ -239,3 +239,117 @@ describe("WebhooksView - warning about unsigned deliveries", () => {
     expect(screen.queryByText("These deliveries are unsigned")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The server now refuses to save a brand-new webhook URL that would be
+ * delivered unsigned, so first-time setup generates the signing secret in
+ * the same request and reveals it. Without that the requirement would be
+ * an obstacle: save, get rejected, hunt for a button, save again.
+ *
+ * The second half matters more than the first. A merchant already live
+ * without a secret must NOT have one generated as a side effect of editing
+ * their subscribed events - that would start signing deliveries their
+ * receiver has never been told about. Coordinating that is their decision.
+ */
+describe("WebhooksView - first-time setup generates a signing secret", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function savedConfig(overrides: Record<string, unknown> = {}) {
+    vi.mocked(updateWebhookConfig).mockResolvedValue({
+      webhook_url: "https://billing.example.net/hooks",
+      subscribed_events: null,
+      has_secret: true,
+      last_delivery: null,
+      secret: SECRET,
+      ...overrides,
+    });
+  }
+
+  it("asks for a secret when no endpoint exists yet", async () => {
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: null,
+      subscribed_events: null,
+      has_secret: false,
+      last_delivery: null,
+    });
+    savedConfig();
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    fireEvent.change(await screen.findByDisplayValue(""), {
+      target: { value: "https://billing.example.net/hooks" },
+    });
+    fireEvent.click(screen.getByText("Save Configuration"));
+
+    await waitFor(() =>
+      expect(updateWebhookConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ regenerate_secret: true }),
+      ),
+    );
+  });
+
+  it("reveals the secret once, so it can be copied", async () => {
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: null,
+      subscribed_events: null,
+      has_secret: false,
+      last_delivery: null,
+    });
+    savedConfig();
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    fireEvent.change(await screen.findByDisplayValue(""), {
+      target: { value: "https://billing.example.net/hooks" },
+    });
+    fireEvent.click(screen.getByText("Save Configuration"));
+
+    expect(await screen.findByText(SECRET)).toBeInTheDocument();
+  });
+
+  it("never generates one behind the back of an existing unsigned endpoint", async () => {
+    // The migration guarantee: editing events must not start signing
+    // deliveries the receiver has not been told about.
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: "https://billing.example.net/hooks",
+      subscribed_events: null,
+      has_secret: false,
+      last_delivery: null,
+    });
+    savedConfig({ has_secret: false, secret: null });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    fireEvent.click(await screen.findByText("Save Configuration"));
+
+    await waitFor(() => expect(updateWebhookConfig).toHaveBeenCalled());
+    expect(updateWebhookConfig).not.toHaveBeenCalledWith(
+      expect.objectContaining({ regenerate_secret: true }),
+    );
+  });
+
+  it("does not ask again once a secret already exists", async () => {
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: "https://billing.example.net/hooks",
+      subscribed_events: null,
+      has_secret: true,
+      last_delivery: null,
+    });
+    savedConfig({ secret: null });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    fireEvent.click(await screen.findByText("Save Configuration"));
+
+    await waitFor(() => expect(updateWebhookConfig).toHaveBeenCalled());
+    expect(updateWebhookConfig).not.toHaveBeenCalledWith(
+      expect.objectContaining({ regenerate_secret: true }),
+    );
+  });
+});

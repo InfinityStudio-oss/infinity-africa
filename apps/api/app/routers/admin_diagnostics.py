@@ -23,6 +23,7 @@ Everything here is deliberately inert and boring:
 
 import logging
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends
 
@@ -31,6 +32,7 @@ from app.config import get_settings
 from app.core.analytics import track
 from app.core.monitoring import capture_message
 from app.core.rate_limit import rate_limit
+from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
 from app.schemas.common import APIResponse
 
@@ -103,5 +105,70 @@ async def send_posthog_test_event(
             # Said explicitly because the queue is asynchronous by design —
             # an empty dashboard a second later is expected, not a failure.
             "message": "PostHog test event sent (queued; allow up to a minute to appear)",
+        }
+    )
+
+
+@router.get("/webhook-signing", response_model=APIResponse[dict])
+def webhook_signing_posture(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[None, Depends(_RATE_LIMIT)],
+):
+    """Which merchants have a webhook endpoint that is delivered unsigned.
+
+    A merchant can save a webhook URL without a signing secret. When there
+    is no secret, app/services/webhook_delivery.py omits
+    X-Infinity-Signature entirely, so the receiver cannot distinguish our
+    event from any other POST to the same URL. For a receiver that
+    activates service on a payment event, that is the whole security of
+    the integration, and it was invisible from the admin side - there was
+    no screen or endpoint anywhere that showed it.
+
+    New endpoints are now refused unless a secret is configured
+    (app/routers/merchant_webhooks.py). Merchants already live without one
+    keep working, so this is the list of who still needs contacting, and
+    it is the reason this endpoint exists: the migration needs a worklist,
+    not a warning.
+
+    Returns identities, never secrets. The signing secret is not selected
+    from the database at all here, encrypted or otherwise. Only the
+    endpoint's **host** is returned, not the full URL - a webhook path can
+    itself contain a token, and nothing here needs the path to be useful.
+    """
+    client = get_supabase_admin()
+
+    # Two narrow queries rather than one wide one, so the ciphertext column
+    # is never read into this process.
+    with_url = (
+        client.table("merchants").select("id, business_name, webhook_url").execute().data or []
+    )
+    unsigned_ids = {
+        str(row.get("id"))
+        for row in (
+            client.table("merchants")
+            .select("id")
+            .is_("webhook_secret_encrypted", "null")
+            .execute()
+            .data
+            or []
+        )
+    }
+
+    configured = [row for row in with_url if (row.get("webhook_url") or "").strip()]
+    unsigned = [row for row in configured if str(row.get("id")) in unsigned_ids]
+
+    return APIResponse(
+        data={
+            "endpoints_configured": len(configured),
+            "signed": len(configured) - len(unsigned),
+            "unsigned": len(unsigned),
+            "unsigned_merchants": [
+                {
+                    "merchant_id": str(row.get("id")),
+                    "business_name": row.get("business_name"),
+                    "webhook_host": urlparse(row.get("webhook_url") or "").hostname,
+                }
+                for row in unsigned
+            ],
         }
     )
