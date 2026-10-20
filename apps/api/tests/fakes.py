@@ -363,6 +363,33 @@ class _FakeTable:
             # next_attempt_at is `not null default now()` in the migration.
             row.setdefault("next_attempt_at", now)
             row.setdefault("attempts", 0)
+        if self.name == "audit_logs":
+            # audit_logs.actor_id is `references auth.users (id)`
+            # (20260814090015_audit_logs.sql). This fake enforces no foreign
+            # keys, which is precisely how a real bug survived twelve call
+            # sites and reached production on 2026-10-20:
+            #
+            #   APIError: insert or update on table "audit_logs" violates
+            #   foreign key constraint "audit_logs_actor_id_fkey"
+            #
+            # An API-key caller is not a Supabase Auth user - caller.actor_id
+            # is the api_keys row id - so every audited money path called
+            # with an API key raised *after* doing the work, turning a
+            # successful collection or disbursement into a 500.
+            #
+            # Enforcing the whole foreign key here would mean every test that
+            # invents a user uuid had to register an auth user first, which
+            # would be churn for no safety. This enforces the part that
+            # actually broke and that no legitimate caller needs: an actor
+            # that is not a user has no business in a column that means "the
+            # auth user who did this".
+            if row.get("actor_type") not in (None, "user") and row.get("actor_id") is not None:
+                raise Exception(  # noqa: TRY002
+                    "insert or update on table \"audit_logs\" violates foreign key "
+                    "constraint \"audit_logs_actor_id_fkey\" "
+                    f"(actor_type={row.get('actor_type')!r} is not a Supabase Auth user; "
+                    "pass actor_id=None and record the identity in metadata)"
+                )
         if self.name == "sms_provider_events":
             # event_id is unique in the migration, and that uniqueness is
             # the entire deduplication mechanism for provider callbacks -
