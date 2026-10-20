@@ -274,3 +274,64 @@ def test_the_migration_touches_no_table():
 
     for forbidden in ("alter table", "update ", "insert ", "delete ", "drop ", "create table"):
         assert forbidden not in sql, f"migration contains '{forbidden.strip()}'"
+
+
+# --- "the tests passed" must mean tests actually ran --------------------
+
+
+class _FakeProc:
+    def __init__(self, stdout: str, returncode: int = 0):
+        self.stdout = stdout
+        self.stderr = ""
+        self.returncode = returncode
+
+
+def test_a_suite_that_collected_almost_nothing_does_not_pass(check, monkeypatch):
+    """pytest exits 0 when it collects nothing matching, so a zero exit code
+    is not proof the tests ran. A suite that silently stopped running would
+    otherwise report success forever - and a green check is believed.
+
+    The first CI run of this workflow finished in 36 seconds. From outside,
+    a fast Linux runner and a step that had quietly stopped executing look
+    identical, and reading the log needs admin rights the person on call may
+    not have. So the check states the number and refuses an implausible one.
+    """
+    monkeypatch.setattr(
+        check.subprocess, "run", lambda *a, **k: _FakeProc("3 passed in 0.10s")
+    )
+
+    result = check.check_security_tests()
+
+    assert result.status == check.FAIL
+    assert "only 3 tests ran" in result.detail
+
+
+def test_a_full_suite_passes(check, monkeypatch):
+    monkeypatch.setattr(
+        check.subprocess, "run", lambda *a, **k: _FakeProc("987 passed in 42.00s")
+    )
+
+    assert check.check_security_tests().status == check.PASS
+
+
+def test_a_zero_exit_with_no_summary_line_does_not_pass(check, monkeypatch):
+    """No parsable summary means no evidence, and no evidence is not a pass."""
+    monkeypatch.setattr(check.subprocess, "run", lambda *a, **k: _FakeProc(""))
+
+    assert check.check_security_tests().status == check.FAIL
+
+
+def test_a_real_failure_is_still_reported_as_failure(check, monkeypatch):
+    monkeypatch.setattr(
+        check.subprocess,
+        "run",
+        lambda *a, **k: _FakeProc("1 failed, 900 passed in 42.00s", returncode=1),
+    )
+
+    assert check.check_security_tests().status == check.FAIL
+
+
+def test_the_floor_is_below_the_real_count_but_not_trivial(check):
+    """A floor set too low protects nothing; set above the real count it
+    fails every run and gets deleted."""
+    assert 100 <= check._MIN_SECURITY_TESTS <= 2000

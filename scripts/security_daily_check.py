@@ -222,6 +222,12 @@ def check_function_search_path() -> Result:
     return Result("function search_path", PASS, f"all {len(defs)} functions pin search_path")
 
 
+# The floor below which "the tests passed" is not credible. Set well under
+# the real count so adding or removing a test file never needs this edited,
+# but high enough that a suite which has stopped collecting cannot slip
+# through. Raise it if the real number ever drops near it.
+_MIN_SECURITY_TESTS = 400
+
 SECURITY_TESTS = [
     "tests/test_admin_api_keys.py", "tests/test_api_key_pairs.py", "tests/test_auth.py",
     "tests/test_auth_actions.py", "tests/test_collection_ownership.py",
@@ -255,7 +261,34 @@ def check_security_tests() -> Result:
     )
     tail = [l for l in proc.stdout.splitlines() if "passed" in l or "failed" in l]
     summary = tail[-1].strip() if tail else "no pytest summary line"
-    return Result("security tests", PASS if proc.returncode == 0 else FAIL, summary)
+
+    if proc.returncode != 0:
+        return Result("security tests", FAIL, summary)
+
+    # A zero exit code is not proof the tests ran. pytest exits 0 when it
+    # collects nothing matching, and a suite that silently stopped running
+    # reports success forever - which is worse than no suite, because a
+    # green check is believed.
+    #
+    # This is not hypothetical here: the first CI run of this workflow
+    # finished its whole job in 36 seconds, and from the outside there was
+    # no way to tell a fast Linux runner from a step that had quietly
+    # stopped executing anything. Reading the log needed admin rights that
+    # whoever is on call may not have. So the check states the number
+    # itself, and refuses to pass on a number that is too low to be real.
+    passed = 0
+    match = re.search(r"(\d+) passed", summary)
+    if match:
+        passed = int(match.group(1))
+    if passed < _MIN_SECURITY_TESTS:
+        return Result(
+            "security tests",
+            FAIL,
+            f"only {passed} tests ran (expected at least {_MIN_SECURITY_TESTS}) - "
+            f"the suite is not running what it should be. Summary: {summary}",
+        )
+
+    return Result("security tests", PASS, summary)
 
 
 def check_web_secret_scan() -> Result:
