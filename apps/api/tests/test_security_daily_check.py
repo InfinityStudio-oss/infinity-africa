@@ -308,7 +308,31 @@ def test_a_suite_that_collected_almost_nothing_does_not_pass(check, monkeypatch)
 
 def test_a_full_suite_passes(check, monkeypatch):
     monkeypatch.setattr(
-        check.subprocess, "run", lambda *a, **k: _FakeProc("987 passed in 42.00s")
+        check.subprocess,
+        "run",
+        lambda *a, **k: _FakeProc(f"{check._MIN_SECURITY_TESTS + 392} passed in 728.05s"),
+    )
+
+    assert check.check_security_tests().status == check.PASS
+
+
+def test_a_count_just_under_the_floor_does_not_pass(check, monkeypatch):
+    """The boundary, stated explicitly: a run that is close but short is
+    still a run that did not do what it claims."""
+    monkeypatch.setattr(
+        check.subprocess,
+        "run",
+        lambda *a, **k: _FakeProc(f"{check._MIN_SECURITY_TESTS - 1} passed in 9.00s"),
+    )
+
+    assert check.check_security_tests().status == check.FAIL
+
+
+def test_a_count_exactly_at_the_floor_passes(check, monkeypatch):
+    monkeypatch.setattr(
+        check.subprocess,
+        "run",
+        lambda *a, **k: _FakeProc(f"{check._MIN_SECURITY_TESTS} passed in 9.00s"),
     )
 
     assert check.check_security_tests().status == check.PASS

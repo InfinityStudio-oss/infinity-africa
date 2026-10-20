@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import os
 import re
 import subprocess
 import sys
@@ -222,11 +223,18 @@ def check_function_search_path() -> Result:
     return Result("function search_path", PASS, f"all {len(defs)} functions pin search_path")
 
 
-# The floor below which "the tests passed" is not credible. Set well under
-# the real count so adding or removing a test file never needs this edited,
-# but high enough that a suite which has stopped collecting cannot slip
-# through. Raise it if the real number ever drops near it.
-_MIN_SECURITY_TESTS = 400
+# The floor below which "the tests passed" is not credible.
+#
+# The real count is 1,892. A floor of 400 proved too generous to answer the
+# question that prompted it: the first two CI runs finished this step in ten
+# seconds against twelve minutes locally, and a floor that low would pass
+# whether the runner was fast or the step was running a fraction of the
+# suite. 1,500 sits close enough to the real number to tell those apart,
+# while leaving room for a test file to be retired without an edit here.
+#
+# If this starts failing, do not lower it before checking the count in the
+# run summary - the point of the number is that it stops being guesswork.
+_MIN_SECURITY_TESTS = 1500
 
 SECURITY_TESTS = [
     "tests/test_admin_api_keys.py", "tests/test_api_key_pairs.py", "tests/test_auth.py",
@@ -332,6 +340,26 @@ def main() -> int:
         for r in results:
             print(f"  {r.status:<8} {r.name:<24} {r.detail}")
         print("=" * 72)
+
+    # Publish the same table to the GitHub run summary, where it is visible
+    # on the run page to anyone who can see the repository.
+    #
+    # The job log needs admin rights to download, so "did the test step
+    # actually run 1,892 tests or 3?" was unanswerable by the person most
+    # likely to be asking. The first two runs of this workflow finished
+    # their test step in ten seconds against twelve minutes locally, and
+    # there was no way to tell a fast runner from a silent one. The count
+    # belongs somewhere it can simply be read.
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        try:
+            with open(summary_path, "a", encoding="utf-8") as handle:
+                handle.write(f"### InfinityPay security check — {stamp}\n\n")
+                handle.write("| Check | Status | Detail |\n|---|---|---|\n")
+                for r in results:
+                    handle.write(f"| {r.name} | {r.status} | {r.detail} |\n")
+        except OSError:  # pragma: no cover - never fail the run over a report
+            pass
 
     failed = [r for r in results if r.status == FAIL]
     skipped = [r for r in results if r.status == SKIP]
