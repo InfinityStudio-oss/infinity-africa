@@ -94,6 +94,29 @@ def _sql_files() -> list[Path]:
     return sorted(MIGRATIONS.glob("*.sql"))
 
 
+def _strip_sql_comments(sql: str) -> str:
+    """Commented-out SQL is not SQL.
+
+    This is not hypothetical tidiness. The first version of this script
+    counted 83 policies where the live database has 64, and reported 11
+    deny-all tables where there are 13, because it read `create policy`
+    inside comments as real policy. Every one of the 19 phantom policies
+    was a "planned shape" sketch left beside a table definition - see
+    20260822180000_checkout_orders.sql for the pattern - documenting the
+    policy that *would* be needed if that table were ever exposed to
+    direct client access.
+
+    A scanner that reads commented SQL as real SQL draws exactly the
+    wrong conclusion: it believes a backend-only table is reachable by
+    clients and that the schema has policies it does not have.
+
+    Same approach as apps/api/tests/test_database_security_invariants.py,
+    which got this right first.
+    """
+    sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    return "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
+
+
 def check_committed_secrets() -> Result:
     """Reuse the existing scanner rather than reimplementing it."""
     api = REPO / "apps" / "api"
@@ -136,7 +159,7 @@ def check_secret_name_drift() -> Result:
 def _schema_facts():
     created, rls_on, policies = set(), set(), collections.Counter()
     for f in _sql_files():
-        t = f.read_text(encoding="utf-8", errors="ignore")
+        t = _strip_sql_comments(f.read_text(encoding="utf-8", errors="ignore"))
         for m in re.finditer(r"create\s+table(?:\s+if\s+not\s+exists)?\s+(?:public\.)?\"?([a-z0-9_]+)\"?", t, re.I):
             created.add(m.group(1).lower())
         for m in re.finditer(r"alter\s+table\s+(?:public\.)?\"?([a-z0-9_]+)\"?[^;]*?enable\s+row\s+level\s+security", t, re.I | re.S):
@@ -177,7 +200,9 @@ def check_function_search_path() -> Result:
     defs: dict[str, str] = {}
     altered: set[str] = set()
     for f in _sql_files():
-        t = f.read_text(encoding="utf-8", errors="ignore")
+        # Stripped for the same reason as the RLS scan: a commented-out
+        # `set search_path` would otherwise read as a pinned one.
+        t = _strip_sql_comments(f.read_text(encoding="utf-8", errors="ignore"))
         for m in re.finditer(r"create\s+or\s+replace\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\(", t, re.I):
             start = m.start()
             end = t.find("$$", t.find("$$", start) + 2)

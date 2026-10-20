@@ -146,3 +146,96 @@ describe("WebhooksView — when the backend refuses", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("That URL is not reachable");
   });
 });
+
+/**
+ * A webhook URL with no signing secret is delivered unsigned: the server
+ * omits X-Infinity-Signature entirely, so the receiver cannot tell a real
+ * InfinityPay event from a forged POST to the same URL.
+ *
+ * A review on 2026-10-20 found this to be the common case rather than the
+ * exception, and nothing in the product mentioned it: a secret is only
+ * created when "Generate Secret" is pressed, and saving a URL never
+ * prompts for one.
+ *
+ * Exact figures deliberately left out of this public repository; they are
+ * in the private inspection report.
+ */
+describe("WebhooksView - warning about unsigned deliveries", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function configured({ has_secret }: { has_secret: boolean }) {
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: "https://webhook.site/c888be49-d274-477d-b33d-5a587278c4ec",
+      subscribed_events: null,
+      has_secret,
+      last_delivery: null,
+    });
+  }
+
+  it("warns when a URL is configured with no signing secret", async () => {
+    configured({ has_secret: false });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    expect(await screen.findByText("These deliveries are unsigned")).toBeInTheDocument();
+  });
+
+  it("names the missing header so a developer can act on it", async () => {
+    configured({ has_secret: false });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    await screen.findByText("These deliveries are unsigned");
+    expect(screen.getByText("X-Infinity-Signature")).toBeInTheDocument();
+  });
+
+  it("stays quiet once a secret exists", async () => {
+    configured({ has_secret: true });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    await screen.findByText("Regenerate Secret");
+    expect(screen.queryByText("These deliveries are unsigned")).not.toBeInTheDocument();
+  });
+
+  it("does not warn before a URL is configured at all", async () => {
+    // Nothing is being delivered yet, so there is nothing unsigned. A
+    // warning here would just be noise on an empty form.
+    vi.mocked(getWebhookConfig).mockResolvedValue({
+      webhook_url: null,
+      subscribed_events: null,
+      has_secret: false,
+      last_delivery: null,
+    });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    await screen.findByText("Generate Secret");
+    expect(screen.queryByText("These deliveries are unsigned")).not.toBeInTheDocument();
+  });
+
+  it("clears the warning as soon as the merchant generates one", async () => {
+    configured({ has_secret: false });
+    vi.mocked(updateWebhookConfig).mockResolvedValue({
+      webhook_url: "https://webhook.site/c888be49-d274-477d-b33d-5a587278c4ec",
+      subscribed_events: null,
+      has_secret: true,
+      last_delivery: null,
+      secret: SECRET,
+    });
+
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    fireEvent.click(await screen.findByText("Generate Secret"));
+
+    await screen.findByText(SECRET);
+    expect(screen.queryByText("These deliveries are unsigned")).not.toBeInTheDocument();
+  });
+});

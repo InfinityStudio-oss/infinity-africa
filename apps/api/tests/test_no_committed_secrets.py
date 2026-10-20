@@ -41,6 +41,24 @@ SECRET_PATTERNS: list[tuple[str, str]] = [
     ("Sentry DSN", r"https://[0-9a-f]{32}@[A-Za-z0-9.-]*\.ingest\.[A-Za-z0-9.-]*sentry\.io/\d+"),
     ("PostHog project key", r"\bphc_[A-Za-z0-9]{30,}"),
     ("PostHog personal API key", r"\bph[xps]_[A-Za-z0-9]{30,}"),
+    # Added 2026-10-20 after scripts/security_scanner_selftest.py showed
+    # these two categories had no pattern at all.
+    #
+    # A database password embedded in a connection URL is the highest-value
+    # single string in this project: DATABASE_URL and DIRECT_URL carry
+    # direct Postgres access, which bypasses RLS entirely and reads every
+    # merchant's ledger. The password is required to be 12+ characters so
+    # that the documented examples - `:password@localhost`,
+    # `:postgres@localhost` - do not match, since a scanner that fires on
+    # every README teaches people to ignore it.
+    (
+        "Postgres connection string with password",
+        r"postgres(?:ql)?://[^:@/\s]+:(?!password@|postgres@|your[-_])[^:@/\s]{12,}@",
+    ),
+    # A Google service-account JSON file is a complete credential: the
+    # marker is cheaper and more reliable to match than its embedded key,
+    # though the PEM pattern above would usually also fire on it.
+    ("Google service account key file", r'"type"\s*:\s*"service_account"'),
 ]
 
 # Anything containing one of these near the match is an illustration, not a
@@ -143,3 +161,89 @@ def test_no_authorization_header_value_is_committed():
                 hits.append(f"{path.relative_to(REPO_ROOT)}:{number}")
 
     assert not hits, f"committed Authorization header value at: {hits[:10]}"
+
+
+# Added 2026-10-20. The inspection found .gitignore covered *.dump and
+# db-dump*.sql but not `dump.sql` or `backup.sql`, tracked no .csv rule at
+# all despite support work producing merchant and customer lists with phone
+# numbers, and had nothing to stop a private security report being
+# committed. The repository is publicly readable, so each of those is a
+# disclosure waiting for one careless `git add -A`.
+#
+# These assert the rules exist, which is not the same as asserting nothing
+# leaked: adding a path to .gitignore does nothing about a file already
+# tracked, or already in history, or already pushed. That is what
+# test_no_env_file_is_tracked and the history sweep are for.
+_MUST_BE_IGNORED = [
+    ("database dump", "dump.sql"),
+    ("database dump", "backup.sql"),
+    ("database dump", "db.dump"),
+    ("database dump", "nightly.sql.gz"),
+    ("data export", "merchants.csv"),
+    ("data export", "customers.csv"),
+    ("private report", "security-inspection-2026-10-20.md"),
+    ("private report", "incident-2026-01-01.md"),
+    ("private directory", ".private/findings.md"),
+    ("private key", "server.pem"),
+    ("private key", "signing.key"),
+    ("mobile signing", "release.keystore"),
+    ("mobile signing", "upload.jks"),
+    ("credential file", "service-account-prod.json"),
+    ("env file", ".env"),
+    ("env file", "apps/api/.env"),
+    ("env file", "apps/web/.env.local"),
+]
+
+
+@pytest.mark.parametrize(
+    "category,path", _MUST_BE_IGNORED, ids=[f"{c}:{p}" for c, p in _MUST_BE_IGNORED]
+)
+def test_dangerous_paths_are_gitignored(category, path):
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", path], cwd=REPO_ROOT, capture_output=True
+    )
+
+    assert result.returncode == 0, (
+        f"{path} ({category}) is not covered by .gitignore. This repository is "
+        f"publicly readable, so one `git add -A` would publish it."
+    )
+
+
+_MUST_NOT_BE_IGNORED = [
+    "apps/api/.env.example",
+    "apps/web/.env.example",
+    "apps/mobile/.env.example",
+]
+
+
+@pytest.mark.parametrize("path", _MUST_NOT_BE_IGNORED)
+def test_placeholder_templates_are_still_tracked(path):
+    """The ignore rules must not swallow the templates that document which
+    variables exist - those hold names, never values, and a new developer
+    needs them."""
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", path], cwd=REPO_ROOT, capture_output=True
+    )
+
+    assert result.returncode != 0, f"{path} is ignored but should be tracked"
+
+
+def test_no_tracked_file_is_covered_by_an_ignore_rule():
+    """A rule that matches an already-tracked file is a rule written too
+    broadly: git keeps tracking the file, so the rule gives false comfort
+    while hiding nothing."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True
+    ).stdout
+    # Bytes, and NUL-separated, on purpose. In text mode on Windows Python
+    # rewrites each \n to \r\n on the way into the pipe, so git receives
+    # "apps/api/.env.example\r", which does not match the "!.env.example"
+    # negation and gets reported as ignored. The test then fails on three
+    # files that are perfectly fine.
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin", "-z"],
+        cwd=REPO_ROOT, input=tracked, capture_output=True,
+    )
+    offenders = [p.decode("utf-8", "replace") for p in result.stdout.split(b"\0") if p.strip()]
+
+    assert not offenders, f"tracked files matched by an ignore rule: {offenders[:10]}"

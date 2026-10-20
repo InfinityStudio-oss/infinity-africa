@@ -89,3 +89,30 @@ docs/test-accounts.md
 .DS_Store
 Thumbs.db
 *.log
+
+# --- Added 2026-10-20 after a security inspection found these uncovered ---
+
+# Database exports. The existing rules caught db-dump*.sql and *.dump but
+# not the names people actually type by hand. A dump of this database
+# contains every merchant balance and ledger entry, and the repository is
+# publicly readable, so this is the single worst thing that could land in
+# it by accident.
+*dump*.sql
+*backup*.sql
+*.sql.bz2
+*.sql.zst
+
+# Data exports. Nothing in this repository tracks a .csv, and the ones
+# produced during support work are merchant and customer lists with phone
+# numbers. If a genuine test fixture ever needs one, add it deliberately
+# with: git add -f path/to/fixture.csv
+*.csv
+
+# Private inspection output. Security findings, incident notes and audit
+# reports name unverified weaknesses and belong nowhere near a public
+# repository - keep them in a private location outside the working tree.
+.private/
+security-inspection-*.md
+security-report-*.md
+*-audit-report.md
+incident-*.md

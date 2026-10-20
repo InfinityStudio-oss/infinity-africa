@@ -162,6 +162,42 @@ export function WebhooksView() {
             )}
           </div>
 
+          {/*
+            A webhook URL with no signing secret is delivered unsigned: the
+            server omits X-Infinity-Signature entirely (see
+            app/routers/merchant_webhooks.py and
+            app/services/webhook_delivery.py), so the receiver has no way to
+            tell a real InfinityPay event from a forged POST to the same URL.
+
+            This was not a hypothetical. A review on 2026-10-20 found this
+            state to be the common case rather than the exception, because
+            nothing in the product mentioned it: a secret is only created
+            when "Generate Secret" is pressed, and saving a URL never
+            prompts for one. For a merchant whose server activates service
+            on a payment event, an unverified webhook is free service.
+
+            Deliberately a warning and not an automatic fix: generating a
+            secret behind the merchant's back would sign deliveries with a
+            value they have never seen, so their verification would fail
+            rather than start working. They have to copy it, which means they
+            have to be asked.
+          */}
+          {config?.webhook_url && !config.has_secret && !revealedSecret && (
+            <div className="border border-error rounded-lg p-4 bg-error-container/10">
+              <p className="text-sm font-medium text-error mb-1">
+                These deliveries are unsigned
+              </p>
+              <p className="text-sm text-on-surface-variant">
+                Without a signing secret, InfinityPay sends no{" "}
+                <code className="font-mono text-xs">X-Infinity-Signature</code> header, so
+                your server cannot confirm an event really came from us — anyone who learns
+                this URL could post a convincing fake. Choose{" "}
+                <span className="font-medium text-on-surface">Generate Secret</span> below,
+                copy it once, and verify it on every request.
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <button
               type="submit"

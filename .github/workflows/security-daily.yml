@@ -1,35 +1,64 @@
 name: Daily security check
 
-# 09:00 Africa/Dar_es_Salaam. EAT is UTC+3 all year - Tanzania does not
-# observe daylight saving - so 06:00 UTC is 09:00 EAT every day, with no
-# seasonal drift to correct for.
+# Nominally 09:00 Africa/Dar_es_Salaam, expressed as 06:00 UTC. EAT is
+# UTC+3 all year - Tanzania does not observe daylight saving - so there is
+# no seasonal drift to correct for.
 #
-# This workflow is the answer to what the 2026-10-20 inspection found: the
-# repository already had two good secret scanners and nothing that ran
-# them. There was no CI at all, and no installed git hook. One scanner's
-# own header comment claimed it "catches this on every CI run" - it did
-# not, because there were no CI runs.
+# Read "nominally" literally. GitHub's scheduler is best-effort and runs
+# late under load, sometimes by a long way, and can skip a run entirely.
+# This is a **periodic check, not a guarantee of a 09:00 run and not
+# continuous monitoring.** Anything that needs to be true within minutes
+# needs a different mechanism.
 #
-# Read-only by design. It runs no DDL, sends no provider requests, reads no
-# production data and needs no secrets, so it cannot be the thing that
-# breaks a payment flow. It is also why there is nothing here that deploys,
-# merges, applies a migration or rotates a credential: those stay manual
-# and deliberate.
+# Why this exists: the 2026-10-20 inspection found the repository already
+# had two secret scanners and nothing that ran them - no CI at all and no
+# installed git hook, so both ran only when somebody remembered. One
+# scanner's own header comment claimed it "catches this on every CI run".
+# There were no CI runs.
+#
+# Read-only by design. No DDL, no provider requests, no production data,
+# and it needs no secrets, so it cannot be the thing that breaks a payment
+# flow. Nothing here deploys, merges, applies a migration or rotates a
+# credential; those stay manual and deliberate.
 
 on:
   schedule:
+    # Scheduled runs always use the default branch (main).
     - cron: "0 6 * * *"
-  # So a change to the checks themselves is verified by the checks.
+
+  # A change to code that the checks cover, or to the checks themselves.
+  # `pull_request` (never `pull_request_target`) means a fork's pull
+  # request runs with a read-only token and no access to repository
+  # secrets - which is safe here only because these jobs need no secrets
+  # at all. Do not add a secret to this workflow without revisiting that.
   pull_request:
     paths:
       - "scripts/security_daily_check.py"
       - "apps/api/tests/test_no_committed_secrets.py"
+      - "apps/api/tests/test_security_daily_check.py"
+      - "apps/api/tests/test_database_security_invariants.py"
       - "apps/web/src/security-secret-scan.test.ts"
       - "supabase/migrations/**"
       - "apps/api/app/config/settings.py"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "apps/mobile/**"
       - ".github/workflows/security-daily.yml"
+
+  push:
+    branches: [main]
+    paths:
+      - "scripts/security_daily_check.py"
+      - "apps/api/**"
+      - "apps/web/**"
+      - "apps/mobile/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/security-daily.yml"
+
   workflow_dispatch:
 
+# Least privilege: the checks only read the tree. No issues, no packages,
+# no id-token, no write anywhere.
 permissions:
   contents: read
 
@@ -41,15 +70,21 @@ jobs:
   static-checks:
     name: Static security checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to a commit SHA, not a tag: a tag can be moved
+      # to point at different code, which makes a tag reference mutable
+      # supply chain. The comment records which release the SHA was.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # The committed-secrets scan reads `git ls-files`, so it only
-          # needs the current tree, not the whole history.
+          # The committed-secrets scan reads `git ls-files`, so it needs
+          # only the current tree. It does NOT scan history - history was
+          # swept once by hand during the 2026-10-20 inspection, and
+          # re-sweeping every blob daily would be slow for little gain.
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -59,39 +94,54 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt
           elif [ -f requirements.txt ]; then pip install -r requirements.txt
-          else pip install pytest; fi
+          else echo "::error::no requirements file found"; exit 1; fi
 
-      # Fails if anything failed OR could not run. A check that did not run
-      # has not passed, and this is the step where that distinction matters.
-      # --tests adds the pytest security suite; the frontend scan runs in
+      # Exits non-zero if any check FAILED or could not run. A check that
+      # did not run has not passed, and this is the step where that
+      # distinction has to hold or the whole thing becomes decoration.
+      #
+      # --tests adds the pytest security suite. The frontend scan runs in
       # its own job because it needs Node rather than Python.
       - name: Daily security check
         run: python scripts/security_daily_check.py --tests
 
+      # Proves the scanner can still detect something, using a synthetic
+      # fixture that is not a real credential. A scanner that has silently
+      # stopped matching reports "clean" forever, which is the failure mode
+      # that matters most here.
+      - name: Prove the scanner still detects a planted secret
+        run: python scripts/security_scanner_selftest.py
+
   frontend-secret-scan:
     name: Frontend secret-name scan
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
 
       # The lockfile is at the repo root: apps/web is an npm workspace, so
-      # the install happens from the root even though the test runs from
+      # the install runs from the root even though the test runs from
       # apps/web. (apps/mobile is deliberately not a workspace and must
       # never be installed from here.)
       - name: Install web dependencies
         run: npm ci
 
       # Must run from apps/web: from the repo root the "@" alias fails to
-      # resolve and reports a misleading "Cannot find package" error.
+      # resolve and reports a misleading "Cannot find package" wall.
       - name: Secret-name scan
         working-directory: apps/web
         run: npx vitest run src/security-secret-scan.test.ts
+
+# No artifacts are uploaded. Inspection findings are kept private and off
+# this public repository, so there is nothing here to publish, and a job
+# log must never carry a secret value, customer data or more operational
+# detail than a maintainer needs to fix the failure.
