@@ -40,6 +40,27 @@ const FORBIDDEN_NAMES = [
   "SELCOM_CHECKOUT_API_SECRET",
   "SELCOM_CHECKOUT_PRIVATE_KEY_BASE64",
   "SELCOM_CHECKOUT_WEBHOOK_TEST_SECRET",
+  // Added 2026-10-20. The security inspection compared this list against
+  // settings.py and found it had stopped keeping up: these two were added
+  // to the backend on 2026-10-16/17 and nothing here knew about them. A
+  // hand-maintained list of secrets silently stops covering the newest
+  // ones, which are the ones most likely to be mishandled, so
+  // scripts/security_daily_check.py now diffs the two and fails on the gap.
+  "OASIS_SMS_API_KEY",
+  "OASIS_SMS_WEBHOOK_SECRET",
+  // Deliberately NOT listed, having checked what each one actually is:
+  //
+  //   SENTRY_DSN       already guarded, and more precisely, by
+  //                    seo-and-security.test.ts, which asserts no client
+  //                    bundle reads process.env.SENTRY_DSN. Listing it here
+  //                    would also false-positive on NEXT_PUBLIC_SENTRY_DSN
+  //                    (this scan matches by substring), which the browser
+  //                    is *supposed* to ship - a Sentry DSN is public by
+  //                    design and cannot read anything back out of Sentry.
+  //   POSTHOG_API_KEY  a write-only project key, not a PostHog personal API
+  //                    key. The privileged form (phx_/phs_/php_) is caught
+  //                    by value in apps/api/tests/test_no_committed_secrets.py,
+  //                    which is the right place for it.
 ];
 
 function walk(dir: string, files: string[] = []): string[] {

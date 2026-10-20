@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""Daily security check for InfinityPay.
+
+Read-only. Runs no DDL, sends no provider requests, touches no production
+data, and never prints a secret value - only a path, a type and what to do
+about it.
+
+Written after the 2026-10-20 inspection, which found that the repository
+already had two good secret scanners and nothing that ran them. There is
+no CI in this repo and no installed git hook, so both scanners only ran
+when somebody remembered. One of them even claims in its own header
+comment that it "catches this on every CI run". It did not.
+
+So this script is deliberately not a new scanner. It is the thing that
+runs the checks that already exist, plus the three static checks the
+inspection had to do by hand.
+
+Checks:
+
+  1  committed secrets        reuses apps/api/tests/test_no_committed_secrets.py
+  2  secret-name drift        every credential in settings.py is covered by
+                              the frontend scanner's forbidden-name list
+  3  RLS coverage             every table created in migrations has RLS enabled
+  4  function search_path     every function pins search_path
+  5  security test suite      the ~440 auth/webhook/key/limit tests
+
+Check 2 exists because of what the inspection actually found: four
+credentials (OASIS_SMS_API_KEY, OASIS_SMS_WEBHOOK_SECRET, POSTHOG_API_KEY,
+SENTRY_DSN) had been added to settings.py since the frontend scanner was
+written, and its hardcoded list had not kept up. A hand-maintained list of
+secrets silently stops covering the newest ones, which are exactly the
+ones most likely to be mishandled. This check compares the two and fails
+on the difference.
+
+Usage:
+    python scripts/security_daily_check.py            # static checks only (fast)
+    python scripts/security_daily_check.py --full     # also run the test suites
+
+Exit status is 0 only when every check that ran actually passed. A check
+that could not run is reported as SKIPPED and makes the run fail, never
+pass - a check that produced no output has not told you anything, and
+treating silence as success is how this kind of script becomes decoration.
+"""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import json
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+MIGRATIONS = REPO / "supabase" / "migrations"
+SETTINGS = REPO / "apps" / "api" / "app" / "config" / "settings.py"
+WEB_SCANNER = REPO / "apps" / "web" / "src" / "security-secret-scan.test.ts"
+
+PASS, FAIL, SKIP = "PASS", "FAIL", "SKIPPED"
+
+# Credential-shaped settings fields whose *name* appearing in the frontend
+# is not a finding. Kept explicit and tiny, with a reason each: a broad rule
+# here would hide a real secret, which is the whole failure this check exists
+# to catch.
+NOT_CREDENTIALS = {
+    "COLLECTION_CREATE_MAX_PER_MINUTE_PER_KEY",  # a rate limit
+    "ENABLE_MERCHANT_API_KEYS",                  # a feature flag
+    # Monitoring. Checked individually on 2026-10-20 rather than waved
+    # through: a Sentry DSN is public by design and cannot read anything
+    # back out of Sentry, the browser is supposed to ship it, and no client
+    # bundle reading the server-side form is already asserted - more
+    # precisely than this check could - by apps/web/src/app/
+    # seo-and-security.test.ts. POSTHOG_API_KEY is a write-only project
+    # key; the privileged personal-key form (phx_/phs_/php_) is caught by
+    # value in apps/api/tests/test_no_committed_secrets.py.
+    "SENTRY_DSN",
+    "POSTHOG_API_KEY",
+    "PUBLIC_APP_URL",
+    "SELCOM_BASE_URL",
+    "SELCOM_BUSINESS_PRODUCTION_BASE_URL",
+    "SELCOM_BUSINESS_SANDBOX_BASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_JWKS_URL",
+    "SUPABASE_JWT_ISSUER",
+    "SELCOM_WEBHOOK_PATH",
+}
+
+Result = collections.namedtuple("Result", "name status detail")
+
+
+def _sql_files() -> list[Path]:
+    return sorted(MIGRATIONS.glob("*.sql"))
+
+
+def check_committed_secrets() -> Result:
+    """Reuse the existing scanner rather than reimplementing it."""
+    api = REPO / "apps" / "api"
+    test = api / "tests" / "test_no_committed_secrets.py"
+    if not test.is_file():
+        return Result("committed secrets", SKIP, f"scanner missing: {test}")
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/test_no_committed_secrets.py", "-q"],
+        cwd=api, capture_output=True, text=True,
+    )
+    if proc.returncode == 0:
+        return Result("committed secrets", PASS, "no credential value in any tracked file")
+    # The scanner reports paths, never values, so its output is safe to show.
+    failures = [l for l in proc.stdout.splitlines() if "Possible committed" in l or "tracked" in l]
+    return Result("committed secrets", FAIL, "; ".join(failures[:5]) or "see pytest output")
+
+
+def check_secret_name_drift() -> Result:
+    if not SETTINGS.is_file() or not WEB_SCANNER.is_file():
+        return Result("secret-name drift", SKIP, "settings.py or web scanner not found")
+    text = SETTINGS.read_text(encoding="utf-8")
+    fields = set()
+    for m in re.finditer(r"^\s{4}([a-z0-9_]+)\s*:", text, re.M):
+        name = m.group(1).upper()
+        if any(w in name for w in ("SECRET", "KEY", "PASSWORD", "TOKEN", "DSN")):
+            fields.add(name)
+    fields -= NOT_CREDENTIALS
+    listed = set(re.findall(r'"([A-Z0-9_]+)"', WEB_SCANNER.read_text(encoding="utf-8")))
+    missing = sorted(fields - listed)
+    if not fields:
+        return Result("secret-name drift", SKIP, "parsed no settings fields - parser may be stale")
+    if missing:
+        return Result(
+            "secret-name drift", FAIL,
+            f"{len(missing)} credential(s) not in the frontend scanner list: {', '.join(missing)}",
+        )
+    return Result("secret-name drift", PASS, f"all {len(fields)} credentials covered")
+
+
+def _schema_facts():
+    created, rls_on, policies = set(), set(), collections.Counter()
+    for f in _sql_files():
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        for m in re.finditer(r"create\s+table(?:\s+if\s+not\s+exists)?\s+(?:public\.)?\"?([a-z0-9_]+)\"?", t, re.I):
+            created.add(m.group(1).lower())
+        for m in re.finditer(r"alter\s+table\s+(?:public\.)?\"?([a-z0-9_]+)\"?[^;]*?enable\s+row\s+level\s+security", t, re.I | re.S):
+            rls_on.add(m.group(1).lower())
+        # 'on' may sit on its own line after the policy name - a newline-blind
+        # pattern here silently undercounts policies, which it did once.
+        for m in re.finditer(r"create\s+policy\s+.{1,200}?\son\s+(?:public\.)?\"?([a-z0-9_]+)\"?", t, re.I | re.S):
+            policies[m.group(1).lower()] += 1
+        for m in re.finditer(r"drop\s+table(?:\s+if\s+exists)?\s+(?:public\.)?\"?([a-z0-9_]+)\"?", t, re.I):
+            created.discard(m.group(1).lower())
+    return created, rls_on, policies
+
+
+def check_rls_coverage() -> Result:
+    if not MIGRATIONS.is_dir():
+        return Result("RLS coverage", SKIP, f"no migrations directory at {MIGRATIONS}")
+    created, rls_on, policies = _schema_facts()
+    if len(created) < 20:
+        return Result("RLS coverage", SKIP, f"only parsed {len(created)} tables - parser may be stale")
+    missing = sorted(created - rls_on)
+    if missing:
+        return Result("RLS coverage", FAIL, f"RLS not enabled on: {', '.join(missing)}")
+    deny_all = sorted(t for t in rls_on if policies[t] == 0)
+    # Tables with RLS and no policy are deny-all, which is the correct state
+    # for backend-only tables reached with the service role. Reported for
+    # visibility, never "fixed" by adding a permissive policy.
+    return Result(
+        "RLS coverage", PASS,
+        f"{len(created)} tables, all RLS-enabled; {sum(policies.values())} policies; "
+        f"{len(deny_all)} deny-all (backend-only, expected)",
+    )
+
+
+def check_function_search_path() -> Result:
+    if not MIGRATIONS.is_dir():
+        return Result("function search_path", SKIP, f"no migrations directory at {MIGRATIONS}")
+    # Last definition wins, and a later ALTER ... SET search_path counts.
+    defs: dict[str, str] = {}
+    altered: set[str] = set()
+    for f in _sql_files():
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        for m in re.finditer(r"create\s+or\s+replace\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\(", t, re.I):
+            start = m.start()
+            end = t.find("$$", t.find("$$", start) + 2)
+            defs[m.group(1).lower()] = t[start: end + 2 if end != -1 else len(t)]
+        for m in re.finditer(r"alter\s+function\s+(?:public\.)?([a-z0-9_]+)\s*\([^)]*\)\s*set\s+search_path", t, re.I):
+            altered.add(m.group(1).lower())
+    if not defs:
+        return Result("function search_path", SKIP, "parsed no functions - parser may be stale")
+    unpinned = sorted(
+        n for n, body in defs.items()
+        if n not in altered and not re.search(r"set\s+search_path", body, re.I)
+    )
+    if unpinned:
+        definers = [n for n in unpinned if re.search(r"security\s+definer", defs[n], re.I)]
+        note = f" ({len(definers)} SECURITY DEFINER - escalates)" if definers else " (all SECURITY INVOKER)"
+        return Result("function search_path", FAIL, f"unpinned: {', '.join(unpinned)}{note}")
+    return Result("function search_path", PASS, f"all {len(defs)} functions pin search_path")
+
+
+SECURITY_TESTS = [
+    "tests/test_admin_api_keys.py", "tests/test_api_key_pairs.py", "tests/test_auth.py",
+    "tests/test_auth_actions.py", "tests/test_collection_ownership.py",
+    "tests/test_database_security_invariants.py", "tests/test_idempotency.py",
+    "tests/test_input_validation_security.py", "tests/test_monitoring_scrubber.py",
+    "tests/test_rate_limit.py", "tests/test_rate_limit_dimensions.py",
+    "tests/test_security_alerts.py", "tests/test_security_headers.py",
+    "tests/test_selcom_checkout_webhook.py", "tests/test_selcom_signature.py",
+    "tests/test_super_admin_mfa.py", "tests/test_webhook_delivery.py",
+    "tests/test_webhooks.py", "tests/test_merchant_webhooks.py",
+]
+
+
+def check_security_tests() -> Result:
+    api = REPO / "apps" / "api"
+    present = [t for t in SECURITY_TESTS if (api / t).is_file()]
+    if len(present) < len(SECURITY_TESTS):
+        gone = sorted(set(SECURITY_TESTS) - set(present))
+        return Result("security tests", SKIP, f"missing test files: {', '.join(gone)}")
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", *present, "-q"],
+        cwd=api, capture_output=True, text=True,
+    )
+    tail = [l for l in proc.stdout.splitlines() if "passed" in l or "failed" in l]
+    summary = tail[-1].strip() if tail else "no pytest summary line"
+    return Result("security tests", PASS if proc.returncode == 0 else FAIL, summary)
+
+
+def check_web_secret_scan() -> Result:
+    web = REPO / "apps" / "web"
+    if not WEB_SCANNER.is_file():
+        return Result("frontend secret scan", SKIP, "scanner not found")
+    # vitest must run from apps/web or the "@" alias resolution breaks.
+    proc = subprocess.run(
+        ["npx", "vitest", "run", "src/security-secret-scan.test.ts", "--reporter=dot"],
+        cwd=web, capture_output=True, text=True, shell=(sys.platform == "win32"),
+    )
+    tail = [l for l in proc.stdout.splitlines() if "Tests" in l]
+    summary = tail[-1].strip() if tail else "no vitest summary line"
+    return Result("frontend secret scan", PASS if proc.returncode == 0 else FAIL, summary)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--tests", action="store_true", help="also run the pytest security suite")
+    ap.add_argument("--web", action="store_true", help="also run the vitest frontend scan")
+    ap.add_argument("--full", action="store_true", help="--tests and --web together")
+    ap.add_argument("--json", action="store_true", help="emit machine-readable output")
+    args = ap.parse_args()
+
+    checks = [check_secret_name_drift, check_rls_coverage, check_function_search_path,
+              check_committed_secrets]
+    if args.tests or args.full:
+        checks.append(check_security_tests)
+    if args.web or args.full:
+        checks.append(check_web_secret_scan)
+
+    results = [c() for c in checks]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    if args.json:
+        print(json.dumps({"generated": stamp,
+                          "checks": [r._asdict() for r in results]}, indent=2))
+    else:
+        print(f"\nInfinityPay daily security check - {stamp}")
+        print("=" * 72)
+        for r in results:
+            print(f"  {r.status:<8} {r.name:<24} {r.detail}")
+        print("=" * 72)
+
+    failed = [r for r in results if r.status == FAIL]
+    skipped = [r for r in results if r.status == SKIP]
+    if not args.json:
+        if failed:
+            print(f"  {len(failed)} check(s) FAILED - see detail above.")
+        if skipped:
+            print(f"  {len(skipped)} check(s) could not run. A check that did not run "
+                  f"has not passed.")
+        if not failed and not skipped:
+            print("  No new findings in checked areas.")
+        print()
+    # Non-zero if anything failed OR could not run.
+    return 1 if (failed or skipped) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

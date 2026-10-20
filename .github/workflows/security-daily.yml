@@ -1,0 +1,97 @@
+name: Daily security check
+
+# 09:00 Africa/Dar_es_Salaam. EAT is UTC+3 all year - Tanzania does not
+# observe daylight saving - so 06:00 UTC is 09:00 EAT every day, with no
+# seasonal drift to correct for.
+#
+# This workflow is the answer to what the 2026-10-20 inspection found: the
+# repository already had two good secret scanners and nothing that ran
+# them. There was no CI at all, and no installed git hook. One scanner's
+# own header comment claimed it "catches this on every CI run" - it did
+# not, because there were no CI runs.
+#
+# Read-only by design. It runs no DDL, sends no provider requests, reads no
+# production data and needs no secrets, so it cannot be the thing that
+# breaks a payment flow. It is also why there is nothing here that deploys,
+# merges, applies a migration or rotates a credential: those stay manual
+# and deliberate.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  # So a change to the checks themselves is verified by the checks.
+  pull_request:
+    paths:
+      - "scripts/security_daily_check.py"
+      - "apps/api/tests/test_no_committed_secrets.py"
+      - "apps/web/src/security-secret-scan.test.ts"
+      - "supabase/migrations/**"
+      - "apps/api/app/config/settings.py"
+      - ".github/workflows/security-daily.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-daily-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-checks:
+    name: Static security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The committed-secrets scan reads `git ls-files`, so it only
+          # needs the current tree, not the whole history.
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API test dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt
+          elif [ -f requirements.txt ]; then pip install -r requirements.txt
+          else pip install pytest; fi
+
+      # Fails if anything failed OR could not run. A check that did not run
+      # has not passed, and this is the step where that distinction matters.
+      # --tests adds the pytest security suite; the frontend scan runs in
+      # its own job because it needs Node rather than Python.
+      - name: Daily security check
+        run: python scripts/security_daily_check.py --tests
+
+  frontend-secret-scan:
+    name: Frontend secret-name scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The lockfile is at the repo root: apps/web is an npm workspace, so
+      # the install happens from the root even though the test runs from
+      # apps/web. (apps/mobile is deliberately not a workspace and must
+      # never be installed from here.)
+      - name: Install web dependencies
+        run: npm ci
+
+      # Must run from apps/web: from the repo root the "@" alias fails to
+      # resolve and reports a misleading "Cannot find package" error.
+      - name: Secret-name scan
+        working-directory: apps/web
+        run: npx vitest run src/security-secret-scan.test.ts
