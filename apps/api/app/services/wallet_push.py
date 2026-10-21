@@ -224,8 +224,9 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
                 else {}
             ),
             # Selcom's value, under our unique index. The helper falls back
-            # to transid when they repeat one, matching what the linked
-            # transactions row does below.
+            # to transid when they repeat one; the linked transactions row
+            # below reuses whatever this insert settled on, so the two can
+            # never disagree.
             "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
@@ -249,7 +250,18 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
             merchant_id=merchant_id,
             method=_WALLET_PUSH_METHOD_LABEL,
             collection_id=collection["id"],
-            provider_reference=result.reference or transid,
+            # The reference the collection actually stored, not a second
+            # computation of it. transactions.provider_reference carries its
+            # own partial unique index, and this row was recomputing
+            # `result.reference or transid` instead of reusing what the
+            # collection insert settled on. When Selcom repeats a reference
+            # the collection tolerates it and falls back to transid, while
+            # this insert kept the repeated value and violated
+            # transactions_provider_reference_key - a 500 for the partner,
+            # and a processing collection left with no transaction, which is
+            # the row resolve_collection() needs to post ledger entries
+            # against. Seen in production as INFINITYPAY-API-14.
+            provider_reference=collection["provider_reference"],
             amount=Decimal(str(payment_link["amount"])),
             currency=payment_link["currency"],
         )
@@ -374,8 +386,9 @@ async def execute_wallet_push_collection(
                 else {}
             ),
             # Selcom's value, under our unique index. The helper falls back
-            # to transid when they repeat one, matching what the linked
-            # transactions row does below.
+            # to transid when they repeat one; the linked transactions row
+            # below reuses whatever this insert settled on, so the two can
+            # never disagree.
             "provider_reference": result.reference or transid,
             "provider_transid": transid,
             "provider_resultcode": result.resultcode,
@@ -393,7 +406,9 @@ async def execute_wallet_push_collection(
             merchant_id=merchant_id,
             method=_WALLET_PUSH_METHOD_LABEL,
             collection_id=collection["id"],
-            provider_reference=result.reference or transid,
+            # Same reasoning as the payment-link path above: reuse what the
+            # collection insert stored rather than recomputing it.
+            provider_reference=collection["provider_reference"],
             amount=amount,
             currency=currency,
         )

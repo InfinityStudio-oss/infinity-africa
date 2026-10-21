@@ -363,6 +363,34 @@ class _FakeTable:
             # next_attempt_at is `not null default now()` in the migration.
             row.setdefault("next_attempt_at", now)
             row.setdefault("attempts", 0)
+        if self.name in ("collections", "transactions"):
+            # Partial unique indexes on provider_reference
+            # (20260814090009_collections.sql, 20260814090011_transactions.sql),
+            # both `where provider_reference is not null`.
+            #
+            # Without these the fake cannot show what production does when
+            # Selcom repeats a reference, and
+            # insert_collection_tolerating_repeated_reference never reaches
+            # its fallback - so a test proves the de-duplication works while
+            # never once exercising it.
+            #
+            # That gap hid a real bug (INFINITYPAY-API-14): the collection
+            # insert tolerated a repeated reference while the linked
+            # transactions insert recomputed the value and violated its own
+            # index, leaving a processing collection with no transaction.
+            #
+            # The raised error carries `.code` and the index name because
+            # that is exactly what is_duplicate_provider_reference() matches
+            # on; a bare Exception would be re-raised as an unknown failure.
+            ref = (row.get("provider_reference") or "").strip()
+            if ref and any((r.get("provider_reference") or "") == ref for r in self.rows):
+                index = f"{self.name}_provider_reference_key"
+                error = Exception(  # noqa: TRY002
+                    f'duplicate key value violates unique constraint "{index}"'
+                )
+                error.code = "23505"
+                error.message = f'duplicate key value violates unique constraint "{index}"'
+                raise error
         if self.name == "audit_logs":
             # audit_logs.actor_id is `references auth.users (id)`
             # (20260814090015_audit_logs.sql). This fake enforces no foreign
