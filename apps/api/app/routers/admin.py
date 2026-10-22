@@ -19,7 +19,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.auth import require_super_admin
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationAPIError
+from app.core.rate_limit import rate_limit
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
@@ -1338,4 +1339,82 @@ def list_admin_team(
             )
             for row in rows
         ]
+    )
+
+
+@router.post("/merchant-webhooks/{webhook_event_id}/resend", response_model=APIResponse[dict])
+def resend_merchant_webhook(
+    webhook_event_id: uuid.UUID,
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="webhook_resend", limit=30, window_seconds=60))
+    ],
+):
+    """Put a given-up outbound webhook back in the delivery queue.
+
+    Delivery retries five times and then marks the row `failed`, after
+    which nothing ever touches it again - `_pending_events()` only scans
+    `pending` and `retrying`. A merchant whose endpoint is down for longer
+    than that loses the notification permanently, and the only recovery
+    was asking them to reconcile by hand.
+
+    That is a real gap for a platform where a webhook is how a partner
+    learns money arrived. BennyWiFi hit it on 2026-10-22: their callback
+    answered five deliveries with a redirect to an error page, and five
+    payments plus a payout had to be read back to them by reference.
+
+    **This cannot move money.** It re-queues a notification describing
+    something that already happened; it does not create, approve or alter
+    a payment. The row keeps its own id, so the redelivery carries the
+    same `X-Infinity-Delivery` header as the original - a receiver that
+    did process the first attempt deduplicates it exactly as the
+    integration guide tells them to, and one that never received it gets
+    it for the first time.
+
+    Restricted to rows that actually gave up. Re-queuing a `delivered`
+    row would be a way to send a merchant the same event twice on
+    purpose, and `pending`/`retrying` rows are already in the queue.
+    """
+    client = get_supabase_admin()
+    event = get_by_id(client, "webhook_events", webhook_event_id)
+    if not event:
+        raise NotFoundError("Webhook event not found")
+    if event.get("status") != "failed":
+        raise ValidationAPIError(
+            f"Only a failed delivery can be resent; this one is "
+            f"{event.get('status')!r}."
+        )
+
+    # attempts=0 puts it at the front of the backoff schedule
+    # (_BACKOFF_SECONDS[0] == 0), so the next sweep picks it up rather
+    # than waiting out the interval the final attempt had reached.
+    updated = update_row(
+        client,
+        "webhook_events",
+        webhook_event_id,
+        {"status": "retrying", "attempts": 0, "response_status_code": None},
+    )
+
+    write_audit_log(
+        client,
+        action="webhook.resend_requested",
+        resource_type="webhook_event",
+        resource_id=webhook_event_id,
+        actor_id=_admin.id,
+        actor_type="user",
+        merchant_id=uuid.UUID(event["merchant_id"]) if event.get("merchant_id") else None,
+        metadata={
+            "event_name": event.get("event_name"),
+            "previous_status_code": event.get("response_status_code"),
+            "previous_attempts": event.get("attempts"),
+        },
+    )
+
+    return APIResponse(
+        data={
+            "webhook_event_id": str(webhook_event_id),
+            "event_name": updated.get("event_name"),
+            "status": updated.get("status"),
+            "queued": True,
+        }
     )
