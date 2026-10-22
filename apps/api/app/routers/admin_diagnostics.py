@@ -172,3 +172,64 @@ def webhook_signing_posture(
             ],
         }
     )
+
+
+# Operational switches worth being able to read back from production.
+# Booleans and numbers only - never a secret, and never anything whose
+# value would help someone attack the platform.
+_REPORTED_SETTINGS = (
+    "environment",
+    "selcom_checkout_accept_unsigned_callbacks",
+    "selcom_checkout_reconcile_interval_seconds",
+    "selcom_disbursement_reconcile_interval_seconds",
+    "selcom_outbound_max_per_minute",
+    "selcom_outbound_max_concurrent",
+    "selcom_reconcile_batch_size",
+    "collection_push_expiry_minutes",
+    "webhook_delivery_interval_seconds",
+    "require_super_admin_mfa",
+    "cache_enabled",
+    "oasis_sms_enabled",
+)
+
+
+@router.get("/settings", response_model=APIResponse[dict])
+def report_effective_settings(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[None, Depends(_RATE_LIMIT)],
+):
+    """What the running process actually believes, not what the dashboard
+    says it was given.
+
+    A variable that is absent, misspelled, or unreadable all produce the
+    same outcome - the field's default - and two of those three are
+    silent. On 2026-10-22 that cost several rounds of guessing: Selcom
+    callbacks kept being rejected after
+    SELCOM_CHECKOUT_ACCEPT_UNSIGNED_CALLBACKS was reportedly set, and
+    there was no way to tell from outside whether the process had ever
+    seen it.
+
+    `source` is what makes this answer the question. `env` means an
+    environment variable supplied this value; `default` means nothing
+    did, and the field fell back - which is exactly what a missing or
+    misspelled variable looks like.
+
+    Booleans and numbers only. No secret is reported here, in any form,
+    and nothing is included whose value would help someone attack the
+    platform.
+    """
+    settings = get_settings()
+    supplied = settings.model_fields_set
+
+    return APIResponse(
+        data={
+            "settings": {
+                name: {
+                    "value": getattr(settings, name, None),
+                    "source": "env" if name in supplied else "default",
+                }
+                for name in _REPORTED_SETTINGS
+                if hasattr(settings, name)
+            }
+        }
+    )
