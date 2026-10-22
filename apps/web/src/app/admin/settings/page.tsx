@@ -1,7 +1,8 @@
 import { PageHeader } from "@/components/portal/page-header";
 import { AdminSettingsPanels } from "@/components/admin/admin-settings-panels";
 import { AdminTeamCard } from "@/components/admin/admin-team-card";
-import { listAdminTeam } from "@/lib/admin/live-api";
+import { EffectiveSettingsCard } from "@/components/admin/effective-settings-card";
+import { getEffectiveSettings, listAdminTeam } from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Settings | InfinityPay Super Admin",
@@ -12,6 +13,7 @@ const TABS = [
   { label: "Security", href: "#security" },
   { label: "Notifications", href: "#notifications" },
   { label: "Admin Team", href: "#admins" },
+  { label: "Live Config", href: "#diagnostics" },
 ];
 
 /** Server-rendered so the Admin Team card can read the real
@@ -19,7 +21,10 @@ const TABS = [
  * roster has to come from somewhere other than the invented list this
  * page used to show. */
 export default async function AdminSettingsPage() {
-  const team = await listAdminTeam();
+  const [team, effectiveSettings] = await Promise.all([
+    listAdminTeam(),
+    getEffectiveSettings(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -44,6 +49,8 @@ export default async function AdminSettingsPage() {
       <AdminSettingsPanels />
 
       <AdminTeamCard team={team} />
+
+      <EffectiveSettingsCard report={effectiveSettings} />
     </div>
   );
 }

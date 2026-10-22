@@ -3,6 +3,7 @@ import "server-only";
 import { getAccessToken } from "@/lib/supabase/session";
 
 import type {
+  EffectiveSettingsReport,
   AdminApiKeyPlatformRow,
   AdminApiKeyRow,
   AdminCustomerPlatformRow,
@@ -697,4 +698,22 @@ export async function listAdminNotifications(): Promise<AdminNotificationRow[]> 
  */
 export async function listAdminTeam(): Promise<AdminTeamMember[] | null> {
   return apiGet<AdminTeamMember[]>("/v1/admin/team");
+}
+
+/**
+ * The operational switches as the running API actually resolved them.
+ *
+ * Added after an evening spent unable to answer "is this variable
+ * actually set?" from outside the process. A variable that is absent,
+ * misspelled or unreadable all produce the same outcome - the field's
+ * default - and two of those three are completely silent. Selcom
+ * callbacks kept being rejected after the flag enabling them had
+ * reportedly been set; 177 went unprocessed after a confirmed deploy
+ * before the cause turned out to be that the process had never seen it.
+ *
+ * `source` is the field that answers it: "env" means something supplied
+ * the value, "default" means nothing did.
+ */
+export async function getEffectiveSettings(): Promise<EffectiveSettingsReport | null> {
+  return apiGet<EffectiveSettingsReport>("/v1/admin/diagnostics/settings");
 }

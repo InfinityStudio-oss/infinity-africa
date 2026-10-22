@@ -848,3 +848,14 @@ export interface AdminSmsDryRun {
   credits_total: number | null;
   enough_credits: boolean | null;
 }
+
+/** One operational setting as the running API resolved it. */
+export interface EffectiveSetting {
+  value: string | number | boolean | null;
+  /** "env" - something supplied it. "default" - nothing did. */
+  source: "env" | "default";
+}
+
+export interface EffectiveSettingsReport {
+  settings: Record<string, EffectiveSetting>;
+}
