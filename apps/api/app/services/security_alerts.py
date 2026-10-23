@@ -241,3 +241,21 @@ def _safe_log_delivery(
         )
     except Exception:  # noqa: BLE001, S110 — logging the log must not fail either
         pass
+
+
+def should_alert_once(key: str, *, window_seconds: float) -> bool:
+    """True the first time `key` is seen in the window, False after.
+
+    The same suppression `notify_security_event` applies to its own emails,
+    exposed for alerts that do not go through it - Sentry captures, in
+    particular.
+
+    Added for webhook-delivery exhaustion. One merchant's endpoint erroring
+    0.5% of the time produced roughly eighteen separate "merchant will not
+    receive this event" alerts a day, all describing the same ongoing
+    condition. Eighteen mails a day about a known problem is how a real one
+    gets missed, so the condition is reported once per merchant per window
+    while every individual event is still logged and still recorded on the
+    row itself.
+    """
+    return _deduper.should_send(key, window_seconds=window_seconds)

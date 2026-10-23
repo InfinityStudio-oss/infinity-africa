@@ -66,10 +66,12 @@ import httpx
 from supabase import Client
 
 from app.core.analytics import track
+from app.config import get_settings
 from app.core.monitoring import capture_message
 from app.core.secret_box import decrypt_secret
 from app.core.time import utc_now_iso
 from app.services.crud import get_by_id, update_row
+from app.services.security_alerts import should_alert_once
 from app.services.webhooks import sign_outbound_payload
 
 logger = logging.getLogger("infinity.webhook_delivery")
@@ -259,11 +261,24 @@ def deliver_event(client: Client, event: dict) -> bool:
         # about, and a warning line in Railway is easy to miss — so it
         # also goes to Sentry, where it can raise an alert. The target
         # URL is merchant-controlled text and is deliberately not included.
-        capture_message(
-            "webhook delivery exhausted — merchant will not receive this event",
-            level="error",
-            tags={"merchant_id": str(event["merchant_id"]), "last_status": str(status_code)},
-        )
+        #
+        # Once per merchant per window, though, not once per event. A
+        # single endpoint erroring 0.5% of the time produced about
+        # eighteen identical alerts a day, every one of them describing
+        # the same ongoing condition — which is how a genuinely new
+        # failure gets lost among them. The row is still marked failed and
+        # the warning above is still logged for every event; only the
+        # alert is suppressed, and a merchant whose endpoint stays broken
+        # still raises one every window.
+        if should_alert_once(
+            f"webhook_exhausted:{event['merchant_id']}",
+            window_seconds=get_settings().webhook_exhausted_alert_window_seconds,
+        ):
+            capture_message(
+                "webhook delivery exhausted — merchant will not receive this event",
+                level="error",
+                tags={"merchant_id": str(event["merchant_id"]), "last_status": str(status_code)},
+            )
         track(
             "webhook_exhausted",
             merchant_id=event["merchant_id"],

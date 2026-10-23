@@ -276,6 +276,17 @@ class Settings(BaseSettings):
     # is a separate decision about real funds.
     security_alert_dedupe_window_seconds: int = 600
 
+    # How long to stay quiet after reporting that a merchant's endpoint gave
+    # up on an event. The delivery is still logged and still marked failed
+    # on the row every time - this only governs how often the condition is
+    # raised as an alert.
+    #
+    # One merchant erroring 0.5% of the time generated about eighteen
+    # identical alerts a day, all describing the same ongoing problem.
+    # Hourly keeps "this merchant is dropping events" visible without
+    # burying it in its own repetitions.
+    webhook_exhausted_alert_window_seconds: int = 3600
+
     # Every logger in this app is named "infinity.X" (logging.getLogger(
     # "infinity.scheduler"), "infinity.webhooks", etc.) — see
     # app/main.py::_configure_logging, which sets this level on their
