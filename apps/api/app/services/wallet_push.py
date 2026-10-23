@@ -45,6 +45,7 @@ from decimal import Decimal
 from supabase import Client
 
 from app.core.payment_minimums import assert_amount_allowed
+from app.services.payment_rejections import assert_amount_allowed_recording
 from app.core.push_throttle import assert_customer_push_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
@@ -134,7 +135,13 @@ async def execute_wallet_push_for_payment_link(client: Client, *, payment_link: 
     # below the network's own floor can only come back as a failed
     # payment, so it is refused here rather than spending a provider
     # attempt on it. See app/core/payment_minimums.py.
-    assert_amount_allowed(Decimal(str(payment_link["amount"])), customer_phone=buyer_phone)
+    assert_amount_allowed_recording(
+        client,
+        Decimal(str(payment_link["amount"])),
+        merchant_id=payment_link["merchant_id"],
+        customer_phone=buyer_phone,
+        currency=payment_link.get("currency") or "TZS",
+    )
     assert_customer_push_allowed(
         merchant_id=payment_link["merchant_id"], customer_phone=buyer_phone
     )
@@ -312,7 +319,13 @@ async def execute_wallet_push_collection(
     # below the network's own floor can only come back as a failed
     # payment, so it is refused here rather than spending a provider
     # attempt on it. See app/core/payment_minimums.py.
-    assert_amount_allowed(amount, customer_phone=customer_phone)
+    assert_amount_allowed_recording(
+        client,
+        amount,
+        merchant_id=merchant_id,
+        customer_phone=customer_phone,
+        currency=currency,
+    )
     assert_customer_push_allowed(merchant_id=merchant_id, customer_phone=customer_phone)
 
     buyer_name = customer_name or "InfinityPay Customer"

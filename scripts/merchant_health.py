@@ -201,6 +201,31 @@ def main() -> int:
             if k["429"]:
                 print("    note: they are hitting rate limits - review the per-key ceiling")
 
+        # --- turned away before they started ------------------------------
+        # A payment refused for being below the network minimum creates no
+        # collection at all, so it is invisible in every count above. On
+        # 23 October that hid about twelve customers for one merchant in a
+        # single day, three of whom retried 16, 28 and 30 times because
+        # their screen said "Pending" and never showed the reason.
+        rejected = page(client, base, "audit_logs", "created_at,metadata",
+                        f"&merchant_id=eq.{mid}&action=eq.payment.below_operator_minimum"
+                        f"&created_at=gte.{since}")
+        if rejected:
+            total = sum(Decimal(str((r.get("metadata") or {}).get("amount") or 0)) for r in rejected)
+            print(
+                f"\n  TURNED AWAY   {len(rejected)} attempt(s) below the network "
+                f"minimum - TZS {total:,.0f} attempted"
+            )
+            seen = Counter(
+                (r.get("metadata") or {}).get("customer_phone_masked") or "unknown"
+                for r in rejected
+            )
+            print(f"    distinct customers: {len(seen)}")
+            for phone, tries in seen.most_common(6):
+                note = "  <-- retried, almost certainly saw no reason why" if tries >= 5 else ""
+                print(f"      {phone:<14} {tries:>3} attempt(s){note}")
+            print(f"    networks: {dict(Counter((r.get('metadata') or {}).get('network') or '?' for r in rejected))}")
+
         # --- what to act on ---------------------------------------------
         print("\n  WATCH LIST")
         flags = []
@@ -210,6 +235,11 @@ def main() -> int:
             flags.append(f"{len(stuck)} money event(s) undelivered - customers owed service")
         if orphans:
             flags.append(f"{len(orphans)} payment(s) not credited to their wallet")
+        if rejected:
+            flags.append(
+                f"{len(rejected)} payment(s) refused below the network minimum - "
+                f"customers turned away, no collection created"
+            )
         if cols and len(expired) / len(cols) > 0.4:
             flags.append(f"{pct(len(expired), len(cols))} of prompts expire - conversion problem")
         if by.get("failed", 0) and len(ev) and by["failed"] / len(ev) > 0.02:
