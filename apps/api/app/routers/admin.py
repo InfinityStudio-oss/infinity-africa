@@ -20,8 +20,8 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import require_super_admin
 from app.core.errors import NotFoundError, ValidationAPIError
-from app.core.rate_limit import rate_limit
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
+from app.core.rate_limit import rate_limit
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.admin import (
@@ -65,7 +65,10 @@ from app.services.admin_directory import (
     merchants_with_live_keys,
 )
 from app.services.admin_overview import get_admin_overview
-from app.services.api_access import is_production_api_access_allowed
+from app.services.api_access import (
+    is_production_api_access_allowed,
+    merchants_with_production_api_access,
+)
 from app.services.audit import write_audit_log
 from app.services.checkout_reconciliation import refresh_checkout_collection_status
 from app.services.crud import execute_maybe_single, get_by_id, update_row
@@ -132,6 +135,18 @@ def list_admin_merchants(
     profiles = batch_user_profiles(client, set(owner_user_id_by_merchant.values()))
     # One batched query, not one per row — see merchants_with_live_keys.
     live_key_merchants = merchants_with_live_keys(client, merchant_ids)
+    # These two were asked per row until this page got slow enough to
+    # report. At 87 merchants, with the only active pricing rule being the
+    # platform fallback, every row missed five tiers before hitting it: six
+    # pricing queries plus two balance queries each, roughly 700 sequential
+    # round trips for one page.
+    #
+    # batch_wallet_balances is the same read-only helper the withdrawal
+    # approval queue below already uses — this page simply wasn't using it,
+    # and get_wallet_balance is a get-*or-create*, so a read-only list was
+    # also inserting ledger accounts.
+    production_eligible = merchants_with_production_api_access(client, merchants)
+    wallet_balances = batch_wallet_balances(client, merchant_ids)
 
     data = []
     for merchant in merchants:
@@ -151,14 +166,12 @@ def list_admin_merchants(
                 account_status=merchant["status"],
                 kyc_status=merchant["kyc_status"],
                 api_access_suspended=bool(merchant.get("api_access_suspended")),
-                production_api_eligible=is_production_api_access_allowed(client, merchant),
+                production_api_eligible=str(merchant["id"]) in production_eligible,
                 live_api_without_webhook=(
                     merchant["id"] in live_key_merchants
                     and not (merchant.get("webhook_url") or "").strip()
                 ),
-                available_balance=get_wallet_balance(
-                    client, merchant_id=uuid.UUID(merchant["id"]), currency=merchant["currency"]
-                ),
+                available_balance=Decimal(wallet_balances.get(merchant["id"], "0")),
                 created_at=merchant["created_at"],
             )
         )

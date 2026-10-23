@@ -20,6 +20,7 @@ find_pricing_rule's precedence (most to least specific):
 """
 
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -27,6 +28,7 @@ from supabase import Client
 
 from app.schemas.enums import DestinationCode, DisbursementMethod
 from app.schemas.withdrawals import FeeBreakdown
+from app.services.crud import fetch_in_chunks
 
 
 def _parse_dt(value: str) -> datetime:
@@ -91,6 +93,55 @@ def find_pricing_rule(
         if rule:
             return rule
     return None
+
+
+def merchants_with_pricing_rule(client: Client, merchant_ids: set[str] | list[str]) -> set[str]:
+    """Of these merchants, which have pricing that resolves at all — the
+    batched form of api_access.py::has_resolvable_pricing_rule.
+
+    Asked per merchant, that gate walks all six tiers above for every row
+    of the Super Admin Businesses list. But it passes channel=None and
+    destination_code=None, and with both of those empty the six tiers
+    collapse to only two distinct questions: is there an active merchant
+    default, or an active platform fallback. Two queries answer that for a
+    whole page instead of up to six per row.
+
+    Precedence is reused, not reimplemented: _pick_active_now still decides
+    what counts as active, so a rule whose effective_from is in the future
+    or whose effective_to has passed is ignored here exactly as it is in
+    find_pricing_rule. This answers only the "any pricing at all" question
+    and never which rule applies, so it must not be used to price anything.
+    """
+    ids = [str(merchant_id) for merchant_id in merchant_ids if merchant_id]
+    if not ids:
+        return set()
+    now = datetime.now(timezone.utc)
+
+    # Tier 6 first: a platform fallback resolves for every merchant, so if
+    # one is active nobody can fail the gate and the per-merchant query is
+    # pointless. Checking it first is also why the common case is 1 query.
+    if _pick_active_now(
+        _query_candidates(client, merchant_id=None, channel=None, destination_code=None), now
+    ):
+        return set(ids)
+
+    rows = fetch_in_chunks(
+        lambda batch: client.table("merchant_pricing_rules")
+        .select("merchant_id, effective_from, effective_to, created_at")
+        .eq("is_active", True)
+        .in_("merchant_id", batch)
+        .is_("channel", "null")
+        .is_("destination_code", "null"),
+        ids,
+    )
+    by_merchant: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_merchant[str(row["merchant_id"])].append(row)
+    return {
+        merchant_id
+        for merchant_id, candidates in by_merchant.items()
+        if _pick_active_now(candidates, now)
+    }
 
 
 def calculate_withdrawal_fee(

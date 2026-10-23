@@ -27,7 +27,10 @@ import uuid
 from supabase import Client
 
 from app.core.errors import ProductionAccessRestrictedError
-from app.services.withdrawals.fee_calculator import find_pricing_rule
+from app.services.withdrawals.fee_calculator import (
+    find_pricing_rule,
+    merchants_with_pricing_rule,
+)
 
 
 def is_merchant_api_access_suspended(merchant: dict) -> bool:
@@ -44,6 +47,28 @@ def is_production_api_access_allowed(client: Client, merchant: dict) -> bool:
     if merchant.get("status") != "active" or merchant.get("kyc_status") != "verified":
         return False
     return has_resolvable_pricing_rule(client, uuid.UUID(merchant["id"]))
+
+
+def merchants_with_production_api_access(client: Client, merchants: list[dict]) -> set[str]:
+    """Which of these merchants pass is_production_api_access_allowed.
+
+    The same decision in the same order, for a whole list: the three local
+    checks cost nothing and are applied per merchant exactly as above, then
+    one batched pricing lookup covers everyone who survived them — rather
+    than a pricing walk per row, which is what made the Super Admin
+    Businesses page slow as the merchant count grew.
+
+    Kept beside the single-merchant version on purpose: if the eligibility
+    rules change, both forms are in front of whoever changes them.
+    """
+    eligible = [
+        merchant
+        for merchant in merchants
+        if not is_merchant_api_access_suspended(merchant)
+        and merchant.get("status") == "active"
+        and merchant.get("kyc_status") == "verified"
+    ]
+    return merchants_with_pricing_rule(client, {str(merchant["id"]) for merchant in eligible})
 
 
 def check_production_api_access(client: Client, merchant: dict) -> None:
