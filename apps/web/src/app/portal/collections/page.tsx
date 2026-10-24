@@ -13,6 +13,32 @@ import { createCollectionRequest, listCollections, refreshCollectionStatus } fro
 import { collectionBadge } from "@/lib/portal/status-tones";
 import type { Collection, PaymentLink } from "@/lib/portal/types";
 
+/** What to tell a merchant when the payment worked but their own system
+ * was never told about it.
+ *
+ * A collection can be entirely successful here — customer charged, wallet
+ * credited — while the merchant's endpoint returned an error and the
+ * notification never landed. Their screen then said "Success" and their
+ * system showed nothing, so the customer was never activated and nobody
+ * knew until the customer complained. On 2026-10-23 that was nine
+ * customers in one day for a single partner.
+ *
+ * Shown only when there is something wrong: a delivered notification
+ * needs no comment, and a payment that genuinely failed already explains
+ * itself through failure_reason. */
+function webhookNote(collection: Collection): string | null {
+  const state = collection.webhook_delivery_status;
+  if (state !== "failed" && state !== "retrying") return null;
+
+  const code = collection.webhook_response_code;
+  const reason = code ? `HTTP ${code}` : "no response";
+  if (state === "retrying") {
+    return `Your system has not accepted this yet (${reason}) — still retrying.`;
+  }
+  const tries = collection.webhook_attempts ?? 0;
+  return `Your system did not receive this (${reason}${tries ? ` after ${tries} tries` : ""}).`;
+}
+
 export default function CollectionsPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   // Once a collection has been manually refreshed, keep showing the
@@ -245,6 +271,9 @@ export default function CollectionsPage() {
                         collection.failure_reason && (
                           <p className="text-xs text-on-surface-variant mt-1">{collection.failure_reason}</p>
                         )}
+                      {webhookNote(collection) && (
+                        <p className="text-xs text-amber-700 mt-1">{webhookNote(collection)}</p>
+                      )}
                     </td>
                     <td className={`${tdClass} text-right`}>
                       {needsRefresh && (

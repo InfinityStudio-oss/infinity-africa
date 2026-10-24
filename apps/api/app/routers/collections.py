@@ -38,6 +38,10 @@ from app.services.collections import initiate_collection, initiate_dynamic_qr_co
 from app.services.crud import get_for_merchant, list_for_merchant
 from app.services.idempotency import run_idempotent
 from app.services.payment_links import validate_payment_link_for_collection
+from app.services.webhook_status import (
+    apply_webhook_status,
+    batch_collection_webhook_status,
+)
 
 router = APIRouter(prefix="/merchants/{merchant_id}/collections", tags=["collections"])
 initiate_router = APIRouter(prefix="/collections", tags=["collections"])
@@ -249,7 +253,13 @@ def list_collections(
 ):
     client = get_supabase_admin()
     rows, total = list_for_merchant(client, "collections", merchant_id=merchant_id, pagination=pagination)
-    data = [CollectionResponse(**row) for row in rows]
+    # One batched query for the whole page, not one per row — a merchant
+    # needs to know when a payment succeeded but their endpoint never
+    # received it, which was previously visible only to us.
+    statuses = batch_collection_webhook_status(
+        client, merchant_id=merchant_id, collection_ids=[str(row["id"]) for row in rows]
+    )
+    data = [CollectionResponse(**row) for row in apply_webhook_status(rows, statuses)]
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
 
@@ -263,4 +273,7 @@ def get_collection(
     row = get_for_merchant(client, "collections", merchant_id=merchant_id, row_id=collection_id)
     if not row:
         raise NotFoundError("Collection not found")
-    return APIResponse(data=CollectionResponse(**row))
+    statuses = batch_collection_webhook_status(
+        client, merchant_id=merchant_id, collection_ids=[str(row["id"])]
+    )
+    return APIResponse(data=CollectionResponse(**apply_webhook_status([row], statuses)[0]))

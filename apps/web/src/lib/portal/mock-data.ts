@@ -214,6 +214,11 @@ export function mockCollections(): Collection[] {
     provider_result: null,
     provider_payment_status: null,
     channel: null,
+    // Webhook delivery is a real-backend concern; mock data has no
+    // merchant endpoint behind it, so there is nothing to report.
+    webhook_delivery_status: null,
+    webhook_response_code: null,
+    webhook_attempts: null,
   }));
 }
 

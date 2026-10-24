@@ -77,6 +77,14 @@ class CollectionResponse(BaseModel):
     # per-method message) — not columns of the collections table itself.
     transaction_reference: str | None = None
     message: str | None = None
+    # Whether the merchant's own endpoint received the notification for
+    # this payment — see app/services/webhook_status.py. A payment can be
+    # entirely successful here while their system never heard about it,
+    # which used to be visible only to us. None means there is nothing to
+    # say: no webhook configured, or no event raised yet.
+    webhook_delivery_status: str | None = None
+    webhook_response_code: int | None = None
+    webhook_attempts: int | None = None
     expires_at: datetime | None = None
     initiated_at: datetime
     completed_at: datetime | None = None

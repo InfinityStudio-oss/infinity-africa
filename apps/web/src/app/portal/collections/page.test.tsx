@@ -71,6 +71,9 @@ function collection(overrides: Partial<Collection>): Collection {
     provider_result: null,
     provider_payment_status: null,
     channel: null,
+    webhook_delivery_status: null,
+    webhook_response_code: null,
+    webhook_attempts: null,
     ...overrides,
   };
 }
@@ -157,5 +160,84 @@ describe("Merchant portal CollectionsPage — refresh status", () => {
     render(<CollectionsPage />);
 
     expect(await screen.findByText("Customer cancelled the prompt")).toBeInTheDocument();
+  });
+
+  // A payment can be entirely successful here while the merchant's own
+  // endpoint never received the notification, so their system shows
+  // nothing and the customer is never activated. That used to be visible
+  // only to us; on 2026-10-23 it cost one partner nine customers in a day.
+  it("warns when a payment succeeded but the merchant's own system never received it", async () => {
+    listCollections.mockResolvedValue([
+      collection({
+        id: "col-5",
+        status: "successful",
+        webhook_delivery_status: "failed",
+        webhook_response_code: 500,
+        webhook_attempts: 5,
+      }),
+    ]);
+    const { default: CollectionsPage } = await import("./page");
+    render(<CollectionsPage />);
+
+    expect(
+      await screen.findByText("Your system did not receive this (HTTP 500 after 5 tries)."),
+    ).toBeInTheDocument();
+  });
+
+  it("still shows the payment itself as successful when their endpoint failed", async () => {
+    // The guarantee: a merchant's broken endpoint must never make a
+    // payment we completed look like it did not happen. The money moved.
+    listCollections.mockResolvedValue([
+      collection({
+        id: "col-6",
+        status: "successful",
+        webhook_delivery_status: "failed",
+        webhook_response_code: 500,
+      }),
+    ]);
+    const { default: CollectionsPage } = await import("./page");
+    render(<CollectionsPage />);
+
+    expect(await screen.findByText("Success")).toBeInTheDocument();
+  });
+
+  it("says it is still retrying while delivery has not given up", async () => {
+    listCollections.mockResolvedValue([
+      collection({
+        id: "col-7",
+        status: "successful",
+        webhook_delivery_status: "retrying",
+        webhook_response_code: 302,
+      }),
+    ]);
+    const { default: CollectionsPage } = await import("./page");
+    render(<CollectionsPage />);
+
+    expect(
+      await screen.findByText("Your system has not accepted this yet (HTTP 302) — still retrying."),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing when the notification was delivered", async () => {
+    // Most merchants have no endpoint at all. They must not grow a new
+    // column of warnings about something that worked.
+    listCollections.mockResolvedValue([
+      collection({ id: "col-8", status: "successful", webhook_delivery_status: "delivered", webhook_response_code: 200 }),
+    ]);
+    const { default: CollectionsPage } = await import("./page");
+    render(<CollectionsPage />);
+
+    await screen.findByText("Success");
+    expect(screen.queryByText(/did not receive this/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/still retrying/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing when the merchant has no webhook configured", async () => {
+    listCollections.mockResolvedValue([collection({ id: "col-9", status: "successful" })]);
+    const { default: CollectionsPage } = await import("./page");
+    render(<CollectionsPage />);
+
+    await screen.findByText("Success");
+    expect(screen.queryByText(/did not receive this/)).not.toBeInTheDocument();
   });
 });

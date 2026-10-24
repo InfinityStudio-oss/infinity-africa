@@ -223,20 +223,44 @@ class _FakeQuery:
             i += 1
         return re.fullmatch("".join(regex_parts), str(row_value), re.IGNORECASE) is not None
 
+    @staticmethod
+    def _value_for(row: dict, column: str):
+        """A column's value, including PostgREST's `payload->>key` path.
+
+        Real PostgREST can filter on a field *inside* a json column, which
+        is how a webhook event is matched back to its collection
+        (`payload->>collection_id`) - webhook_events has no collection_id
+        column of its own.
+
+        This fake used to resolve any such column to None, so a filter on
+        one matched nothing and the test built on it passed for entirely
+        the wrong reason: not "the right rows came back" but "no rows did".
+        Same lesson as the multi-row .single() rule and the .in_() length
+        cap - wherever this fake is more permissive than PostgREST, a bug
+        ships green.
+        """
+        if "->>" in column:
+            container_name, _, field = column.partition("->>")
+            container = row.get(container_name.strip())
+            if isinstance(container, dict):
+                return container.get(field.strip())
+            return None
+        return row.get(column)
+
     def _matches(self, row: dict) -> bool:
         for kind, column, value in self._filters:
-            if kind == "eq" and str(row.get(column)) != str(value):
+            if kind == "eq" and str(self._value_for(row, column)) != str(value):
                 return False
-            if kind == "neq" and str(row.get(column)) == str(value):
+            if kind == "neq" and str(self._value_for(row, column)) == str(value):
                 return False
-            if kind == "ilike" and not self._ilike_matches(row.get(column), value):
+            if kind == "ilike" and not self._ilike_matches(self._value_for(row, column), value):
                 return False
-            if kind == "is" and value == "null" and row.get(column) is not None:
+            if kind == "is" and value == "null" and self._value_for(row, column) is not None:
                 return False
-            if kind == "in" and str(row.get(column)) not in [str(v) for v in value]:
+            if kind == "in" and str(self._value_for(row, column)) not in [str(v) for v in value]:
                 return False
             if kind in ("gte", "gt", "lte", "lt"):
-                cmp = self._compare(row.get(column), value)
+                cmp = self._compare(self._value_for(row, column), value)
                 if cmp is None:
                     return False
                 if kind == "gte" and cmp < 0:
