@@ -79,7 +79,19 @@ def _platform_revenue_since(client: Client, *, account_id: str | None, since: st
 def get_admin_overview(client: Client) -> dict:
     now = datetime.now(timezone.utc)
 
-    total_merchants = (client.table("merchants").select("id", count="exact").execute()).count or 0
+    # Businesses, not rows. A closed account is a business that has left,
+    # and counting it made the headline figure drift further from reality
+    # with every account that was ever wound up — including the duplicate
+    # signups a typo creates (see app/services/duplicate_signup.py).
+    #
+    # `suspended` still counts: those are customers, temporarily blocked,
+    # not gone. Only `closed` is terminal.
+    #
+    # This cannot catch a duplicate that is still `active` — nothing can,
+    # automatically. Those come off the count when someone closes them.
+    total_merchants = (
+        client.table("merchants").select("id", count="exact").neq("status", "closed").execute()
+    ).count or 0
 
     day_start = dar_es_salaam_day_start_utc(now)
     month_start = dar_es_salaam_month_start_utc(now)
@@ -116,18 +128,23 @@ def get_admin_overview(client: Client) -> dict:
         Decimal(0),
     )
 
-    failed_transactions = sum(
-        1
-        for t in (
-            client.table("transactions")
-            .select("created_at")
-            .eq("status", "failed")
-            .gte("created_at", day_start)
-            .execute()
-        ).data
-        or []
-        if _is_today(t["created_at"], now)
-    )
+    # Counted by the database, not by how many rows came back. This used
+    # to sum a plain select, and PostgREST caps a response at 1000 rows —
+    # so the card read exactly "1,000" on 2026-10-24 when the true figure
+    # was 1,049, and would have stayed pinned at 1,000 however far it
+    # actually rose. It became wrong precisely because the platform grew
+    # enough to cross that line in a single day.
+    #
+    # day_start is already midnight on the merchant's calendar (see
+    # app/core/time.py), so the filter alone defines "today" and the
+    # per-row _is_today check it used to need is redundant.
+    failed_transactions = (
+        client.table("transactions")
+        .select("id", count="exact")
+        .eq("status", "failed")
+        .gte("created_at", day_start)
+        .execute()
+    ).count or 0
 
     successful_withdrawals = (
         client.table("disbursements")
