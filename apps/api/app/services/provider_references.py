@@ -36,6 +36,7 @@ logger = logging.getLogger("infinity.provider_references")
 UNIQUE_VIOLATION = "23505"
 COLLECTIONS_PROVIDER_REFERENCE_INDEX = "collections_provider_reference_key"
 CHECKOUT_ORDERS_PROVIDER_REFERENCE_INDEX = "checkout_orders_provider_reference_key"
+TRANSACTIONS_PROVIDER_REFERENCE_INDEX = "transactions_provider_reference_key"
 
 
 def is_duplicate_provider_reference(exc: Exception, index_name: str) -> bool:
@@ -78,6 +79,63 @@ def insert_collection_tolerating_repeated_reference(
             fallback_reference,
         )
         return insert_row(client, "collections", {**row, "provider_reference": fallback_reference})
+
+
+def insert_transaction_tolerating_repeated_reference(
+    client: Client,
+    row: dict,
+    *,
+    fallback_reference: str,
+    context: str,
+) -> dict:
+    """Inserts a transaction, surviving a provider reference already held.
+
+    `transactions.provider_reference` carries its own UNIQUE index, and the
+    value put in it is Selcom's — copied from the collection at push time.
+    Nothing ever syncs it afterwards, while
+    update_collection_tolerating_repeated_reference *does* refresh the
+    collection's copy from Selcom's later replies. Measured on 2026-10-25:
+    all 10,447 transactions of the preceding five days held a reference
+    their collection no longer had.
+
+    So every superseded value stays locked in `transactions` while being
+    free in `collections`. When Selcom then reuses one - which they
+    demonstrably do - the new collection takes it legally and this insert
+    is the thing that breaks:
+
+        duplicate key value violates unique constraint
+        "transactions_provider_reference_key"
+
+    That raised out of POST /v1/collections/wallet-push as a 500, *after*
+    the customer had already been charged, leaving a collection that later
+    resolved to `successful` with no transaction behind it - so no ledger
+    posting, and the merchant never credited. Four real payments reached
+    that state (TZS 2,500, all BennyWiFi) before this guard existed.
+
+    The fallback is the transaction's own generated reference, which is
+    unique by construction and is an identifier this app owns - the same
+    reasoning as the collection fallback. Losing Selcom's value here costs
+    nothing that matters: the collection still holds the authoritative
+    reference, and this column was already unreliable for lookups because
+    of the drift above. A row that exists and is slightly less searchable
+    beats a 500 on a payment the customer has already made.
+
+    Narrow on both SQLSTATE and index name, so any other unique violation
+    - a repeated `reference`, say - still raises as the real bug it is.
+    """
+    try:
+        return insert_row(client, "transactions", row)
+    except Exception as exc:
+        if not is_duplicate_provider_reference(exc, TRANSACTIONS_PROVIDER_REFERENCE_INDEX):
+            raise
+        logger.warning(
+            "transaction_duplicate_provider_reference context=%s provider_reference=%s "
+            "falling_back_to=%s",
+            context,
+            row.get("provider_reference"),
+            fallback_reference,
+        )
+        return insert_row(client, "transactions", {**row, "provider_reference": fallback_reference})
 
 
 def update_collection_tolerating_repeated_reference(

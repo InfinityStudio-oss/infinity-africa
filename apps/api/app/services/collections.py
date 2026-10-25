@@ -27,7 +27,6 @@ from supabase import Client
 from app.core.analytics import amount_band, track
 from app.core.errors import InsufficientBalanceError
 from app.core.payment_minimums import assert_amount_allowed
-from app.services.payment_rejections import assert_amount_allowed_recording
 from app.core.push_throttle import assert_customer_push_allowed
 from app.core.references import generate_reference
 from app.core.time import utc_now_iso
@@ -47,6 +46,10 @@ from app.services.fraud_monitoring_service import (
 from app.services.ledger import post_collection_entries, reverse_collection_entries
 from app.services.merchant_gate import require_approved_merchant
 from app.services.notifications_service import notify_admin, notify_merchant
+from app.services.payment_rejections import assert_amount_allowed_recording
+from app.services.provider_references import (
+    insert_transaction_tolerating_repeated_reference,
+)
 from app.services.selcom.client import get_selcom_client
 from app.services.selcom.schemas import CollectionResult
 from app.services.webhooks import enqueue_webhook_event
@@ -171,13 +174,19 @@ def create_processing_transaction(
     initiated it."""
     fee_amount = calculate_collection_fee(client, merchant_id=merchant_id, amount=amount, channel=method)
     net_amount = amount - fee_amount
+    reference = generate_reference("TXN")
 
-    return insert_row(
+    # Tolerating a repeated provider reference, for the same reason the
+    # collection insert does — except here the value can collide with a
+    # reference no collection holds any more, because only the collection's
+    # copy is ever refreshed. Without this, the push 500s *after* the
+    # customer has paid and the collection is left with no transaction, so
+    # the merchant is never credited. See the helper's own docstring.
+    return insert_transaction_tolerating_repeated_reference(
         client,
-        "transactions",
         {
             "merchant_id": str(merchant_id),
-            "reference": generate_reference("TXN"),
+            "reference": reference,
             "provider_reference": provider_reference,
             "type": "collection",
             "method": method,
@@ -188,6 +197,8 @@ def create_processing_transaction(
             "currency": currency,
             "status": "processing",
         },
+        fallback_reference=reference,
+        context="create_processing_transaction",
     )
 
 
