@@ -78,6 +78,11 @@ logger = logging.getLogger("infinity.collection_expiry")
 # would record that Selcom said something it never said.
 _INTERNAL_REASON = "expired"
 
+# Re-exported: app/routers/webhooks.py needs to recognise a collection
+# *we* expired, as opposed to one the provider declined, before it will
+# let a late callback reopen it.
+COLLECTION_EXPIRED_REASON = _INTERNAL_REASON
+
 
 def _iso(moment: datetime) -> str:
     return moment.isoformat()

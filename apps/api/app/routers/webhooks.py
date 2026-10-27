@@ -2,6 +2,7 @@ import hmac
 import json
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,6 +15,9 @@ from app.core.errors import NotFoundError, ValidationAPIError
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.rate_limit import RateLimitExceededError, enforce_rate_limit, rate_limit
 from app.core.time import utc_now_iso
+from app.services.collection_expiry import (
+    COLLECTION_EXPIRED_REASON,
+)
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
 from app.schemas.common import APIResponse
@@ -42,6 +46,42 @@ callback_router = APIRouter(prefix="/webhooks", tags=["webhooks (provider callba
 logger = logging.getLogger("infinity.webhooks")
 
 _HEADER_NAMES_NEVER_STORED = {"authorization", "cookie"}
+
+
+def _expired_within_grace(collection: dict, *, payment_status: str, grace_hours: int) -> bool:
+    """A payment the customer completed after we stopped waiting.
+
+    Narrow on every axis, because this is the one case where an unsigned
+    delivery is allowed to reopen something we had closed:
+
+      * only a collection *we* expired — `failed` with the `expired`
+        reason code this platform sets itself, never a provider decline,
+        a cancellation or a reversal;
+      * only while the provider could still plausibly answer for it, the
+        same grace window the scheduled sweep uses;
+      * only when the delivery claims COMPLETED. That claim is never
+        trusted — Selcom is re-queried over our own connection before a
+        shilling moves — but it keeps us from spending a provider call on
+        every late `PENDING` chirp about a payment nobody made.
+    """
+    if collection.get("status") != "failed":
+        return False
+    if collection.get("failure_reason_code") != COLLECTION_EXPIRED_REASON:
+        return False
+    if str(payment_status or "").upper() != "COMPLETED":
+        return False
+    if grace_hours <= 0:
+        return False
+    failed_at = collection.get("failed_at")
+    if not failed_at:
+        return False
+    try:
+        closed = datetime.fromisoformat(str(failed_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if closed.tzinfo is None:
+        closed = closed.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - closed <= timedelta(hours=grace_hours)
 
 
 def _safe_headers_for_storage(headers) -> dict[str, str]:
@@ -420,7 +460,28 @@ async def selcom_checkout_webhook(
     # for an answer. Anything already resolved has nothing to learn from
     # a lookup, so re-asking about one is pure provider budget spent on
     # an unauthenticated request's say-so.
-    if hinting_unsigned and collection.get("status") != "processing":
+    #
+    # With one exception, which cost 58 customers their service before it
+    # was found. A collection we gave up on after
+    # collection_push_expiry_minutes is not "resolved" - it is abandoned,
+    # on our clock, not the provider's. Selcom keeps the prompt alive
+    # longer, so the customer can still approve, and Selcom's COMPLETED
+    # callback then arrives a median of 122 seconds after our expiry
+    # write. Every one of those was rejected here, while the proof of
+    # payment sat in selcom_webhook_events doing nothing.
+    #
+    # Letting it through buys no trust: resolve_checkout_collection_from_
+    # webhook_hint ignores everything the delivery claims and re-queries
+    # Selcom over our own authenticated connection. The callback only
+    # says *which order to ask about* - and asking about a payment a
+    # customer may have just made is exactly what we want to spend
+    # provider budget on.
+    late_payment = _expired_within_grace(
+        collection,
+        payment_status=payload.payment_status,
+        grace_hours=settings.collection_push_expiry_grace_hours,
+    )
+    if hinting_unsigned and collection.get("status") != "processing" and not late_payment:
         update_row(
             client,
             "selcom_webhook_events",
@@ -428,6 +489,28 @@ async def selcom_checkout_webhook(
             {"status": "failed", "processing_error": "unsigned callback for an already-resolved collection"},
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+
+    if late_payment:
+        # Reopened only so the ordinary path will act on it at all —
+        # resolve_collection ignores anything that is not `processing`.
+        # Nothing is credited by this write. If Selcom turns out to
+        # disagree, the collection simply sits in `processing` and the
+        # next expiry sweep closes it again, which is the same recovery
+        # the scheduled sweep already relies on; no state is stranded.
+        logger.warning(
+            "selcom_checkout late payment reopening expired collection "
+            "collection_id=%s order_id=%s",
+            collection["id"],
+            payload.order_id,
+        )
+        collection = update_row(
+            client, "collections", uuid.UUID(collection["id"]), {"status": "processing"}
+        )
+        linked = (
+            client.table("transactions").select("id").eq("collection_id", str(collection["id"])).execute()
+        ).data or []
+        if linked:
+            update_row(client, "transactions", uuid.UUID(linked[0]["id"]), {"status": "processing"})
 
     # Deliberately ignores payload.payment_status/result/resultcode —
     # never trusted directly (see this function's docstring). Only used
