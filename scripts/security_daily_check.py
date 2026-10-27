@@ -234,7 +234,7 @@ def check_function_search_path() -> Result:
 #
 # If this starts failing, do not lower it before checking the count in the
 # run summary - the point of the number is that it stops being guesswork.
-_MIN_SECURITY_TESTS = 1500
+_MIN_SECURITY_TESTS = 1600
 
 SECURITY_TESTS = [
     "tests/test_admin_api_keys.py", "tests/test_api_key_pairs.py", "tests/test_auth.py",
@@ -254,6 +254,21 @@ SECURITY_TESTS = [
     "tests/test_security_daily_check.py",
     "tests/test_tenant_isolation_route_guards.py",
     "tests/test_admin_route_guards.py",
+    # Added 2026-10-27. Every one of these was written with a control and
+    # then left out of CI, because this list is the only thing that runs
+    # and nothing adds to it automatically. That is the failure mode this
+    # comment exists to interrupt: a regression suite that exists, passes
+    # locally, and is never run again.
+    "tests/test_cross_merchant_denial_alert.py",
+    "tests/test_api_request_log_records_failures.py",
+    "tests/test_transaction_duplicate_provider_reference.py",
+    "tests/test_late_payment_reopens_expired_collection.py",
+    "tests/test_webhook_retry_window.py",
+    "tests/test_collection_webhook_status.py",
+    "tests/test_payment_minimum_rejections.py",
+    "tests/test_webhook_exhausted_alert_dedupe.py",
+    "tests/test_admin_merchants_list_batching.py",
+    "tests/test_signing_secret_failure_is_not_a_downgrade.py",
 ]
 
 

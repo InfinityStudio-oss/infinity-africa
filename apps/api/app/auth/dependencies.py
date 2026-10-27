@@ -22,6 +22,7 @@ user_metadata or app_metadata, which callers can influence or which aren't
 meant to be treated as an authorization source of truth.
 """
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -47,6 +48,8 @@ from app.schemas.enums import UserRole
 from app.services.crud import execute_maybe_single
 from app.services.ip_allowlist import is_ip_allowed
 from app.services.security_alerts import notify_security_event
+
+logger = logging.getLogger("infinity.auth")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -666,6 +669,21 @@ def authorize_merchant_action(
     """
     if caller.actor_type == "api_key":
         if caller.merchant_id != merchant_id:
+            # A live key reaching for a merchant it does not own. This is
+            # the clean signal for an insecure-direct-object-reference
+            # attempt: the key authenticated fine, so this is not a typo in
+            # a credential — something walked an id it was not given.
+            #
+            # It can also be an integrator looping over their own ids with
+            # the wrong key, which is why it is deduplicated per key rather
+            # than alerting on every request, and why the wording says
+            # attempted rather than accusing anyone.
+            _notify_cross_merchant_denied(
+                actor="api_key",
+                actor_id=caller.actor_id,
+                owns=caller.merchant_id,
+                attempted=merchant_id,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="API key does not belong to this merchant"
             )
@@ -678,4 +696,56 @@ def authorize_merchant_action(
 
     membership = get_merchant_membership(merchant_id, caller.user)
     if membership is None or (allowed_roles and membership.role not in allowed_roles):
+        # Only a complete absence of membership is reported. Holding the
+        # wrong *role* inside a merchant you legitimately belong to is an
+        # everyday permissions miss - staff hitting an admin-only screen -
+        # and alerting on it would bury the case that matters.
+        if membership is None:
+            _notify_cross_merchant_denied(
+                actor="user",
+                actor_id=caller.user.id,
+                owns=None,
+                attempted=merchant_id,
+                actor_email=caller.user.email,
+            )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this merchant")
+
+
+def _notify_cross_merchant_denied(
+    *,
+    actor: str,
+    actor_id: uuid.UUID | str | None,
+    owns: uuid.UUID | None,
+    attempted: uuid.UUID,
+    actor_email: str | None = None,
+) -> None:
+    """Report an attempt to act on a merchant the caller has no claim to.
+
+    Never raises: an authorization decision has already been made and must
+    not be changed, delayed or turned into a 500 by a notification. The
+    403 is raised by the caller regardless of what happens here.
+
+    Deliberately carries no customer data and no key material - the actor
+    id, the merchant actually held, and the merchant reached for. That is
+    enough to tell a looping integrator from someone walking ids, and
+    nothing in it is useful to an attacker who later reads the mailbox.
+    """
+    try:
+        notify_security_event(
+            get_supabase_admin(),
+            event="merchant.cross_access_denied",
+            title="Attempt to act on another merchant",
+            actor_email=actor_email,
+            actor_id=actor_id,
+            extra={
+                "Actor type": actor,
+                "Merchant held": str(owns) if owns else "none",
+                "Merchant attempted": str(attempted),
+            },
+            # Per actor and target: one integrator looping over ids raises
+            # one alert, not one per request, while a different target from
+            # the same actor is still news.
+            dedupe_key=f"{actor_id}:{attempted}",
+        )
+    except Exception:
+        logger.warning("cross_merchant_denial_alert_failed", exc_info=True)

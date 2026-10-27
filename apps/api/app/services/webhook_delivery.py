@@ -174,16 +174,46 @@ def _batch_fairly(due: list[dict]) -> list[dict]:
     return interleaved[:_BATCH_SIZE]
 
 
+class SigningSecretUnavailableError(Exception):
+    """A merchant has a signing secret that could not be decrypted.
+
+    Distinct from "no secret configured", which is an ordinary state: a
+    merchant who has never generated one receives unsigned deliveries by
+    design. This is the other thing entirely — a merchant who *did*
+    configure signing, whose receiver verifies it, and whose secret we
+    cannot currently read.
+    """
+
+
 def _secret_for(client: Client, merchant_id: str) -> str | None:
+    """The merchant's signing secret, or None if they have not set one.
+
+    Raises SigningSecretUnavailableError if one is configured but cannot
+    be decrypted.
+
+    That distinction is the whole point. This used to swallow the failure
+    and return None, which is the same value as "no secret configured" —
+    so a merchant who had deliberately turned signing on would silently
+    receive an **unsigned** delivery the moment decryption broke (a
+    rotated or mismatched SECRET_BOX_KEY, corrupted ciphertext). Their
+    receiver then either rejects it, losing a real payment notification,
+    or accepts unsigned payloads — which means it would also accept a
+    forged one.
+
+    Failing the attempt instead is strictly better. The delivery retries
+    on the normal schedule, the row stays visible as undelivered, and if
+    the cause is a key that has been fixed in the meantime a later attempt
+    simply succeeds. Nothing is silently downgraded.
+    """
     merchant = get_by_id(client, "merchants", uuid.UUID(merchant_id))
     encrypted = merchant.get("webhook_secret_encrypted") if merchant else None
     if not encrypted:
         return None
     try:
         return decrypt_secret(encrypted)
-    except Exception:
+    except Exception as exc:
         logger.exception("webhook secret could not be decrypted merchant_id=%s", merchant_id)
-        return None
+        raise SigningSecretUnavailableError(merchant_id) from exc
 
 
 def deliver_event(client: Client, event: dict) -> bool:
@@ -212,7 +242,45 @@ def deliver_event(client: Client, event: dict) -> bool:
         "X-Infinity-Delivery": str(event["id"]),
         "X-Infinity-Timestamp": str(int(datetime.now(timezone.utc).timestamp())),
     }
-    secret = _secret_for(client, event["merchant_id"])
+    try:
+        secret = _secret_for(client, event["merchant_id"])
+    except SigningSecretUnavailableError:
+        # Configured to sign, and we cannot. Nothing is sent: an unsigned
+        # delivery to a receiver that verifies signatures is either a lost
+        # notification or, worse, proof that it accepts unsigned payloads.
+        # The attempt is counted so this still backs off and eventually
+        # stops rather than spinning, and the row stays visible as
+        # undelivered. A later attempt succeeds by itself once the key is
+        # fixed, because nothing about the event was changed.
+        logger.error(
+            "webhook delivery skipped: signing secret unavailable event=%s attempt=%s",
+            event["id"],
+            attempts,
+        )
+        if should_alert_once(
+            f"signing_secret_unavailable:{event['merchant_id']}",
+            window_seconds=get_settings().webhook_exhausted_alert_window_seconds,
+        ):
+            capture_message(
+                "webhook signing secret could not be decrypted — delivery withheld",
+                level="error",
+                tags={"merchant_id": str(event["merchant_id"])},
+            )
+        update_row(
+            client,
+            "webhook_events",
+            event_id,
+            {
+                "status": "failed" if attempts >= _MAX_ATTEMPTS else "retrying",
+                "attempts": attempts,
+                "last_attempted_at": utc_now_iso(),
+                # No response_status_code: nothing was sent, so there is no
+                # status to record. Writing one would invent a reply the
+                # merchant's server never gave.
+            },
+        )
+        return False
+
     if secret:
         headers["X-Infinity-Signature"] = sign_outbound_payload(raw_body=raw_body, secret=secret)
 
