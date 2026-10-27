@@ -98,6 +98,10 @@ export interface AdminCollectionRow {
   channel: string | null;
   provider_payment_status: string | null;
   failure_reason: string | null;
+  // Whether this merchant's own endpoint received the notification. null
+  // means nothing to say — no webhook configured, or no event raised yet.
+  webhook_delivery_status: string | null;
+  webhook_response_code: number | null;
 }
 
 export interface AdminPaymentLinkRow {

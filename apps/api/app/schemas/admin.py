@@ -228,6 +228,14 @@ class AdminCollectionResponse(BaseModel):
     channel: str | None = None
     provider_payment_status: str | None = None
     failure_reason: str | None = None
+    # Whether the merchant's own endpoint received the notification for
+    # this payment — see app/services/webhook_status.py. The merchant sees
+    # this on their own Collections page; Super Admin could not see it at
+    # all, which made "the customer paid and was never connected" invisible
+    # from the side that fields the complaint. None means nothing to say:
+    # no webhook configured, or no event raised yet.
+    webhook_delivery_status: str | None = None
+    webhook_response_code: int | None = None
 
 
 class AdminWithdrawalResponse(BaseModel):

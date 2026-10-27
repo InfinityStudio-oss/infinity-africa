@@ -68,18 +68,49 @@ def batch_collection_webhook_status(
         ids,
     )
 
+    # A collection can in principle produce more than one event; the most
+    # recent one is the current truth about its delivery.
+    return _latest_by_collection(rows)
+
+
+def admin_batch_collection_webhook_status(
+    client: Client, collection_ids: list[str] | set[str]
+) -> dict[str, dict]:
+    """The same lookup across every merchant, for Super Admin.
+
+    Separate function rather than an optional merchant_id, deliberately.
+    This one cannot be scoped, so a merchant-facing caller must not be
+    able to reach it by leaving an argument out - the name says who it is
+    for and the merchant-scoped version stays the default.
+
+    Super Admin fields the "my customer paid and was never connected"
+    complaint, and until now that was the one screen where the answer was
+    invisible: the merchant could see the delivery failure on their own
+    page, the person being asked about it could not.
+    """
+    ids = [str(collection_id) for collection_id in collection_ids if collection_id]
+    if not ids:
+        return {}
+
+    rows = fetch_in_chunks(
+        lambda batch: client.table("webhook_events")
+        .select("payload, event_name, status, response_status_code, attempts, created_at")
+        .in_("payload->>collection_id", batch),
+        ids,
+    )
+    return _latest_by_collection(rows)
+
+
+def _latest_by_collection(rows: list[dict]) -> dict[str, dict]:
     latest: dict[str, dict] = {}
     for row in rows:
         payload = row.get("payload") or {}
         collection_id = str(payload.get("collection_id") or "")
         if not collection_id or row.get("event_name") not in COLLECTION_EVENTS:
             continue
-        # A collection can in principle produce more than one event; the
-        # most recent one is the current truth about its delivery.
         seen = latest.get(collection_id)
         if seen is None or str(row.get(_SORT_KEY) or "") >= str(seen.get(_SORT_KEY) or ""):
             latest[collection_id] = row
-
     return {
         collection_id: {
             "status": row.get("status"),

@@ -30,7 +30,9 @@ deliveries simply carry no signature header.
 **Failures back off and eventually stop.** Attempts are spaced by
 `_BACKOFF_SECONDS` and capped at `_MAX_ATTEMPTS`, after which the row is
 `failed` and never retried — a permanently broken endpoint must not be
-retried forever against a live provider's traffic.
+retried forever against a live provider's traffic. The whole sequence
+finishes in ten minutes; see `_BACKOFF_SECONDS` for why a longer tail was
+measured to buy nothing.
 
 **Delivery never blocks payment processing.** Nothing here is called from
 a request path. The scheduler in app/main.py drives it, and every
@@ -65,8 +67,8 @@ from typing import Any
 import httpx
 from supabase import Client
 
-from app.core.analytics import track
 from app.config import get_settings
+from app.core.analytics import track
 from app.core.monitoring import capture_message
 from app.core.secret_box import decrypt_secret
 from app.core.time import utc_now_iso
@@ -76,10 +78,26 @@ from app.services.webhooks import sign_outbound_payload
 
 logger = logging.getLogger("infinity.webhook_delivery")
 
-# Attempt 1 is immediate; the rest are spaced out. Five attempts over ~30
-# minutes covers a receiver restart or a short outage without hammering an
-# endpoint that is simply down.
-_BACKOFF_SECONDS = [0, 60, 300, 900, 1800]
+# Attempt 1 is immediate; the rest are spaced out. Five attempts, the last
+# at ten minutes.
+#
+# It was [0, 60, 300, 900, 1800] — five attempts over 51 minutes. The long
+# tail bought nothing. Measured on 2026-10-27 across 379 given-up
+# deliveries: every single one failed all five times, and 96 of the day's
+# 103 returned the identical status on every attempt. The failures this
+# faces are deterministic — a handler that throws on a payload throws on
+# it an hour later too — so the extra 41 minutes only delayed the moment
+# anyone found out.
+#
+# Ten minutes still covers what the backoff is actually for: a receiver
+# restart or a brief outage. What it stops costing is time-to-knowing. A
+# merchant watching their Collections page now learns a delivery is in
+# trouble in seconds and dead within ten minutes, instead of an hour.
+#
+# Resending stays the recovery for anything longer than that
+# (POST /v1/admin/merchant-webhooks/{id}/resend), which is the right shape:
+# retry briefly and automatically, recover deliberately.
+_BACKOFF_SECONDS = [0, 30, 90, 180, 300]
 _MAX_ATTEMPTS = len(_BACKOFF_SECONDS)
 
 _TIMEOUT_SECONDS = 8.0

@@ -11,6 +11,30 @@ import { refreshAdminCollectionStatusClient } from "@/lib/admin/refresh-collecti
 import { adminCollectionBadge } from "@/lib/admin/status-tones";
 import type { AdminCollectionRow } from "@/lib/admin/types";
 
+/** Whether the merchant's own system was told about this payment.
+ *
+ * Super Admin is who gets asked "my customer paid and was never
+ * connected", and this was the one screen that could not answer it — the
+ * merchant could see the failure on their own page, the person fielding
+ * the complaint could not. Success and error only: a delivery still
+ * inside its ten-minute retry window is not yet news. */
+function deliveryCell(row: AdminCollectionRow) {
+  const state = row.webhook_delivery_status;
+  if (!state) return <span className="text-xs text-on-surface-variant">—</span>;
+  if (state === "delivered") {
+    return <span className="text-xs text-on-surface-variant">Delivered</span>;
+  }
+  if (state === "failed") {
+    const code = row.webhook_response_code;
+    return (
+      <span className="text-xs font-medium text-error">
+        Not received{code ? ` · HTTP ${code}` : ""}
+      </span>
+    );
+  }
+  return <span className="text-xs text-on-surface-variant">Sending…</span>;
+}
+
 export function CollectionsTable({ collections: initialCollections }: { collections: AdminCollectionRow[] }) {
   const [collections, setCollections] = useState(initialCollections);
   // Once a collection has been manually refreshed, keep showing the
@@ -41,6 +65,7 @@ export function CollectionsTable({ collections: initialCollections }: { collecti
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Order / Provider Ref</th>
                 <th className={thClass}>Status</th>
+                <th className={thClass}>Merchant notified</th>
                 <th className={thClass}>Date</th>
                 <th className={`${thClass} text-right`}>Actions</th>
               </tr>
@@ -88,6 +113,7 @@ export function CollectionsTable({ collections: initialCollections }: { collecti
                           </p>
                         )}
                     </td>
+                    <td className={tdClass}>{deliveryCell(row)}</td>
                     <td className={`${tdClass} text-on-surface-variant text-xs`}>{formatDateTime(row.created_at)}</td>
                     <td className={`${tdClass} text-right`}>
                       {needsRefresh && (

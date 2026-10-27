@@ -84,6 +84,7 @@ from app.services.merchant_notifications import (
 )
 from app.services.pay_by_link import get_own_pay_link
 from app.services.payment_links import build_public_url
+from app.services.webhook_status import admin_batch_collection_webhook_status
 from app.services.webhooks import last_webhook_delivery
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -887,6 +888,12 @@ def list_admin_collections(
             if txn.get("collection_id"):
                 fee_net_by_collection_id[txn["collection_id"]] = (txn["fee_amount"], txn["net_amount"])
 
+    # Whether each merchant's own endpoint actually received the
+    # notification. One batched query for the page — Super Admin is who
+    # gets asked "my customer paid and was never connected", and this was
+    # the one screen that could not answer it.
+    webhook_status = admin_batch_collection_webhook_status(client, collection_ids)
+
     data = [
         AdminCollectionResponse(
             collection_id=row["id"],
@@ -912,6 +919,8 @@ def list_admin_collections(
             channel=row.get("channel"),
             provider_payment_status=row.get("provider_payment_status"),
             failure_reason=row.get("failure_reason"),
+            webhook_delivery_status=(webhook_status.get(str(row["id"])) or {}).get("status"),
+            webhook_response_code=(webhook_status.get(str(row["id"])) or {}).get("response_code"),
         )
         for row in rows
     ]

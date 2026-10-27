@@ -34,6 +34,8 @@ function row(overrides: Partial<AdminCollectionRow>): AdminCollectionRow {
     channel: null,
     provider_payment_status: null,
     failure_reason: null,
+    webhook_delivery_status: null,
+    webhook_response_code: null,
     ...overrides,
   };
 }
@@ -70,5 +72,58 @@ describe("CollectionsTable", () => {
 
     await waitFor(() => expect(refreshAdminCollectionStatusClient).toHaveBeenCalledWith("col-1"));
     expect(await screen.findByText("Payment completed")).toBeInTheDocument();
+  });
+
+  // Super Admin is who gets asked "my customer paid and was never
+  // connected". Until 2026-10-27 this screen could not answer it — the
+  // merchant saw the delivery failure on their own page, the person
+  // fielding the complaint did not.
+
+  it("shows the error code when the merchant's system never received the payment", async () => {
+    const { CollectionsTable } = await import("./collections-table");
+    render(
+      <CollectionsTable
+        collections={[row({ status: "successful", webhook_delivery_status: "failed", webhook_response_code: 500 })]}
+      />,
+    );
+
+    expect(await screen.findByText(/Not received/)).toBeInTheDocument();
+    expect(screen.getByText(/HTTP 500/)).toBeInTheDocument();
+  });
+
+  it("shows Delivered when the merchant was told", async () => {
+    const { CollectionsTable } = await import("./collections-table");
+    render(
+      <CollectionsTable
+        collections={[row({ status: "successful", webhook_delivery_status: "delivered", webhook_response_code: 200 })]}
+      />,
+    );
+
+    expect(await screen.findByText("Delivered")).toBeInTheDocument();
+  });
+
+  it("says nothing for a merchant with no webhook configured", async () => {
+    // Most merchants have no endpoint at all — they must not grow a
+    // column full of warnings about something that was never set up.
+    const { CollectionsTable } = await import("./collections-table");
+    render(<CollectionsTable collections={[row({ status: "successful" })]} />);
+
+    await screen.findByText("Juma Traders Ltd");
+    expect(screen.queryByText(/Not received/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Delivered")).not.toBeInTheDocument();
+  });
+
+  it("does not raise alarm while delivery is still inside its retry window", async () => {
+    // A payment still being retried is not yet news; only success and
+    // error are worth a Super Admin's attention.
+    const { CollectionsTable } = await import("./collections-table");
+    render(
+      <CollectionsTable
+        collections={[row({ status: "successful", webhook_delivery_status: "retrying", webhook_response_code: 500 })]}
+      />,
+    );
+
+    expect(await screen.findByText(/Sending/)).toBeInTheDocument();
+    expect(screen.queryByText(/Not received/)).not.toBeInTheDocument();
   });
 });

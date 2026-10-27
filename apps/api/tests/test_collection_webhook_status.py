@@ -278,3 +278,54 @@ def test_listing_costs_one_query_however_many_collections(fake_client, monkeypat
 
     assert len(rows) >= 10
     assert calls.count("webhook_events") == 1, calls
+
+
+# --- the Super Admin view ----------------------------------------------
+#
+# Super Admin is who gets asked "my customer paid and was never
+# connected", and until 2026-10-27 that was the one screen with no answer:
+# the merchant could see the delivery failure on their own page, the
+# person fielding the complaint could not.
+
+
+def test_super_admin_sees_the_failure_across_merchants(fake_client):
+    """Deliberately unscoped — it must return rows for merchants the caller
+    has no membership of, which is exactly why it is a separate function
+    from the merchant-scoped one."""
+    from app.services.webhook_status import admin_batch_collection_webhook_status
+
+    first, second = uuid.uuid4(), uuid.uuid4()
+    a = _collection(fake_client, first)
+    b = _collection(fake_client, second)
+    _event(fake_client, first, a["id"], status="failed", code=500)
+    _event(fake_client, second, b["id"], status="delivered", code=200)
+
+    found = admin_batch_collection_webhook_status(fake_client, [a["id"], b["id"]])
+
+    assert found[str(a["id"])]["status"] == "failed"
+    assert found[str(a["id"])]["response_code"] == 500
+    assert found[str(b["id"])]["status"] == "delivered"
+
+
+def test_the_admin_lookup_agrees_with_the_merchant_one(fake_client):
+    """Same answer, different scope. If these ever disagreed, the merchant
+    and the Super Admin would be reading different truths about the same
+    payment."""
+    from app.services.webhook_status import admin_batch_collection_webhook_status
+
+    merchant_id = uuid.uuid4()
+    col = _collection(fake_client, merchant_id)
+    _event(fake_client, merchant_id, col["id"], status="failed", code=503)
+
+    scoped = batch_collection_webhook_status(
+        fake_client, merchant_id=merchant_id, collection_ids=[col["id"]]
+    )
+    unscoped = admin_batch_collection_webhook_status(fake_client, [col["id"]])
+
+    assert scoped[str(col["id"])] == unscoped[str(col["id"])]
+
+
+def test_the_admin_lookup_asks_nothing_for_no_collections(fake_client):
+    from app.services.webhook_status import admin_batch_collection_webhook_status
+
+    assert admin_batch_collection_webhook_status(fake_client, []) == {}
