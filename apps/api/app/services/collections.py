@@ -40,7 +40,6 @@ from app.services.email import (
 )
 from app.services.failure_reasons import USER_CANCELLED, normalize_failure_reason
 from app.services.fraud_monitoring_service import (
-    check_self_payment_risk,
     evaluate_collection,
 )
 from app.services.ledger import post_collection_entries, reverse_collection_entries
@@ -374,41 +373,30 @@ def resolve_collection(client: Client, *, collection_id: uuid.UUID, result: Coll
     currency = collection["currency"]
     transaction = _find_transaction_for_collection(client, collection_id)
 
-    if result.status == "successful":
-        risk_alert = check_self_payment_risk(client, collection=collection, transaction=transaction)
-        if risk_alert:
-            # Held, not credited: the payer phone matches this merchant's
-            # own contact phone (see fraud_monitoring_service's
-            # SELF_PAYMENT_OWN_TILL rule) — the exact "trying to pay into
-            # your own till" pattern from the incident this whole reversal
-            # fix responds to. Transaction stays "processing"; an admin
-            # clearing the alert (PATCH /v1/admin/risk-alerts/{id}/status)
-            # is what actually credits it, via
-            # finalize_pending_review_collection().
-            collection = update_row(
-                client,
-                "collections",
-                collection_id,
-                {"status": "pending_review", "completed_at": utc_now_iso()},
-            )
-            notify_merchant(
-                client,
-                merchant_id=merchant_id,
-                notification_type=NotificationType.COLLECTION_PENDING_REVIEW,
-                title="Payment pending review",
-                body=f"A payment of {collection['amount']} {currency} is pending review before funds become available.",
-                related_resource_type="collection",
-                related_resource_id=collection_id,
-            )
-            enqueue_webhook_event(
-                client,
-                merchant_id=merchant_id,
-                event_name="collection.pending_review",
-                payload=_collection_webhook_payload(
-                    collection=collection, external_status="pending_clearance", transaction=transaction
-                ),
-            )
-            return collection
+    # The SELF_PAYMENT_OWN_TILL gate used to sit here, holding a payment
+    # at `pending_review` when the payer's phone matched the merchant's
+    # own registered contact number. Removed on 2026-10-27 at the owner's
+    # decision, and the record supports it: of 157 alerts — 99.4% of every
+    # fraud alert this platform has ever raised — exactly **one** payment
+    # was ever actually held, against TZS 144,190 flagged.
+    #
+    # The premise was wrong for this market. A small ISP's registered
+    # contact number is also a customer of their own hotspot, so the rule
+    # fired on ordinary trading: one merchant alone accounted for 83 of
+    # the alerts from a single phone. What it cost was real — an integrator
+    # testing from their own phone found their money stranded with nothing
+    # on screen explaining why, and reasonably concluded the API was broken.
+    #
+    # What is given up is the hold above self_payment_hold_above_amount,
+    # which guarded pay-in → withdraw → dispute-the-mobile-money-leg. That
+    # remains a real pattern; it is simply no longer worth stopping every
+    # honest self-payment to catch, and the reversal path
+    # (reverse_collection_entries) still exists for when a provider does
+    # claw one back.
+    #
+    # finalize_pending_review_collection() is deliberately kept: 32 alerts
+    # are still OPEN and a Super Admin clearing one must still be able to
+    # credit anything historical that is sitting at pending_review.
 
     final_status = "successful" if result.status == "successful" else "failed"
 

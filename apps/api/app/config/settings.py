@@ -126,28 +126,12 @@ class Settings(BaseSettings):
     # back to "processing" and settled normally. 0 disables the recheck.
     collection_push_expiry_grace_hours: int = 24
 
-    # SELF_PAYMENT_OWN_TILL: the amount above which a self-payment is held
-    # for review rather than credited (app/services/
-    # fraud_monitoring_service.py::check_self_payment_risk).
-    #
-    # The rule fires when the payer's phone matches the merchant's own
-    # registered contact phone. It began as an unconditional hold, after a
-    # real "you are trying to pay into your own till" incident. The cost of
-    # that was paid by every honest integrator: testing a payment from your
-    # own phone is the first thing anyone does, and it left their money
-    # sitting at pending_review with nothing explaining why. A partner hit
-    # exactly this on 2026-10-01 and reasonably concluded the API was
-    # broken.
-    #
-    # A self-payment is not profitable on its own -- the payer loses the
-    # fee. What the hold actually guards is the reversal window: pay in,
-    # withdraw the balance, then dispute the original mobile money
-    # transaction. That only pays off at size, so size is what decides.
-    # Below this, credit immediately and raise the alert anyway; above it,
-    # hold as before.
-    #
-    # 0 holds every self-payment, restoring the original behaviour.
-    self_payment_hold_above_amount: Decimal = Decimal(50000)
+    # SELF_PAYMENT_OWN_TILL and its hold threshold were removed on
+    # 2026-10-27 - see app/services/fraud_monitoring_service.py for why.
+    # SELF_PAYMENT_HOLD_ABOVE_AMOUNT may still be set in the environment;
+    # model_config uses extra="ignore", so an orphaned variable is inert
+    # rather than a startup failure.
+
 
     # Whether an UNSIGNED Selcom Checkout callback may trigger an
     # authenticated status lookup (app/routers/webhooks.py).
