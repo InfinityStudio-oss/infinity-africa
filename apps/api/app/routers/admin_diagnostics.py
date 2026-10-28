@@ -190,6 +190,21 @@ _REPORTED_SETTINGS = (
     "require_super_admin_mfa",
     "cache_enabled",
     "oasis_sms_enabled",
+    # Super Admin alerts. Reported because "configured" and "working" look
+    # identical from the outside until a merchant happens to register or a
+    # withdrawal happens to wait - and on a quiet night that is hours
+    # away. A flag that was set but misspelled, or set on the wrong
+    # service, reads here as `default` rather than `env`, which is the
+    # whole point of this endpoint.
+    #
+    # The recipient itself is deliberately NOT listed: this reports
+    # booleans and numbers only, never a value, and an operator's phone
+    # number is not something to render in a diagnostics page. Whether one
+    # is configured shows up instead as a skipped row with a reason in the
+    # Super Admin SMS screen.
+    "super_admin_sms_enabled",
+    "super_admin_sms_new_merchant_enabled",
+    "super_admin_sms_withdrawal_request_enabled",
 )
 
 

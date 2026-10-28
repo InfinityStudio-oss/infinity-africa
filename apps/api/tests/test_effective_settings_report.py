@@ -144,3 +144,38 @@ def test_a_merchant_cannot_read_the_settings(fake_client):
 
 def test_an_unauthenticated_caller_cannot_read_the_settings(fake_client):
     assert client.get(URL).status_code in (401, 403)
+
+
+def test_the_super_admin_sms_flags_are_reported(fake_client, admin, monkeypatch):
+    """A flag set but misspelled, or set on the wrong service, reads as
+    `default` here rather than `env` - which is the only way to tell
+    "configured" from "looks configured" before a merchant happens to
+    register.
+
+    Without this, confirming the feature was switched on meant waiting for
+    a qualifying event, which on a quiet night is hours away.
+    """
+    monkeypatch.setenv("SUPER_ADMIN_SMS_ENABLED", "true")
+    monkeypatch.delenv("SUPER_ADMIN_SMS_NEW_MERCHANT_ENABLED", raising=False)
+    get_settings.cache_clear()
+
+    body = client.get(URL, headers=auth_headers(admin)).json()["data"]["settings"]
+
+    assert body["super_admin_sms_enabled"]["value"] is True
+    assert body["super_admin_sms_enabled"]["source"] == "env"
+    # Absent, so running on its default - the case this endpoint exists for.
+    assert body["super_admin_sms_new_merchant_enabled"]["value"] is False
+    assert body["super_admin_sms_new_merchant_enabled"]["source"] == "default"
+
+
+def test_the_operator_phone_number_is_never_reported(fake_client, admin, monkeypatch):
+    """Booleans and numbers only. An operator's phone number is not
+    something to render in a diagnostics page, and whether one is
+    configured shows up as a skipped row with a reason instead."""
+    monkeypatch.setenv("SUPER_ADMIN_SMS_RECIPIENTS", "255700000001")
+    get_settings.cache_clear()
+
+    response = client.get(URL, headers=auth_headers(admin))
+
+    assert "super_admin_sms_recipients" not in response.json()["data"]["settings"]
+    assert "255700000001" not in response.text
