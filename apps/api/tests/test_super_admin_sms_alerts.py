@@ -377,3 +377,26 @@ def test_both_templates_stay_gsm7():
         ),
     ):
         assert message_cost(body)["encoding"] == "GSM-7"
+
+
+def test_both_messages_lead_with_the_brand_on_its_own_line():
+    """The layout the owner asked for: INFINITYPAY, then the news, then
+    where to go. Pinned because a reword could collapse it back to one
+    run-on line without any test noticing — and because a newline is a
+    plain GSM-7 character, so the structure costs nothing to keep."""
+    for body in (
+        render_new_merchant_admin(business_name="Juma Traders Ltd"),
+        render_withdrawal_request_admin(
+            business_name="Juma Traders Ltd",
+            amount=Decimal(150000),
+            reference="85275081",
+            available_balance=Decimal(2450000),
+        ),
+    ):
+        lines = body.split("\n")
+        assert lines[0] == "INFINITYPAY"
+        assert len(lines) >= 3
+        assert lines[-1].startswith("Review")
+        # Still one message, not several: the newlines are layout, and the
+        # encoding must not have slipped to UCS-2 because of them.
+        assert message_cost(body)["encoding"] == "GSM-7"

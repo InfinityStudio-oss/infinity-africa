@@ -267,9 +267,13 @@ ADMIN_PORTAL_URL = "https://www.infinitypay.me/admin-login"
 # a registered account is status='pending', kyc_status='unverified', and
 # an operator reading this on a phone must not come away thinking a
 # business is live.
+# INFINITYPAY on its own line, then the news, then where to go. A newline
+# is a plain GSM-7 character costing one septet - the same as the ": " it
+# replaces, minus one - so the layout is a character cheaper than the
+# inline form, not more expensive.
 NEW_MERCHANT_ADMIN_TEMPLATE = (
-    "INFINITYPAY: {business_name} has opened a new account. "
-    "Not yet approved. "
+    "INFINITYPAY\n"
+    "{business_name} has opened a new account. Not yet approved.\n"
     "Review on portal: " + ADMIN_PORTAL_URL
 )
 
@@ -278,10 +282,9 @@ NEW_MERCHANT_ADMIN_TEMPLATE = (
 # and a reference is 8, so the cap is what keeps the worst case at two
 # parts instead of letting a long name run it to three.
 WITHDRAWAL_REQUEST_ADMIN_TEMPLATE = (
-    "INFINITYPAY: {business_name} requested TZS {amount}. "
-    "Bal: TZS {available_balance}. "
-    "Ref: {reference}. "
-    "Awaiting approval. "
+    "INFINITYPAY\n"
+    "{business_name} requested TZS {amount}. Bal: TZS {available_balance}.\n"
+    "Ref: {reference}. Awaiting approval.\n"
     "Review: " + ADMIN_PORTAL_URL
 )
 
