@@ -93,14 +93,43 @@ def main() -> int:
             skipped += 1
             continue
 
-        # Re-checked immediately before writing, every run. This is what
-        # makes a second run safe: if the first one credited it, there is
-        # now a transaction and this skips.
+        # Re-checked immediately before writing, every run.
+        #
+        # The question is "was the wallet credited", and the only honest
+        # answer is whether ledger entries exist - NOT whether a
+        # transaction row does. Crediting is three separate writes
+        # (create the transaction, mark it successful, post the entries),
+        # so an interruption between the first and the last leaves a
+        # transaction with no posting and a merchant with no money.
+        #
+        # This guard used to ask only whether a transaction existed, and
+        # printed "already credited" when it found one. A re-run would
+        # therefore skip exactly the rows that most needed finishing, and
+        # report success while doing it. Production had one such row
+        # (TXN-20261024-FC86CC73, net TZS 488.50) from the same
+        # non-atomic sequence inside resolve_collection.
         existing = (
-            client.table("transactions").select("id").eq("collection_id", str(cid)).execute()
+            client.table("transactions").select("id, status").eq("collection_id", str(cid)).execute()
         ).data or []
         if existing:
-            print(f"  SKIP {ref}: already has a transaction ({str(existing[0]['id'])[:8]}) - already credited")
+            txn_id = str(existing[0]["id"])
+            posted = (
+                client.table("ledger_entries").select("id").eq("transaction_id", txn_id).limit(1).execute()
+            ).data or []
+            if posted:
+                print(f"  SKIP {ref}: transaction {txn_id[:8]} is posted - already credited")
+                skipped += 1
+                continue
+            # A transaction with no posting. Finishing it is the whole
+            # point of the script, so this is reported loudly rather than
+            # skipped quietly - but it is NOT repaired automatically here:
+            # completing a half-written credit needs the same deliberate
+            # look as making one.
+            print(
+                f"  ATTENTION {ref}: transaction {txn_id[:8]} exists with NO ledger entries "
+                f"- the wallet was never credited. Not repaired automatically; see "
+                f"scripts/ledger_integrity_check.py"
+            )
             skipped += 1
             continue
 
