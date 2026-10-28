@@ -22,19 +22,26 @@ Everything here is deliberately inert and boring:
 """
 
 import logging
-from typing import Annotated
+import uuid
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.auth import require_super_admin
 from app.config import get_settings
 from app.core.analytics import track
 from app.core.monitoring import capture_message
+from app.core.phone import normalize_tz_phone
 from app.core.rate_limit import rate_limit
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
 from app.schemas.common import APIResponse
+from app.services.audit import write_audit_log
+from app.services.security_alerts import mask_phone
+from app.services.sms_provider import SmsNotConfigured, send_sms
+from app.services.sms_text import message_cost, render_new_merchant_admin
 
 logger = logging.getLogger("infinity.admin.diagnostics")
 
@@ -248,3 +255,136 @@ def report_effective_settings(
             }
         }
     )
+
+
+# --- Super Admin SMS test ----------------------------------------------
+
+
+class _SmsTestRequest(BaseModel):
+    """How far to go. Each step proves strictly more than the one before,
+    and only the last one costs money or reaches a handset."""
+
+    mode: Literal["preview", "dry_run", "send"] = "preview"
+
+
+@router.post("/test-sms", response_model=APIResponse[dict])
+def test_super_admin_sms(
+    payload: _SmsTestRequest,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_sms_test", limit=3, window_seconds=300))
+    ],
+):
+    """Prove the Super Admin SMS path without waiting for a merchant.
+
+    "Configured" and "configured wrongly" are indistinguishable until a
+    registration or a withdrawal happens to occur, which on a quiet night
+    is hours away. This answers the question on demand, in three steps:
+
+    **preview** (default) - renders the exact message, resolves and masks
+    the recipient, reports the flags and where each came from. Touches no
+    provider and costs nothing. Enough to catch an unset variable, a
+    misspelled one, a number that will not normalise, or a template that
+    has grown to two segments.
+
+    **dry_run** - asks Oasis to validate the message without sending it.
+    Proves the API key, the sender ID and the number format are accepted,
+    and returns the provider's own segment count and whether there are
+    enough credits. Still sends nothing and charges nothing.
+
+    **send** - one real message to the configured operator number. The
+    only step that reaches a handset, and the only one that costs.
+
+    Super Admin only, inheriting whatever MFA require_super_admin
+    enforces, rate limited to three calls in five minutes, and audited.
+    Never a merchant-supplied recipient: the number comes from
+    configuration and nothing in the request can change it.
+    """
+    settings = get_settings()
+    supplied = settings.model_fields_set
+    numbers = settings.super_admin_sms_numbers
+
+    report: dict = {
+        "mode": payload.mode,
+        "flags": {
+            name: {
+                "value": getattr(settings, name, None),
+                "source": "env" if name in supplied else "default",
+            }
+            for name in (
+                "super_admin_sms_enabled",
+                "super_admin_sms_new_merchant_enabled",
+                "super_admin_sms_withdrawal_request_enabled",
+                "oasis_sms_enabled",
+            )
+        },
+        "recipients_configured": len(numbers),
+        # Masked, always. A diagnostics response is read in a browser and
+        # often pasted into a chat; the full operator number has no reason
+        # to travel that way.
+        "recipients": [mask_phone(n) for n in numbers],
+        "sender_id": settings.oasis_sms_sender_id or None,
+    }
+
+    # The real template, with a name that cannot be mistaken for a real
+    # registration. An operator who receives this at 2am must know in the
+    # first three words that nothing has happened and nobody is waiting.
+    sample = render_new_merchant_admin(business_name="SMS TEST - ignore")
+    cost = message_cost(sample)
+    report["sample_message"] = sample
+    report["segments"] = cost["segments"]
+    report["encoding"] = cost["encoding"]
+
+    if not numbers:
+        report["result"] = "no recipient configured - set SUPER_ADMIN_SMS_RECIPIENTS"
+        return APIResponse(data=report)
+
+    try:
+        normalised = normalize_tz_phone(numbers[0])
+    except Exception:  # noqa: BLE001
+        report["result"] = "the configured recipient is not a valid Tanzanian number"
+        return APIResponse(data=report)
+
+    if payload.mode == "preview":
+        report["result"] = "preview only - nothing was sent to the provider"
+        return APIResponse(data=report)
+
+    write_audit_log(
+        get_supabase_admin(),
+        actor_id=admin.id,
+        actor_type="user",
+        action=f"admin.sms_test.{payload.mode}",
+        resource_type="sms",
+        # The number is masked here too: an audit row proves who tested
+        # and when, and does not need to carry the recipient in clear.
+        metadata={"recipient": mask_phone(numbers[0]), "mode": payload.mode},
+    )
+
+    try:
+        result = send_sms(
+            to=normalised,
+            sender=settings.oasis_sms_sender_id,
+            message=sample,
+            idempotency_key=f"ipay-admin-test-{uuid.uuid4().hex}",
+            dry_run=payload.mode == "dry_run",
+        )
+    except SmsNotConfigured as exc:
+        report["result"] = f"provider not configured: {exc}"
+        return APIResponse(data=report)
+
+    report["provider"] = {
+        "outcome": result.outcome,
+        "status_code": result.status_code,
+        "segments": result.segments,
+        "credits_required": result.credits_required,
+        "enough_credits": result.enough_credits,
+        # Provider error text can echo the request; it is reported because
+        # an operator needs it, and it never contains our credentials.
+        "error": result.error,
+    }
+    report["result"] = (
+        "dry run accepted by the provider - nothing was sent"
+        if payload.mode == "dry_run"
+        else f"message handed to the provider ({result.outcome})"
+    )
+    return APIResponse(data=report)
