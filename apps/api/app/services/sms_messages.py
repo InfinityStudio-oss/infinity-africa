@@ -39,8 +39,10 @@ from app.core.phone import normalize_tz_phone
 from app.core.time import utc_now_iso
 from app.services.sms_text import (
     message_cost,
+    render_new_merchant_admin,
     render_welcome,
     render_withdrawal_complete,
+    render_withdrawal_request_admin,
 )
 
 logger = logging.getLogger("infinity.sms")
@@ -313,3 +315,162 @@ def enqueue_withdrawal_complete_sms(
     except Exception:  # noqa: BLE001 — never break a completed payout
         logger.warning("sms_withdrawal_enqueue_failed disbursement_id=%s", disbursement.get("id"))
         return None
+
+
+# --- Super Admin alerts ------------------------------------------------
+#
+# Addressed to an operator, not to a merchant. merchant_id keeps its
+# meaning but as the SUBJECT of the alert, and recipient_role says who it
+# is actually for - see the 20261028090000 migration for why the
+# administrator is not pretended into the merchant model.
+#
+# Both follow the same contract as every other enqueue here: never raise.
+# A registration and a withdrawal are already committed by the time these
+# run, and a message about them must not be able to undo either.
+
+SKIP_NO_ADMIN_RECIPIENT = "no Super Admin SMS recipient configured"
+
+
+def _admin_idempotency_key(purpose: str, anchor: uuid.UUID, phone: str) -> str:
+    """Stable per purpose, per subject, AND per recipient.
+
+    The recipient is in the key because configuring a second operator
+    number must deliver a second message, not be swallowed as a duplicate
+    of the first. Digits only, so the key stays inside the provider's
+    documented 1-64 visible-ASCII format whatever separators a number was
+    configured with.
+    """
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return f"ipay-{purpose}-{anchor.hex}-{digits}"
+
+
+def _admin_rows(
+    client: Client,
+    *,
+    purpose: str,
+    merchant_id: uuid.UUID,
+    anchor: uuid.UUID,
+    body: str,
+    **extra,
+) -> list[dict]:
+    """One row per configured operator number.
+
+    Returns the rows actually written. An unusable number is recorded as a
+    skip with a reason rather than silently dropped: a missing or
+    malformed operator number must be visible to whoever reads the Super
+    Admin SMS screen, without that visibility costing a registration or a
+    withdrawal.
+    """
+    settings = get_settings()
+    sender = settings.oasis_sms_sender_id or "-"
+    numbers = settings.super_admin_sms_numbers
+    if not numbers:
+        key = _admin_idempotency_key(purpose, anchor, "")
+        row = _skip(client, merchant_id, purpose, key, SKIP_NO_ADMIN_RECIPIENT, **extra)
+        return [row] if row else []
+
+    written: list[dict] = []
+    for raw in numbers:
+        key = _admin_idempotency_key(purpose, anchor, raw)
+        try:
+            phone = normalize_tz_phone(raw)
+        except Exception:  # noqa: BLE001 - an unusable number is a skip, not a crash
+            phone = None
+        if not phone:
+            row = _skip(client, merchant_id, purpose, key, SKIP_INVALID_NUMBER, **extra)
+        else:
+            row = _insert(
+                client,
+                {
+                    **_base_row(merchant_id, purpose, phone, sender, body),
+                    "idempotency_key": key,
+                    "recipient_role": "super_admin",
+                    **extra,
+                },
+            )
+        if row:
+            written.append(row)
+    return written
+
+
+def enqueue_admin_new_merchant_sms(
+    client: Client, *, merchant_id: uuid.UUID, business_name: str
+) -> list[dict]:
+    """Tell an operator a business has registered.
+
+    Called once, from the branch of create_merchant_onboarding that
+    actually inserts a merchants row - so a resubmission, which updates an
+    existing merchant and returns before that insert, produces nothing.
+
+    Registered is not approved: the row is written `status='pending'`,
+    `kyc_status='unverified'`, and the message says so. This never changes
+    either.
+    """
+    settings = get_settings()
+    if not (settings.super_admin_sms_enabled and settings.super_admin_sms_new_merchant_enabled):
+        return []
+    try:
+        return _admin_rows(
+            client,
+            purpose="admin_new_merchant",
+            merchant_id=merchant_id,
+            anchor=merchant_id,
+            body=render_new_merchant_admin(business_name=business_name),
+        )
+    except Exception:
+        logger.exception("admin_new_merchant_sms_enqueue_failed merchant_id=%s", merchant_id)
+        return []
+
+
+def enqueue_admin_withdrawal_request_sms(
+    client: Client, *, disbursement: dict, business_name: str, available_balance: Decimal
+) -> list[dict]:
+    """Tell an operator a withdrawal is waiting for them.
+
+    The caller is responsible for only calling this once the withdrawal
+    has come to rest at PENDING_ADMIN_APPROVAL - a rejected or
+    auto-processed payout never reaches that state, so it never produces
+    one of these. This function re-checks the status anyway, because a
+    message that says "awaiting your approval" about something already
+    paid is worse than no message.
+
+    Amount is the Decimal from the committed row; nothing is recomputed
+    here and nothing passes through a float.
+    """
+    settings = get_settings()
+    if not (settings.super_admin_sms_enabled and settings.super_admin_sms_withdrawal_request_enabled):
+        return []
+    try:
+        if str(disbursement.get("status")) != "PENDING_ADMIN_APPROVAL":
+            return []
+        disbursement_id = uuid.UUID(str(disbursement["id"]))
+        merchant_id = uuid.UUID(str(disbursement["merchant_id"]))
+        return _admin_rows(
+            client,
+            purpose="admin_withdrawal_request",
+            merchant_id=merchant_id,
+            anchor=disbursement_id,
+            body=render_withdrawal_request_admin(
+                business_name=business_name,
+                amount=Decimal(str(disbursement.get("amount") or 0)),
+                # provider_reference is assigned when the payout runs, so
+                # at PENDING_ADMIN_APPROVAL it is null. The first eight
+                # characters of the id are what the Super Admin withdrawals
+                # queue shows and are enough to find the row; the full UUID
+                # would cost a third segment and is unreadable on a handset.
+                reference=str(
+                    disbursement.get("provider_reference") or str(disbursement["id"])[:8]
+                ),
+                # The same figure the approval email already quotes, taken
+                # from the same read, so the two can never disagree about
+                # what an operator was told. Display-only: nothing reads
+                # it back to authorize a payout.
+                available_balance=available_balance,
+            ),
+            disbursement_id=str(disbursement_id),
+        )
+    except Exception:
+        logger.exception(
+            "admin_withdrawal_sms_enqueue_failed disbursement_id=%s", disbursement.get("id")
+        )
+        return []

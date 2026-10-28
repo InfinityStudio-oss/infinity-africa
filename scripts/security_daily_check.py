@@ -269,6 +269,7 @@ SECURITY_TESTS = [
     "tests/test_webhook_exhausted_alert_dedupe.py",
     "tests/test_admin_merchants_list_batching.py",
     "tests/test_signing_secret_failure_is_not_a_downgrade.py",
+    "tests/test_super_admin_sms_alerts.py",
 ]
 
 

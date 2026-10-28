@@ -558,6 +558,31 @@ class Settings(BaseSettings):
     oasis_sms_welcome_enabled: bool = False
     oasis_sms_withdrawal_enabled: bool = False
 
+    # Super Admin alerts — a different audience from everything above.
+    #
+    # Separate switches on purpose. The flags above are merchant lifecycle
+    # messages; these go to an operator. One category must never be turned
+    # off by someone adjusting the other, and no merchant preference can
+    # reach them: an operator alert about a merchant is not that
+    # merchant's to silence.
+    #
+    # SUPER_ADMIN_SMS_ENABLED is the master switch and the rollback. With
+    # it false nothing is composed, nothing is queued and nothing is
+    # charged, whatever the per-event flags say.
+    super_admin_sms_enabled: bool = False
+    super_admin_sms_new_merchant_enabled: bool = False
+    super_admin_sms_withdrawal_request_enabled: bool = False
+
+    # Comma-separated, same shape as CEO_EMAIL. Never a NEXT_PUBLIC_ or
+    # EXPO_PUBLIC_ value, and never settable by a merchant.
+    #
+    # Empty means "not configured", which every caller treats as a skip
+    # with a recorded reason rather than an error — a missing operator
+    # number must be visible without breaking a registration or a
+    # withdrawal. The production recipient is documented privately, not
+    # here; .env.example carries a placeholder.
+    super_admin_sms_recipients: str = ""
+
     # What one message part costs, for the Super Admin cost estimates.
     # Configurable rather than a constant in the code: a tariff is a
     # commercial fact that changes without a deploy, and a hardcoded
@@ -754,6 +779,28 @@ class Settings(BaseSettings):
     # (notify_merchant(...WITHDRAWAL_SUCCESS...)) and the webhook event
     # are unconditional either way — only this email is gated.
     send_merchant_withdrawal_emails: bool = False
+
+    @property
+    def super_admin_sms_numbers(self) -> list[str]:
+        """SUPER_ADMIN_SMS_RECIPIENTS parsed into numbers, in the order given.
+
+        Same shape and the same reasoning as ceo_emails: blanks and
+        duplicates dropped, so a trailing comma or a repeated number cannot
+        send one operator two copies of the same alert — and an empty list
+        is the signal callers use to record a skip rather than send.
+
+        Deliberately NOT normalised here. Normalisation can fail, and a
+        settings property is the wrong place to discover that: it is read
+        on paths that must not raise. The enqueue path normalises each
+        number through the same helper merchant numbers use, and records
+        an unusable one as a skip with a reason an operator can read.
+        """
+        seen: list[str] = []
+        for part in (self.super_admin_sms_recipients or "").split(","):
+            number = part.strip()
+            if number and number not in seen:
+                seen.append(number)
+        return seen
 
     @property
     def ceo_emails(self) -> list[str]:

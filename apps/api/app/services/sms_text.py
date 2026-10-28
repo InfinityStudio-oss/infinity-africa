@@ -210,3 +210,120 @@ def render_collection_alert(
         closing_balance=format_amount(closing_balance),
         reference=reference,
     )
+
+
+# --- Super Admin alerts ------------------------------------------------
+#
+# A different audience from everything above: these go to an operator, not
+# to a merchant. Both carry only what is needed to decide to go and look,
+# and a link that still requires a normal login — nothing in an SMS may
+# approve anything.
+#
+# The business name is interpolated from merchant-supplied text, so it is
+# sanitised and capped before it reaches a template. A name is the one
+# field here an outsider controls, and it decides both the segment count
+# and whether the message still reads as ours.
+
+# Longest safe business name. A GSM-7 message is 160 characters for one
+# segment and 153 per part after that; the fixed text below is ~150, so
+# any name at all spills into a second segment. 32 keeps the worst case at
+# two parts rather than letting one long name turn every alert into three.
+_MAX_NAME = 32
+_MAX_REFERENCE = 32
+
+
+def sanitise_for_sms(value: str | None, *, limit: int) -> str:
+    """Merchant-supplied text, made safe to put in a message.
+
+    Control characters are removed rather than escaped: a newline in a
+    business name would break the message into something that reads like
+    two messages, and a zero-width character changes the segment count
+    without changing anything visible. Collapsed whitespace for the same
+    reason.
+
+    Truncation ends with two ASCII dots, deliberately not an ellipsis.
+    U+2026 is outside GSM-7, and a single one of them flips the whole
+    message to UCS-2 - which halves the characters per segment and turned
+    a 143-character alert into three segments instead of one. A truncation
+    marker is worth having; it is not worth tripling the cost of every
+    message that uses it.
+
+    Returns a dash for empty input — a message with a blank where a name
+    should be is worse than one that says nothing is known.
+    """
+    text = "".join(ch for ch in str(value or "") if ch.isprintable())
+    text = " ".join(text.split())
+    if not text:
+        return "-"
+    if len(text) > limit:
+        return text[: limit - 2].rstrip() + ".."
+    return text
+
+
+ADMIN_PORTAL_URL = "https://www.infinitypay.me/admin-login"
+
+# One segment even at the 32-character name cap (146 chars worst case),
+# which halves what this event costs. "Not yet approved" is load-bearing:
+# a registered account is status='pending', kyc_status='unverified', and
+# an operator reading this on a phone must not come away thinking a
+# business is live.
+NEW_MERCHANT_ADMIN_TEMPLATE = (
+    "INFINITYPAY: {business_name} has opened a new account. "
+    "Not yet approved. "
+    "Review on portal: " + ADMIN_PORTAL_URL
+)
+
+# One segment for a typical business name (149 chars), two at the 32-char
+# cap. Measured rather than assumed: the portal URL alone is 38 characters
+# and a reference is 8, so the cap is what keeps the worst case at two
+# parts instead of letting a long name run it to three.
+WITHDRAWAL_REQUEST_ADMIN_TEMPLATE = (
+    "INFINITYPAY: {business_name} requested TZS {amount}. "
+    "Bal: TZS {available_balance}. "
+    "Ref: {reference}. "
+    "Awaiting approval. "
+    "Review: " + ADMIN_PORTAL_URL
+)
+
+
+def render_new_merchant_admin(*, business_name: str) -> str:
+    """A merchant has registered — not been approved.
+
+    "Bado hajaidhinishwa" (not yet approved) is in the message on purpose.
+    A registered account is `status='pending'` with `kyc_status='unverified'`,
+    and an operator reading this on a phone must not come away thinking a
+    business is live. The message describes the state and points at the
+    screen where the decision is actually made.
+    """
+    return NEW_MERCHANT_ADMIN_TEMPLATE.format(
+        business_name=sanitise_for_sms(business_name, limit=_MAX_NAME),
+    )
+
+
+def render_withdrawal_request_admin(
+    *, business_name: str, amount: Decimal, reference: str, available_balance: Decimal
+) -> str:
+    """A withdrawal is waiting for a Super Admin.
+
+    `amount` and `available_balance` are Decimals from committed records
+    and are rendered by the same format_amount every other money message
+    uses, so neither passes through a float.
+
+    The balance is here at the owner's explicit request, against the
+    original brief's "do not include wallet balances". It is what an
+    operator actually needs to judge whether a payout can be covered
+    without opening the queue - the same figure the approval email already
+    carries. The trade is that a merchant's financial position now sits in
+    an SMS inbox, so the recipient list is operators only and the number
+    is display-only: nothing reads it back to authorize anything.
+
+    Still deliberately absent: the payout destination, the account name
+    and the bank. Those are decided by opening the queue, and are a worse
+    thing to leave in a mailbox than a balance.
+    """
+    return WITHDRAWAL_REQUEST_ADMIN_TEMPLATE.format(
+        business_name=sanitise_for_sms(business_name, limit=_MAX_NAME),
+        amount=format_amount(amount),
+        available_balance=format_amount(available_balance),
+        reference=sanitise_for_sms(reference, limit=_MAX_REFERENCE),
+    )

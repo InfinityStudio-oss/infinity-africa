@@ -78,7 +78,10 @@ from app.services.ledger import (
 from app.services.notifications_service import notify_merchant
 from app.services.reconciliation_schedule import next_check_at
 from app.services.selcom_business.client import get_selcom_business_client
-from app.services.sms_messages import enqueue_withdrawal_complete_sms
+from app.services.sms_messages import (
+    enqueue_admin_withdrawal_request_sms,
+    enqueue_withdrawal_complete_sms,
+)
 from app.services.webhooks import enqueue_webhook_event
 from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
 
@@ -413,6 +416,40 @@ async def execute_disbursement(
         except Exception:
             logger.exception("auto_withdrawal_processing_failed disbursement_id=%s", disbursement_id)
             disbursement = get_by_id(client, "disbursements", disbursement_id) or disbursement
+
+    # Tell an operator, but only about a withdrawal that has actually come
+    # to rest waiting for them.
+    #
+    # Deliberately the last thing this function does, and deliberately
+    # gated on the FINAL status rather than on the row that was inserted.
+    # Everything that can move a withdrawal out of the approval queue has
+    # already run by this point: a limit rejection raised above, and
+    # auto-processing has either left the row PROCESSING/SUCCESS/FAILED or
+    # fallen back to PENDING_ADMIN_APPROVAL. Reading the status here is
+    # what keeps the message honest - "linasubiri idhini yako" must never
+    # be sent about a payout that is already on its way.
+    #
+    # A repeated request never reaches here at all: the route wraps this
+    # in run_idempotent, which returns the stored response rather than
+    # re-running the handler.
+    #
+    # Never raises, and never blocks: the withdrawal is committed either
+    # way, and a message about it must not be able to change that.
+    try:
+        merchant_row = get_by_id(client, "merchants", merchant_id)
+        enqueue_admin_withdrawal_request_sms(
+            client,
+            disbursement=disbursement,
+            business_name=(merchant_row or {}).get("business_name") or "",
+            # `available` from the pre-insert read above - the same value
+            # handed to send_withdrawal_request_notification_email, so the
+            # email and the SMS quote one number rather than two. Nothing
+            # has moved it: a withdrawal resting at PENDING_ADMIN_APPROVAL
+            # has reserved nothing.
+            available_balance=available,
+        )
+    except Exception:  # noqa: BLE001, S110 - best-effort, never blocks a withdrawal
+        pass
 
     return disbursement
 

@@ -46,7 +46,10 @@ from app.services.email import (
 from app.services.ledger import get_wallet_balance
 from app.services.merchant_code import generate_merchant_code
 from app.services.referrals import start_referral_period
-from app.services.sms_messages import enqueue_welcome_sms
+from app.services.sms_messages import (
+    enqueue_admin_new_merchant_sms,
+    enqueue_welcome_sms,
+)
 
 # Documents required by the system for a merchant to go live, checked at
 # approval time. Deliberately empty: KYC document upload was removed from
@@ -262,6 +265,23 @@ def create_merchant_onboarding(
         )
     except Exception:  # noqa: BLE001, S110
         pass
+
+    # The same news by SMS, for an operator who is not at a desk. Reached
+    # only on this branch - the resubmission path above returns before the
+    # merchants insert, so an existing business re-submitting its details
+    # produces nothing here.
+    #
+    # Registered is not approved: the row above is written
+    # status='pending', kyc_status='unverified', and the message says so
+    # rather than implying a business is live. Nothing in it approves
+    # anything, and the link it carries needs a normal login.
+    #
+    # Deliberately after the signup email and outside its try: both are
+    # courtesies, and neither may fail a signup that has already
+    # succeeded. enqueue_admin_new_merchant_sms never raises.
+    enqueue_admin_new_merchant_sms(
+        client, merchant_id=merchant_id, business_name=merchant.get("business_name") or ""
+    )
 
     return merchant
 
