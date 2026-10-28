@@ -400,3 +400,72 @@ def test_both_messages_lead_with_the_brand_on_its_own_line():
         # Still one message, not several: the newlines are layout, and the
         # encoding must not have slipped to UCS-2 because of them.
         assert message_cost(body)["encoding"] == "GSM-7"
+
+
+# --- 9. the queue is only half of it -----------------------------------
+
+
+@pytest.fixture
+def dispatchable(on, monkeypatch):
+    """The alerts enabled AND the worker switched on, which the tests
+    above deliberately do not need - and which is exactly why they all
+    passed while nothing was ever sent."""
+    monkeypatch.setenv("OASIS_SMS_ENABLED", "true")
+    monkeypatch.setenv("OASIS_SMS_BATCH_SIZE", "50")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def _capture(monkeypatch):
+    from app.services.sms_provider import SmsResult
+
+    sent: list[dict] = []
+    monkeypatch.setattr(
+        "app.services.sms_dispatch.send_sms",
+        lambda **kw: sent.append(kw) or SmsResult(outcome="sent", status_code=200),
+    )
+    return sent
+
+
+def test_a_withdrawal_alert_is_actually_dispatched(fake_client, dispatchable, monkeypatch):
+    """The live failure of 2026-10-28.
+
+    The row was written correctly - right recipient, right body, visible
+    in the Super Admin screen as Queued - and the worker never asked the
+    database for that purpose, so no sweep ever claimed it. Queuing a
+    message is not sending one, and every test in this file up to here
+    stopped at the queue.
+    """
+    from app.services.sms_dispatch import dispatch_pending_sms
+
+    sent = _capture(monkeypatch)
+    merchant_id = uuid.uuid4()
+
+    enqueue_admin_withdrawal_request_sms(
+        fake_client,
+        disbursement=_withdrawal(merchant_id),
+        business_name="Juma Traders Ltd",
+        available_balance=Decimal("106500.13"),
+    )
+    dispatch_pending_sms(fake_client)
+
+    assert len(sent) == 1, "the alert was queued and no sweep ever looked for it"
+    assert sent[0]["to"] == RECIPIENT
+    assert "Juma Traders Ltd requested TZS 150,000" in sent[0]["message"]
+    assert _queued(fake_client, "admin_withdrawal_request")[0]["status"] == "sent"
+
+
+def test_a_new_merchant_alert_is_actually_dispatched(fake_client, dispatchable, monkeypatch):
+    from app.services.sms_dispatch import dispatch_pending_sms
+
+    sent = _capture(monkeypatch)
+
+    enqueue_admin_new_merchant_sms(
+        fake_client, merchant_id=uuid.uuid4(), business_name="Juma Traders Ltd"
+    )
+    dispatch_pending_sms(fake_client)
+
+    assert len(sent) == 1, "the alert was queued and no sweep ever looked for it"
+    assert sent[0]["to"] == RECIPIENT
+    assert _queued(fake_client, "admin_new_merchant")[0]["status"] == "sent"

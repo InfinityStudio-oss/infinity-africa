@@ -38,14 +38,35 @@ from app.services.sms_provider import (
 
 logger = logging.getLogger("infinity.sms")
 
-# Every purpose the worker will dispatch, most urgent first. Must stay in
-# step with the purposes app/services/sms_messages.py enqueues and the
-# check constraint in 20261017140000 - a purpose missing from here is a
-# message that queues and is never sent.
+# Every purpose the worker will dispatch, most urgent first, paired with
+# the budget it draws from. Must stay in step with the purposes
+# app/services/sms_messages.py enqueues and the check constraint in
+# 20261017140000 - a purpose missing from here is a message that queues
+# and is never sent.
+#
+# This is deliberately the ONLY list. It was two: this constant and a
+# second copy inside dispatch_pending_sms, and the Super Admin alerts
+# added on 2026-10-28 were put in neither. Both alerts enqueued
+# correctly, the row appeared in the Super Admin screen with its real
+# recipient, and nothing ever claimed it - the first live withdrawal
+# alert sat queued while the queue reported itself healthy. The same
+# failure had already happened once, to welcome and withdrawal_complete,
+# which is what the paragraph below was written about.
+#
+# The operator alerts come first: their whole purpose is to shorten the
+# time a withdrawal waits for a human, so they must not queue behind a
+# merchant announcement.
 #
 # 'collection_alert' is absent deliberately: retired 2026-10-17, and the
 # migration cancels what was queued. Historical rows stay readable.
-DISPATCHED_PURPOSES = ("welcome", "withdrawal_complete", "announcement")
+_DISPATCH_ORDER = (
+    ("admin_withdrawal_request", "alerts"),
+    ("admin_new_merchant", "alerts"),
+    ("welcome", "alerts"),
+    ("withdrawal_complete", "alerts"),
+    ("announcement", "announcements"),
+)
+DISPATCHED_PURPOSES = tuple(purpose for purpose, _ in _DISPATCH_ORDER)
 
 _WORKER = f"sms-{uuid.uuid4().hex[:8]}"
 
@@ -253,17 +274,16 @@ def dispatch_pending_sms(client: Client) -> dict:
     # Transactional messages first, announcements after, so a bulk send
     # can never leave a merchant's payout confirmation waiting behind it.
     #
-    # This list is the one place the worker learns which purposes exist.
-    # It named 'collection_alert' for a day after that purpose was retired
-    # and the two lifecycle purposes replaced it, so welcome and
-    # withdrawal_complete rows were enqueued correctly and then never
-    # claimed by anyone - a real payout confirmation sat queued until it
-    # was noticed. Adding a purpose means adding it here.
-    for purpose, budget, key in (
-        ("welcome", alert_budget, "alerts"),
-        ("withdrawal_complete", alert_budget, "alerts"),
-        ("announcement", announcement_budget, "announcements"),
-    ):
+    # The order comes from _DISPATCH_ORDER rather than a copy kept here.
+    # A copy is how two purposes have now been missed: the worker only
+    # ever asks the database for the purposes it is told about, so one
+    # left out of the list is not a message that fails, it is a message
+    # nobody ever looks for. Adding a purpose means adding it to
+    # _DISPATCH_ORDER, and test_sms_lifecycle asserts every purpose the
+    # enqueue layer can write is in it.
+    budgets = {"alerts": alert_budget, "announcements": announcement_budget}
+    for purpose, key in _DISPATCH_ORDER:
+        budget = budgets[key]
         if budget <= 0:
             continue
         for row in _claimable(client, purpose, budget):

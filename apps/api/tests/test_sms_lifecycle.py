@@ -557,3 +557,44 @@ def test_a_broken_database_does_not_raise_into_a_payout(fake_client):
         )
         is None
     )
+
+
+def test_every_purpose_the_enqueue_layer_can_write_is_actually_dispatched():
+    """The guard the test above cannot be.
+
+    test_the_worker_actually_sends_every_purpose_it_is_given loops over
+    DISPATCHED_PURPOSES, so it proves the worker drains what it already
+    knows about - and passes perfectly while a purpose is missing from
+    that list entirely. Both times a purpose has been missed, that test
+    was green.
+
+    This compares the worker's list against the other half: the enqueue
+    functions, which are the only things that put a purpose into the
+    table. A new enqueue_* function fails here until someone has decided
+    what dispatching it means.
+    """
+    import inspect
+
+    from app.services import sms_messages
+    from app.services.sms_dispatch import DISPATCHED_PURPOSES
+
+    writes = {
+        "enqueue_welcome_sms": "welcome",
+        "enqueue_withdrawal_complete_sms": "withdrawal_complete",
+        "enqueue_admin_new_merchant_sms": "admin_new_merchant",
+        "enqueue_admin_withdrawal_request_sms": "admin_withdrawal_request",
+    }
+    defined = {
+        name
+        for name, obj in inspect.getmembers(sms_messages, inspect.isfunction)
+        if name.startswith("enqueue_") and obj.__module__ == sms_messages.__name__
+    }
+    assert defined == set(writes), (
+        "an enqueue function was added or renamed - name the purpose it writes here, "
+        "then make sure app/services/sms_dispatch.py::_DISPATCH_ORDER drains it"
+    )
+    for name, purpose in sorted(writes.items()):
+        assert purpose in DISPATCHED_PURPOSES, (
+            f"{name} writes {purpose!r}, which no sweep ever asks the database for - "
+            "those rows queue and are never sent"
+        )
