@@ -19,6 +19,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
+import httpx
 import resend
 from supabase import Client
 
@@ -1700,3 +1701,77 @@ def send_report_email(
         )
         for recipient in recipients
     ]
+
+
+def _unverified_auth_user(email: str) -> dict | None:
+    """The Supabase Auth user for this address, but only while it still
+    needs verifying.
+
+    This check is what keeps the resend endpoint from becoming a
+    passwordless login. generate_link("magiclink") happily mints a
+    working sign-in link for *any* existing account, verified or not, and
+    InfinityPay has no magic-link login - so without this, anyone who
+    knew a merchant's email address could have a link to their dashboard
+    mailed to them. Only an account that has never completed verification
+    gets one, and that link can do nothing a fresh verification link
+    could not already do.
+
+    Returns None - never raises, never distinguishes - when the address
+    is unknown, already verified, or the lookup itself fails. The caller
+    must look identical from the outside in all three cases.
+    """
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        return None
+    wanted = (email or "").strip().lower()
+    try:
+        response = httpx.get(
+            f"{settings.supabase_url}/auth/v1/admin/users",
+            params={"filter": wanted, "per_page": 20},
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        users = response.json().get("users") or []
+    except Exception:  # noqa: BLE001 - a lookup failure must be silent
+        return None
+    for user in users:
+        # `filter` is a partial match, so the exact address is checked
+        # here rather than trusting the first row back.
+        if (user.get("email") or "").strip().lower() == wanted:
+            return None if user.get("email_confirmed_at") else user
+    return None
+
+
+def send_verification_resend(client: Client, *, email: str, redirect_to: str) -> dict | None:
+    """A fresh verification link for a merchant who never got the first one.
+
+    Sent through Resend with our own template, exactly like the password
+    reset - deliberately NOT through supabase.auth.resend, which uses
+    Supabase's built-in mailer. Eight accounts reached 26 October 2026
+    unverified and five of those businesses gave up and registered again
+    under a second address; whatever the cause, rebuilding the recovery
+    path on the same mailer that is under suspicion would only reproduce
+    it.
+
+    Returns None for an unknown address, an already-verified one, or any
+    failure along the way. POST /v1/auth/resend-verification returns the
+    same sentence regardless, so this function's job is to make sure the
+    endpoint cannot tell those apart either.
+    """
+    if _unverified_auth_user(email) is None:
+        return None
+    try:
+        result = client.auth.admin.generate_link(
+            {"type": "magiclink", "email": email, "options": {"redirect_to": redirect_to}}
+        )
+    except Exception:  # noqa: BLE001 - indistinguishable from "no such account"
+        return None
+    return send_email_verification_email(
+        client,
+        email=email,
+        action_link=auth_link_for(result, redirect_to=redirect_to, link_type="magiclink"),
+    )

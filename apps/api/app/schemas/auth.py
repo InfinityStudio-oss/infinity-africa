@@ -22,6 +22,18 @@ class ForgotPasswordRequest(BaseModel):
     redirect_path: Literal["/dashboard/reset-password", "/admin-login/reset-password"] = "/dashboard/reset-password"
 
 
+class ResendVerificationRequest(BaseModel):
+    """POST /v1/auth/resend-verification — the email address only.
+
+    Unlike ForgotPasswordRequest there is no redirect_path at all: a
+    merchant who has not verified yet can only ever be going to
+    onboarding, so the destination is fixed in the router rather than
+    offered to the caller. One fewer caller-supplied URL is one fewer
+    place an open redirect can appear."""
+
+    email: str = Field(pattern=_EMAIL_PATTERN)
+
+
 class AuthenticatedUser(BaseModel):
     """The caller identified by a verified Supabase Auth JWT."""
 

@@ -171,3 +171,176 @@ def test_forgot_password_redirect_to_matches_the_production_reset_page(fake_clie
 
     html = fake_resend.calls[0]["html"]
     assert f'href="{settings.app_url}/dashboard/reset-password?token_hash=' in html
+
+
+# --- POST /v1/auth/resend-verification ---------------------------------
+#
+# The way back for a merchant who never received the signup link. Five
+# businesses in production answered that by registering again under a
+# second address, which is where the duplicate merchant records came
+# from; once duplicate signups started being refused, two more were left
+# with no way in at all.
+
+_GENERIC_VERIFICATION_MESSAGE = (
+    "If that account still needs verification, we've sent a fresh link. "
+    "Check your inbox and spam folder."
+)
+
+
+@pytest.fixture
+def auth_lookup(monkeypatch):
+    """Stands in for the Supabase admin user lookup the service does over
+    HTTP, driving the real _unverified_auth_user rather than replacing
+    it - the matching and the verified check are the parts worth
+    testing."""
+
+    class _Lookup:
+        def __init__(self):
+            self.users: list[dict] = []
+            self.should_fail = False
+            self.params: list[dict] = []
+
+        def get(self, url, **kwargs):
+            self.params.append(kwargs.get("params") or {})
+            if self.should_fail:
+                raise Exception("Supabase admin API unreachable")  # noqa: TRY002
+
+            class _Response:
+                @staticmethod
+                def raise_for_status():
+                    return None
+
+                @staticmethod
+                def json():
+                    return {"users": lookup.users}
+
+            return _Response()
+
+    lookup = _Lookup()
+    monkeypatch.setattr("app.services.email.httpx.get", lookup.get)
+    return lookup
+
+
+def test_resend_verification_sends_a_fresh_link_to_an_unverified_account(
+    fake_client, fake_resend, auth_lookup
+):
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [{"email": "amina@example.com", "email_confirmed_at": None}]
+
+    response = client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["message"] == _GENERIC_VERIFICATION_MESSAGE
+    assert len(fake_resend.calls) == 1
+    assert fake_resend.calls[0]["to"] == ["amina@example.com"]
+
+
+def test_resend_verification_refuses_an_account_that_is_already_verified(
+    fake_client, fake_resend, auth_lookup
+):
+    """The security of this endpoint rests here.
+
+    generate_link("magiclink") mints a working sign-in link for any
+    existing account, and InfinityPay has no magic-link login. Without
+    the verified check, knowing a merchant's email address would be
+    enough to have a link to their dashboard mailed to them.
+    """
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [
+        {"email": "amina@example.com", "email_confirmed_at": "2026-10-01T09:00:00Z"}
+    ]
+
+    response = client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["message"] == _GENERIC_VERIFICATION_MESSAGE
+    assert fake_resend.calls == [], "a verified account must never be sent a sign-in link"
+
+
+def test_resend_verification_says_the_same_thing_for_an_unknown_address(
+    fake_client, fake_resend, auth_lookup
+):
+    auth_lookup.users = []
+
+    response = client.post("/v1/auth/resend-verification", json={"email": "nobody@example.com"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["message"] == _GENERIC_VERIFICATION_MESSAGE
+    assert fake_resend.calls == []
+
+
+def test_resend_verification_requires_an_exact_address_match(fake_client, fake_resend, auth_lookup):
+    """Supabase's `filter` is a partial match, so the lookup can come back
+    with a neighbour of the address asked for. Mailing that neighbour a
+    sign-in link would be the same bug as skipping the check entirely."""
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [{"email": "amina.k@example.com", "email_confirmed_at": None}]
+
+    response = client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    assert response.status_code == 200
+    assert fake_resend.calls == []
+
+
+def test_resend_verification_says_the_same_thing_when_the_lookup_fails(
+    fake_client, fake_resend, auth_lookup
+):
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.should_fail = True
+
+    response = client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["message"] == _GENERIC_VERIFICATION_MESSAGE
+    assert fake_resend.calls == []
+
+
+def test_resend_verification_link_points_at_onboarding(fake_client, fake_resend, auth_lookup):
+    settings = get_settings()
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [{"email": "amina@example.com", "email_confirmed_at": None}]
+
+    client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    html = fake_resend.calls[0]["html"]
+    assert f'href="{settings.app_url}/auth/callback?next=/onboarding&token_hash=' in html
+
+
+def test_resend_verification_gives_the_caller_no_say_in_the_destination(
+    fake_client, fake_resend, auth_lookup
+):
+    """There is no redirect_path field at all. A caller who sends one is
+    ignored rather than obeyed - one fewer place an open redirect can
+    appear."""
+    settings = get_settings()
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [{"email": "amina@example.com", "email_confirmed_at": None}]
+
+    response = client.post(
+        "/v1/auth/resend-verification",
+        json={"email": "amina@example.com", "redirect_path": "https://evil.example.com"},
+    )
+
+    assert response.status_code == 200
+    html = fake_resend.calls[0]["html"]
+    assert "evil.example.com" not in html
+    assert f'href="{settings.app_url}/auth/callback?next=/onboarding' in html
+
+
+def test_resend_verification_does_not_log_the_token_or_link(fake_client, fake_resend, auth_lookup):
+    fake_client.seed_auth_user(uuid.uuid4(), email="amina@example.com", full_name="Amina")
+    auth_lookup.users = [{"email": "amina@example.com", "email_confirmed_at": None}]
+
+    client.post("/v1/auth/resend-verification", json={"email": "amina@example.com"})
+
+    delivery = fake_client.table("email_deliveries")._table.rows[-1]
+    serialized = str(delivery)
+    assert "token=" not in serialized
+    assert "action_link" not in serialized
+
+
+def test_resend_verification_rejects_a_malformed_address(fake_client, fake_resend, auth_lookup):
+    response = client.post("/v1/auth/resend-verification", json={"email": "not-an-email"})
+
+    assert response.status_code == 422
+    assert fake_resend.calls == []

@@ -74,6 +74,14 @@ PUBLIC_ROUTES = {
     ("POST", "/v1/sms/callbacks/oasis"),
     # Pre-session flows.
     ("POST", "/v1/auth/forgot-password"),
+    # Resending a signup verification link. Unauthenticated by necessity
+    # - the caller has never been able to sign in, which is the entire
+    # problem it solves. It carries an email address and nothing else, it
+    # returns one fixed sentence whatever the outcome, and it will only
+    # act on an account that has never completed verification, so it
+    # cannot be used to mail a sign-in link to a working account. See
+    # app/services/email.py::_unverified_auth_user.
+    ("POST", "/v1/auth/resend-verification"),
     ("POST", "/v1/onboarding/signup"),
     ("POST", "/v1/public/disputes/report"),
     ("POST", "/v1/public/inquiries"),

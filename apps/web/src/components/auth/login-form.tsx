@@ -75,12 +75,29 @@ export function LoginForm({ variant }: { variant: "public" | "merchant" | "admin
       {/* The admin console shows no footer: it told a would-be attacker
           how access is granted, and told a real admin nothing. */}
       {variant === "admin" ? null : (
-        <p className="text-center text-sm text-on-surface-variant">
-          {"Don't have an account?"}{" "}
-          <Link href="/create-account" className="font-semibold text-primary-container hover:underline">
-            Create an account
-          </Link>
-        </p>
+        <>
+          <p className="text-center text-sm text-on-surface-variant">
+            {"Don't have an account?"}{" "}
+            <Link href="/create-account" className="font-semibold text-primary-container hover:underline">
+              Create an account
+            </Link>
+          </p>
+          {/* The only way back for someone who never received the signup
+              link. It used to live solely on the screen shown right after
+              signing up, so closing that tab left registering again as the
+              only visible option — which is how five businesses ended up
+              with two merchant records each, and how two more ended up
+              with no way in once duplicate signups started being refused. */}
+          <p className="text-center text-sm text-on-surface-variant">
+            {"Didn't get your verification email?"}{" "}
+            <Link
+              href="/dashboard/resend-verification"
+              className="font-semibold text-primary-container hover:underline"
+            >
+              Send it again
+            </Link>
+          </p>
+        </>
       )}
     </form>
   );
