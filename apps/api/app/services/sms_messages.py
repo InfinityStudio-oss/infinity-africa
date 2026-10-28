@@ -28,6 +28,7 @@ customer number is read in this file, and sms_messages has no column that
 could hold one.
 """
 
+import hashlib
 import logging
 import uuid
 from decimal import Decimal
@@ -104,6 +105,38 @@ def resolve_recipient(client: Client, merchant_id: uuid.UUID) -> tuple[str | Non
         return None, SKIP_INVALID_NUMBER
 
 
+LIMIT = 64
+
+# Short codes for the purposes whose own name is too long to spell out
+# inside the limit. 'admin_withdrawal_request' alone is 24 characters,
+# and with the prefix, a 32-character anchor and a recipient's digits it
+# produced a 75-character key - which the provider rejected, correctly
+# and every time. Five identical retries later the first live operator
+# alert was marked failed, with the row still looking perfectly healthy
+# in the database. The docstring below had claimed the key stayed inside
+# the format since the day it was written; nothing measured it.
+_SHORT = {
+    "admin_new_merchant": "anm",
+    "admin_withdrawal_request": "awr",
+}
+
+
+def _bounded(candidate: str) -> str:
+    """The provider's documented format, enforced here rather than
+    discovered there.
+
+    A key over the limit is a message that cannot be sent no matter how
+    often it is retried, so the length is not a provider problem to find
+    out about - it is ours to not produce. Over the limit the readable
+    form is replaced by a digest of itself, which is still derived purely
+    from the same inputs and so is still the same key every time the same
+    message is composed.
+    """
+    if len(candidate) <= LIMIT:
+        return candidate
+    return "ipay-" + hashlib.sha256(candidate.encode("ascii", "ignore")).hexdigest()[:48]
+
+
 def _idempotency_key(purpose: str, anchor: uuid.UUID) -> str:
     """Stable, derived, and inside the provider's documented format
     (1-64 visible ASCII, no spaces).
@@ -115,7 +148,7 @@ def _idempotency_key(purpose: str, anchor: uuid.UUID) -> str:
     original response and charges nothing, instead of sending a second
     message to a merchant who already has one.
     """
-    return f"ipay-{purpose}-{anchor.hex}"
+    return _bounded(f"ipay-{_SHORT.get(purpose, purpose)}-{anchor.hex}")
 
 
 def _insert(client: Client, row: dict) -> dict | None:
@@ -336,12 +369,12 @@ def _admin_idempotency_key(purpose: str, anchor: uuid.UUID, phone: str) -> str:
 
     The recipient is in the key because configuring a second operator
     number must deliver a second message, not be swallowed as a duplicate
-    of the first. Digits only, so the key stays inside the provider's
-    documented 1-64 visible-ASCII format whatever separators a number was
-    configured with.
+    of the first. Digits only, so no separator a number was configured
+    with can put a space into the key, and _bounded keeps the whole thing
+    inside the provider's documented 1-64 visible-ASCII format.
     """
     digits = "".join(ch for ch in phone if ch.isdigit())
-    return f"ipay-{purpose}-{anchor.hex}-{digits}"
+    return _bounded(f"ipay-{_SHORT.get(purpose, purpose)}-{anchor.hex}-{digits}")
 
 
 def _admin_rows(

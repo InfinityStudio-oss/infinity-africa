@@ -598,3 +598,55 @@ def test_every_purpose_the_enqueue_layer_can_write_is_actually_dispatched():
             f"{name} writes {purpose!r}, which no sweep ever asks the database for - "
             "those rows queue and are never sent"
         )
+
+
+def test_every_idempotency_key_fits_the_format_the_provider_documents():
+    """What the provider found out for us, at the cost of an alert.
+
+    'admin_withdrawal_request' spelled out in full, with the prefix, a
+    32-character anchor and a recipient's digits, is 75 characters. The
+    provider rejects anything over 64, so the first live operator alert
+    could not be sent - and because the key is derived, every retry
+    rebuilt the identical invalid key, so it failed five times and
+    stopped. Nothing locally had ever measured a key; the function's own
+    docstring asserted it fit.
+
+    The rule is the provider's, so it is checked here against the rule
+    rather than against a monkeypatched send.
+    """
+    from app.services.sms_messages import _admin_idempotency_key, _idempotency_key
+
+    anchor = uuid.uuid4()
+    # Separators a number can really be configured with, and a long one.
+    phones = ("255762474101", "+255 762 474 101", "+255-762-474-101", "0" * 20)
+
+    keys = [_idempotency_key(p, anchor) for p in ("welcome", "withdrawal_complete")]
+    keys += [
+        _admin_idempotency_key(p, anchor, phone)
+        for p in ("admin_new_merchant", "admin_withdrawal_request")
+        for phone in phones
+    ]
+    # A purpose long enough to overflow must still produce a usable key,
+    # not a rejected one.
+    keys.append(_admin_idempotency_key("a" * 80, anchor, "255762474101"))
+
+    for key in keys:
+        assert 1 <= len(key) <= 64, f"{key!r} is {len(key)} characters; the provider allows 64"
+        assert key.isascii(), f"{key!r} is not ASCII"
+        assert key.isprintable() and " " not in key, f"{key!r} is not visible ASCII without spaces"
+
+
+def test_an_idempotency_key_is_the_same_every_time_it_is_built():
+    """A key that changed between attempts would turn a retry into a
+    second charged message, which is what deriving it prevents."""
+    from app.services.sms_messages import _admin_idempotency_key
+
+    anchor = uuid.uuid4()
+    long_purpose = "a" * 80  # the digest branch, where sameness is easiest to lose
+
+    assert _admin_idempotency_key(long_purpose, anchor, "255762474101") == (
+        _admin_idempotency_key(long_purpose, anchor, "255762474101")
+    )
+    assert _admin_idempotency_key(long_purpose, anchor, "255762474101") != (
+        _admin_idempotency_key(long_purpose, anchor, "255762474102")
+    ), "a second operator number must get its own copy, not be deduplicated away"
