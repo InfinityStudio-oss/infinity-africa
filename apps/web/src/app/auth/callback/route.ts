@@ -67,13 +67,23 @@ export async function GET(request: Request) {
     }
   }
 
-  // Either there was no usable token, or the exchange failed. The most
-  // common benign cause is the link being opened on a different device
-  // from the one that signed up (so no PKCE verifier is present) or the
-  // link being clicked a second time after it was already consumed — the
-  // account itself is fine in both cases, they just need to sign in.
+  // Either there was no usable token, or redeeming it failed.
+  //
+  // This used to say "Your email is verified. Sign in to continue",
+  // written for the benign case of a link clicked twice after it was
+  // already spent. When redeeming genuinely fails — an expired link, most
+  // often — that sentence is false, and it closes a loop with no way out:
+  // the merchant is told they are verified, signs in, and is told their
+  // email still needs verifying. Two screens contradicting each other and
+  // nothing to do about either.
+  //
+  // We cannot tell the two cases apart from here, so the wording has to
+  // be true in both and carry the next step either way. Signing in is
+  // what resolves it for someone already verified; "Send it again" is on
+  // that same page for someone who is not.
   return loginRedirect(
     origin,
-    "Your email is verified. Sign in to continue your merchant verification.",
+    "That link didn't work — it may have expired or already been used. Try signing in; " +
+      "if your email still needs verifying, use “Send it again” below.",
   );
 }

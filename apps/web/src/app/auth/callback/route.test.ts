@@ -44,7 +44,26 @@ describe("GET /auth/callback", () => {
     expect(res.status).toBe(307);
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/dashboard/login");
-    expect(location.searchParams.get("notice")).toMatch(/verified/i);
+    expect(location.searchParams.get("notice")).toMatch(/didn't work/i);
+  });
+
+  it("does not tell a merchant they are verified when redeeming just failed", async () => {
+    // The notice used to say "Your email is verified. Sign in to
+    // continue." On a genuine failure that is false, and it closes a
+    // loop: the merchant is told they are verified, signs in, and the
+    // login tells them their email still needs verifying. Neither screen
+    // offers a way out.
+    verifyOtp.mockResolvedValue({ error: { message: "Token has expired or is invalid" } });
+
+    const res = await callGet(
+      "https://infinitypay.me/auth/callback?token_hash=expired&type=magiclink",
+    );
+
+    const notice = new URL(res.headers.get("location")!).searchParams.get("notice")!;
+    expect(notice).not.toMatch(/your email is verified/i);
+    expect(notice).toMatch(/expired|already been used/i);
+    // and it says what to do next, on the page it is sending them to
+    expect(notice).toMatch(/sign(ing)? in/i);
   });
 
   it("treats a link opened with no token as 'verified — please sign in', not an error page", async () => {
