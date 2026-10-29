@@ -61,12 +61,44 @@ import type {
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
-const LIST_ALL_PARAMS = "page=1&page_size=100";
+
+// The API caps page_size at 100 (app/core/pagination.py). Asking for one
+// page of 100 and rendering whatever came back is what every list here
+// used to do, and it is silent: there is no pagination control and no
+// "showing 100 of N", so the page simply stops. At 104 merchants that
+// hid four businesses — one of them the operator's own account, which is
+// how it was noticed. It also defeats the filters, which run in the
+// browser over the rows already fetched, so searching for something past
+// row 100 finds nothing however it is spelled.
+const PAGE_SIZE = 100;
+
+// A list that needs more than this is one that should be filtered and
+// paged on the server instead of loaded whole — the audit log and the
+// webhook queue are already tens of thousands of rows and deliberately
+// still take one page. The ceiling is here so that a list which grows
+// into that category degrades to "the first 2,000" rather than hanging
+// the page on hundreds of sequential requests.
+const MAX_PAGES = 20;
+
+// Collections, transactions, the webhook queue and the audit log are in
+// the tens of thousands of rows and are NOT loaded whole. They show the
+// most recent page, which is a known limitation rather than an oversight
+// — giving them real server-side paging and filtering is its own piece
+// of work, and loading them completely would be the wrong fix.
+const FIRST_PAGE_ONLY = "page=1&page_size=100";
+
+interface PageMeta {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
 
 interface ApiEnvelope<T> {
   success: boolean;
   data?: T;
   error?: { code: string; message: string };
+  meta?: PageMeta | null;
 }
 
 export class AdminApiError extends Error {
@@ -98,6 +130,48 @@ async function apiGet<T>(path: string): Promise<T | null> {
 
 async function apiList<T>(path: string): Promise<T[]> {
   return (await apiGet<T[]>(path)) ?? [];
+}
+
+/** One page, with the paging meta the plain reads throw away. Degrades
+ * the same way they do: a failure is an empty page, not an exception. */
+async function apiPage<T>(path: string): Promise<{ rows: T[]; totalPages: number }> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { headers: await authHeader(), cache: "no-store" });
+    if (!res.ok) return { rows: [], totalPages: 0 };
+    const body: ApiEnvelope<T[]> = await res.json();
+    if (!body.success) return { rows: [], totalPages: 0 };
+    return { rows: body.data ?? [], totalPages: body.meta?.total_pages ?? 1 };
+  } catch {
+    return { rows: [], totalPages: 0 };
+  }
+}
+
+/** Every page of a list, not just the first.
+ *
+ * For the lists that are meant to be complete on screen — businesses,
+ * team members, API keys, payouts and the like, all in the hundreds —
+ * because a Super Admin looking for one of them has no other way to
+ * reach it, and because the search and status filters on those tables
+ * run in the browser over whatever this returned.
+ *
+ * Pages are fetched in order and stop as soon as the API says there are
+ * no more, so a list that fits in one page costs exactly one request,
+ * the same as before.
+ */
+async function apiListAll<T>(path: string, params?: URLSearchParams): Promise<T[]> {
+  const query = new URLSearchParams(params);
+  query.set("page_size", String(PAGE_SIZE));
+
+  const rows: T[] = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    query.set("page", String(page));
+    const result = await apiPage<T>(`${path}?${query.toString()}`);
+    rows.push(...result.rows);
+    // An empty page also stops it: a list that shrinks between requests
+    // must not spin to MAX_PAGES against a stale total_pages.
+    if (result.rows.length === 0 || page >= result.totalPages) break;
+  }
+  return rows;
 }
 
 async function apiWrite<T>(
@@ -144,7 +218,7 @@ export async function listAdminMerchantOptions(): Promise<MerchantOption[]> {
 }
 
 export async function listAdminMerchants(): Promise<Merchant[]> {
-  return apiList<Merchant>(`/v1/admin/merchants?${LIST_ALL_PARAMS}`);
+  return apiListAll<Merchant>("/v1/admin/merchants");
 }
 
 export async function getAdminMerchant(merchantId: string): Promise<Merchant | null> {
@@ -282,9 +356,9 @@ export async function reinstateMerchantApiAccess(merchantId: string): Promise<vo
 }
 
 export async function listAdminIpAllowlist(filters?: { merchantId?: string }): Promise<AdminIpAllowlistRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminIpAllowlistRow>(`/v1/admin/ip-allowlist?${params.toString()}`);
+  return apiListAll<AdminIpAllowlistRow>("/v1/admin/ip-allowlist", params);
 }
 
 export async function approveIpAllowlistEntry(entryId: string): Promise<void> {
@@ -300,11 +374,11 @@ export async function listAdminApiKeys(filters?: {
   status?: string;
   environment?: string;
 }): Promise<AdminApiKeyPlatformRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.environment) params.set("environment", filters.environment);
-  return apiList<AdminApiKeyPlatformRow>(`/v1/admin/api-keys?${params.toString()}`);
+  return apiListAll<AdminApiKeyPlatformRow>("/v1/admin/api-keys", params);
 }
 
 export async function revokeAdminApiKey(apiKeyId: string): Promise<AdminApiKeyPlatformRow> {
@@ -312,9 +386,9 @@ export async function revokeAdminApiKey(apiKeyId: string): Promise<AdminApiKeyPl
 }
 
 export async function listAdminCustomers(filters?: { merchantId?: string }): Promise<AdminCustomerPlatformRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminCustomerPlatformRow>(`/v1/admin/customers?${params.toString()}`);
+  return apiListAll<AdminCustomerPlatformRow>("/v1/admin/customers", params);
 }
 
 export async function getAdminCustomerSummary(
@@ -327,9 +401,9 @@ export async function getAdminCustomerSummary(
 }
 
 export async function listAdminReferrals(filters?: { status?: string }): Promise<AdminReferralRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);
-  return apiList<AdminReferralRow>(`/v1/admin/referrals?${params.toString()}`);
+  return apiListAll<AdminReferralRow>("/v1/admin/referrals", params);
 }
 
 /** Counted server-side across every referral, so the cards cannot report
@@ -370,15 +444,15 @@ export async function approveMerchantOnboarding(merchantId: string): Promise<voi
 // --- Merchant Users (read-only — no mutation endpoint requested) ---------
 
 export async function listAdminMerchantUsers(): Promise<MerchantUserRow[]> {
-  return apiList<MerchantUserRow>(`/v1/admin/merchant-users?${LIST_ALL_PARAMS}`);
+  return apiListAll<MerchantUserRow>("/v1/admin/merchant-users");
 }
 
 // --- Payment Links / Invoices / Collections --------------------------------
 
 export async function listAdminPaymentLinks(filters?: { merchantId?: string }): Promise<AdminPaymentLinkRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminPaymentLinkRow>(`/v1/admin/payment-links?${params.toString()}`);
+  return apiListAll<AdminPaymentLinkRow>("/v1/admin/payment-links", params);
 }
 
 /** Platform-wide Pay by Link Monitoring — every merchant's permanent
@@ -388,16 +462,16 @@ export async function listAdminPayByLinks(filters?: {
   merchantId?: string;
   isActive?: boolean;
 }): Promise<AdminPayByLinkListRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   if (filters?.isActive !== undefined) params.set("is_active", String(filters.isActive));
-  return apiList<AdminPayByLinkListRow>(`/v1/admin/pay-by-link?${params.toString()}`);
+  return apiListAll<AdminPayByLinkListRow>("/v1/admin/pay-by-link", params);
 }
 
 export async function listAdminInvoices(filters?: { merchantId?: string }): Promise<AdminInvoiceRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminInvoiceRow>(`/v1/admin/invoices?${params.toString()}`);
+  return apiListAll<AdminInvoiceRow>("/v1/admin/invoices", params);
 }
 
 export async function listAdminCollections(filters?: {
@@ -413,7 +487,7 @@ export async function listAdminCollections(filters?: {
   paymentLinkId?: string;
   invoiceId?: string;
 }): Promise<AdminCollectionRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams(FIRST_PAGE_ONLY);
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   if (filters?.source) params.set("source", filters.source);
   if (filters?.method) params.set("method", filters.method);
@@ -440,11 +514,11 @@ export async function listAdminWithdrawals(filters?: {
   requiresApproval?: boolean;
   merchantId?: string;
 }): Promise<AdminWithdrawalRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);
   if (filters?.requiresApproval !== undefined) params.set("requires_approval", String(filters.requiresApproval));
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminWithdrawalRow>(`/v1/admin/withdrawals?${params.toString()}`);
+  return apiListAll<AdminWithdrawalRow>("/v1/admin/withdrawals", params);
 }
 
 export async function approveWithdrawal(disbursementId: string): Promise<void> {
@@ -594,7 +668,7 @@ export async function listAdminTransactions(filters?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<AdminTransactionRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams(FIRST_PAGE_ONLY);
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   if (filters?.type) params.set("type", filters.type);
   if (filters?.status) params.set("status", filters.status);
@@ -606,23 +680,23 @@ export async function listAdminTransactions(filters?: {
 }
 
 export async function listAdminWebhookEvents(): Promise<AdminWebhookEventRow[]> {
-  return apiList<AdminWebhookEventRow>(`/v1/admin/webhooks?${LIST_ALL_PARAMS}`);
+  return apiList<AdminWebhookEventRow>(`/v1/admin/webhooks?${FIRST_PAGE_ONLY}`);
 }
 
 export async function listAdminAuditLogs(): Promise<AuditLogRow[]> {
-  return apiList<AuditLogRow>(`/v1/admin/audit-logs?${LIST_ALL_PARAMS}`);
+  return apiList<AuditLogRow>(`/v1/admin/audit-logs?${FIRST_PAGE_ONLY}`);
 }
 
 export async function listAdminInquiries(): Promise<AdminInquiryRow[]> {
-  return apiList<AdminInquiryRow>(`/v1/admin/inquiries?${LIST_ALL_PARAMS}`);
+  return apiListAll<AdminInquiryRow>("/v1/admin/inquiries");
 }
 
 // --- Risk monitoring -------------------------------------------------------
 
 export async function listAdminRiskAlerts(filters?: { merchantId?: string }): Promise<AdminFraudAlertRow[]> {
-  const params = new URLSearchParams(LIST_ALL_PARAMS);
+  const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
-  return apiList<AdminFraudAlertRow>(`/v1/admin/risk-alerts?${params.toString()}`);
+  return apiListAll<AdminFraudAlertRow>("/v1/admin/risk-alerts", params);
 }
 
 export async function updateRiskAlertStatus(alertId: string, status: string, note?: string): Promise<void> {
