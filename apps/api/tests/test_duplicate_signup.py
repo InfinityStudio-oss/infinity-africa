@@ -201,6 +201,22 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
     }
     fake_client.seed("merchants", second)
     fake_client.seed("merchants", first)
+    # Both strays have an owner who never verified - that is what they
+    # were. Seeded explicitly now, because an application only blocks a
+    # new signup if its owner never confirmed their email.
+    for merchant, when in ((first, "2026-10-15T20:50:00+00:00"), (second, "2026-10-16T04:37:00+00:00")):
+        user_id = uuid.uuid4()
+        fake_client.seed_auth_user(user_id, email=merchant["contact_email"], full_name="Hussein Said")
+        fake_client.seed(
+            "merchant_users",
+            {
+                "merchant_id": merchant["id"],
+                "user_id": str(user_id),
+                "role": "MERCHANT_ADMIN",
+                "status": "active",
+                "created_at": when,
+            },
+        )
 
     existing = find_existing_application(fake_client, nida="", phone="255766771207")
 
@@ -252,3 +268,155 @@ def test_mask_email_keeps_the_domain_readable(email, expected):
     was on @kilungulesupe... when they meant @gmail.com - so masking the
     domain as well would hide the one part that helps them recognise it."""
     assert mask_email(email) == expected
+
+
+# --- one person, two businesses ---------------------------------------------
+#
+# The other direction, and the expensive one. Everything above is about
+# an accident that leaves an abandoned account behind; none of it should
+# touch a merchant who is trading and wants to open something new.
+
+
+def _verify(fake_client, email: str) -> None:
+    """Confirm the address on the account that was just created, the way
+    clicking the emailed link does."""
+    for user in fake_client.auth.admin._users.values():
+        if user.email == email:
+            user.email_confirmed_at = "2026-10-22T09:00:00+00:00"
+            return
+    raise AssertionError(f"no auth user for {email}")
+
+
+def test_a_verified_merchant_can_open_a_second_business(fake_client):
+    """2026-10-30, in production: a merchant carrying 19,968 payments was
+    refused a second account for a separate billing system, and told he
+    had already applied.
+
+    He had - with the same national ID, because it is his. Identity alone
+    cannot tell "this person already applied and never got in" apart from
+    "this person runs two businesses", and only the first is the accident
+    this guard exists for.
+    """
+    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
+    _verify(fake_client, "benny@example.com")
+
+    second = _post(
+        _form(email="benny-billing@example.com", business_name="Benny Billing", contact_phone="+255766771299")
+    )
+
+    assert second.status_code == 201, second.text
+    assert len(_merchants(fake_client)) == 2
+
+
+def test_the_second_business_is_allowed_even_on_the_very_same_phone(fake_client):
+    """Phone is only a fallback key, and it is a weaker one than NIDA: a
+    business owner may well give the same number twice. A verified first
+    account must not block on it either."""
+    assert _post(_form(email="benny@example.com")).status_code == 201
+    _verify(fake_client, "benny@example.com")
+
+    second = _post(_form(email="benny-two@example.com", business_name="Benny Billing"))
+
+    assert second.status_code == 201, second.text
+
+
+def test_an_unverified_first_account_still_blocks(fake_client):
+    """The guard has not been turned off. Same identity, first account
+    never verified - still refused, exactly as before."""
+    assert _post(_form(email="huseinsaid211@gmail.com")).status_code == 201
+
+    second = _post(_form(email="husseinsaid211@gmail.com"))
+
+    assert second.status_code == 409
+    assert len(_merchants(fake_client)) == 1
+
+
+def test_the_unverified_one_is_found_even_when_a_verified_one_is_older(fake_client):
+    """A merchant with a real account AND an abandoned one must still be
+    pointed at the abandoned one - that is the row whose email support
+    corrects. Being verified elsewhere does not make the stray invisible.
+    """
+    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
+    _verify(fake_client, "benny@example.com")
+    assert _post(_form(email="bennu@example.con", business_name="Benny Billing")).status_code == 201
+
+    third = _post(_form(email="benny-billing@example.com", business_name="Benny Billing"))
+
+    assert third.status_code == 409
+    assert "bennu@example.con"[0] in third.json()["error"]["message"]
+
+
+def test_a_merchant_row_with_no_owner_never_blocks_a_signup(fake_client):
+    """An account with no active owner cannot be verified by anyone and
+    cannot be corrected by support either - correct_merchant_contact_email
+    raises on exactly this state. Refusing because of one would hand a
+    merchant a message telling them to contact support about something
+    support cannot fix, which is the dead end this whole area has been
+    spent getting people out of.
+    """
+    fake_client.seed(
+        "merchants",
+        {
+            "id": str(uuid.uuid4()),
+            "business_name": "Ownerless",
+            "merchant_code": "27000001",
+            "contact_email": "nobody@example.com",
+            "contact_phone": "255766771207",
+            "created_at": "2026-09-01T00:00:00+00:00",
+        },
+    )
+
+    assert find_existing_application(fake_client, nida="", phone="255766771207") is None
+
+
+# --- what the reviewer is shown ---------------------------------------------
+
+
+def test_the_review_screen_is_told_about_the_owners_other_businesses(fake_client):
+    """Signup no longer refuses a second business, so the judgement moves
+    to the person approving it. They cannot judge what they are not
+    shown."""
+    from app.services.duplicate_signup import identity_siblings
+
+    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
+    _verify(fake_client, "benny@example.com")
+    assert _post(
+        _form(email="benny-billing@example.com", business_name="Benny Billing")
+    ).status_code == 201
+
+    merchants = _merchants(fake_client)
+    index = identity_siblings(fake_client)
+
+    assert len(merchants) == 2
+    for merchant in merchants:
+        others = index[str(merchant["id"])]
+        assert [o["business_name"] for o in others] == [
+            m["business_name"] for m in merchants if m["id"] != merchant["id"]
+        ]
+
+
+def test_a_merchant_with_no_sibling_is_absent_from_the_index(fake_client):
+    """Almost every application. The badge must not appear on them."""
+    from app.services.duplicate_signup import identity_siblings
+
+    assert _post(_form()).status_code == 201
+
+    assert identity_siblings(fake_client) == {}
+
+
+def test_the_index_uses_the_same_keys_the_guard_does(fake_client):
+    """NIDA first, phone only as the fallback. If the screen grouped
+    people differently from the rule, the two would disagree about who is
+    the same person."""
+    from app.services.duplicate_signup import identity_siblings
+
+    assert _post(_form(email="a@example.com", business_name="One")).status_code == 201
+    _verify(fake_client, "a@example.com")
+    # Same person, same NIDA, different phone — still one owner.
+    assert _post(
+        _form(email="b@example.com", business_name="Two", contact_phone="+255712999888")
+    ).status_code == 201
+
+    index = identity_siblings(fake_client)
+
+    assert len(index) == 2, "a different phone must not split one owner into two"

@@ -134,6 +134,16 @@ export function OnboardingTable({ rows }: { rows: OnboardingSubmission[] }) {
                     {row.merchant_code && (
                       <div className="font-mono text-xs text-on-surface-variant">{row.merchant_code}</div>
                     )}
+                    {/* Not a warning. One owner may legitimately run
+                        several businesses; this exists so nobody
+                        approves the second one without knowing about
+                        the first. The detail page names them. */}
+                    {row.other_businesses?.length > 0 && (
+                      <div className="mt-1 text-xs text-on-surface-variant">
+                        same owner has {row.other_businesses.length} other business
+                        {row.other_businesses.length === 1 ? "" : "es"}
+                      </div>
+                    )}
                   </td>
                   <td className={`${tdClass} text-on-surface-variant`}>{row.owner_email}</td>
                   <td className={`${tdClass} text-on-surface-variant`}>{row.contact_phone ?? "—"}</td>

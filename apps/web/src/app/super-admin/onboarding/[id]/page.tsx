@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Card } from "@/components/portal/card";
@@ -58,6 +59,33 @@ export default async function OnboardingDetailPage(props: PageProps<"/super-admi
               {submission.nida_last4 ? `••••••••••••••••${submission.nida_last4}` : "—"}
             </dd>
           </div>
+          {/* One owner may legitimately run several businesses — signup
+              stopped refusing that, because it was turning away real
+              merchants opening a genuine second business. Nothing here
+              blocks anything; it tells whoever is approving this
+              application what else the same person already holds. */}
+          {submission.other_businesses?.length > 0 && (
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
+                Same owner also has
+              </dt>
+              <dd className="mt-1.5 flex flex-wrap gap-2">
+                {submission.other_businesses.map((business) => (
+                  <Link
+                    key={business.merchant_id}
+                    href={`/super-admin/merchants/${business.merchant_id}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-outline-variant px-3 py-1.5 text-sm text-on-surface hover:border-primary-container"
+                  >
+                    <span className="font-medium">{business.business_name}</span>
+                    <span className="font-mono text-xs text-on-surface-variant">
+                      {business.merchant_code ?? "—"}
+                    </span>
+                    <span className="text-xs text-on-surface-variant">{business.status ?? ""}</span>
+                  </Link>
+                ))}
+              </dd>
+            </div>
+          )}
           {submission.tin_number && (
             <div>
               <dt className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">TIN Number</dt>

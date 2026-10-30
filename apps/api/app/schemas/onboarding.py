@@ -138,6 +138,15 @@ class OnboardingDocumentResponse(BaseModel):
     signed_url: str | None = None
 
 
+class RelatedBusiness(BaseModel):
+    """One other business on the same owner identity, for the review screen."""
+
+    merchant_id: uuid.UUID
+    business_name: str
+    merchant_code: str | None = None
+    status: str | None = None
+
+
 class OnboardingSubmissionResponse(BaseModel):
     """Super-admin list/detail view — joins the merchant's own profile
     fields onto its onboarding_submissions row."""
@@ -151,6 +160,12 @@ class OnboardingSubmissionResponse(BaseModel):
     # trading/display business_name above. Optional; most merchants leave
     # it blank.
     legal_name: str | None = None
+    # Other businesses already held by the same person — same identity
+    # keys the signup guard uses (NIDA, then contact phone). Empty for
+    # almost every application. It refuses nothing: one owner may
+    # legitimately run several businesses, and this is here so the Super
+    # Admin approving one knows the rest exist.
+    other_businesses: list["RelatedBusiness"] = []
     owner_email: str
     contact_phone: str | None = None
     nature_of_business: str

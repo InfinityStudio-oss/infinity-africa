@@ -98,6 +98,13 @@ export interface OnboardingDocument {
 
 /** Super-admin list/detail view — joins the merchant's own profile fields
  * onto its onboarding_submissions row. */
+export interface RelatedBusiness {
+  merchant_id: string;
+  business_name: string;
+  merchant_code: string | null;
+  status: string | null;
+}
+
 export interface OnboardingSubmission {
   id: string;
   merchant_id: string;
@@ -115,6 +122,11 @@ export interface OnboardingSubmission {
   /** Masked — last 4 digits of the NIDA only. The full number is never
    * returned by the API. Null for pre-NIDA submissions. */
   nida_last4: string | null;
+  /** Other businesses already held by this same owner — matched on the
+   * same identity keys signup uses (NIDA, then phone). Empty for almost
+   * every application. Informational only: one owner may legitimately
+   * run several businesses, and nothing is refused because of this. */
+  other_businesses: RelatedBusiness[];
   tin_number: string | null;
   expected_monthly_volume: string | null;
   services_needed: ServiceNeeded[];

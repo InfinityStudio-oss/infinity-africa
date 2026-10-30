@@ -36,6 +36,7 @@ from app.services.crud import get_by_id, insert_row, update_row
 from app.services.duplicate_signup import (
     duplicate_signup_message,
     find_existing_application,
+    identity_siblings,
 )
 from app.services.email import (
     auth_link_for,
@@ -551,12 +552,18 @@ def _rollup_document_status(documents: list[dict]) -> str:
     return "VERIFIED"
 
 
-def _to_submission_row(submission: dict, merchant: dict, documents: list[dict]) -> dict:
+def _to_submission_row(
+    submission: dict, merchant: dict, documents: list[dict], siblings: list[dict] | None = None
+) -> dict:
     return {
         "id": submission["id"],
         "merchant_id": submission["merchant_id"],
         "merchant_code": merchant.get("merchant_code"),
         "business_name": merchant.get("business_name", ""),
+        # Other businesses already held by this same person. Never a
+        # reason to refuse anything - one owner may legitimately run
+        # several - but the reviewer approving this one should know.
+        "other_businesses": siblings or [],
         "legal_name": merchant.get("legal_name"),
         # `or ""`, not `.get(..., "")` — the merchant row can have the key
         # present but set to None (contact_email is DB-required today, but
@@ -597,10 +604,19 @@ def list_onboarding_submissions(client: Client) -> list[dict]:
     for doc in documents:
         docs_by_merchant.setdefault(doc["merchant_id"], []).append(doc)
 
+    siblings = identity_siblings(client)
+
     rows = []
     for submission in submissions:
         merchant = get_by_id(client, "merchants", uuid.UUID(submission["merchant_id"])) or {}
-        rows.append(_to_submission_row(submission, merchant, docs_by_merchant.get(submission["merchant_id"], [])))
+        rows.append(
+            _to_submission_row(
+                submission,
+                merchant,
+                docs_by_merchant.get(submission["merchant_id"], []),
+                siblings.get(str(submission["merchant_id"])),
+            )
+        )
     return rows
 
 
@@ -619,7 +635,12 @@ def get_onboarding_submission(client: Client, submission_id: uuid.UUID) -> dict:
     for doc in documents:
         doc["signed_url"] = get_document_signed_url(client, doc)
 
-    return _to_submission_row(submission, merchant, documents)
+    return _to_submission_row(
+        submission,
+        merchant,
+        documents,
+        identity_siblings(client).get(str(submission["merchant_id"])),
+    )
 
 
 def _missing_required_documents(client: Client, merchant_id: uuid.UUID) -> list[str]:
