@@ -18,6 +18,17 @@ const MODULES = [
   { href: "/admin/provider-status", icon: "dns", title: "Provider Status", description: "Selcom, M-Pesa, bank uptime" },
 ];
 
+/** A lifetime total, or a dash when the backend could not produce one.
+ *
+ * Never TZS 0.00 for a missing value. Zero is a real and meaningful
+ * answer for a daily card on a quiet morning; for an all-time total it
+ * would read as "this platform has never taken a payment", which is the
+ * single most alarming and least likely thing this dashboard could say.
+ * A dash with "Couldn't load" underneath is honest and unmistakable. */
+function lifetime(amount: string | null): string {
+  return amount === null ? "—" : formatCurrency(amount, "TZS");
+}
+
 export default async function SuperAdminCommandCenterPage() {
   const [overview, recentActivity] = await Promise.all([getAdminOverview(), listAdminAuditLogs()]);
 
@@ -41,9 +52,26 @@ export default async function SuperAdminCommandCenterPage() {
           <AdminKpiCard variant="brand" icon="store" label="Total Businesses" value={overview.total_merchants.toLocaleString()} />
           <AdminKpiCard variant="brand" icon="account_balance_wallet" label="Collections Today" value={formatCurrency(overview.collections_today, "TZS")} />
           <AdminKpiCard variant="brand" icon="send_money" label="Withdrawals Today" value={formatCurrency(overview.withdrawals_today, "TZS")} />
-          <AdminKpiCard variant="brand" icon="link" label="Active Payment Links" value={overview.active_payment_links.toLocaleString()} />
+          {/* Lifetime, in the slot "Active Payment Links" used to hold.
+              The underlying active_payment_links figure is untouched and
+              still returned by the API — only this card changed. */}
+          <AdminKpiCard
+            variant="brand"
+            icon="savings"
+            label="Revenue Total"
+            value={lifetime(overview.revenue_total)}
+            caption={overview.revenue_total === null ? "Couldn't load" : "All time"}
+          />
           <AdminKpiCard variant="brand" icon="payments" label="Collections This Month" value={formatCurrency(overview.collections_this_month, "TZS")} caption="Month to date" />
-          <AdminKpiCard variant="brand" icon="warning" label="Failed Transactions" value={overview.failed_transactions.toLocaleString()} />
+          {/* Likewise: failed_transactions is still computed and still in
+              the response, it simply no longer has a card here. */}
+          <AdminKpiCard
+            variant="brand"
+            icon="account_balance"
+            label="Collections Total"
+            value={lifetime(overview.collections_total)}
+            caption={overview.collections_total === null ? "Couldn't load" : "All time"}
+          />
           <AdminKpiCard variant="brand" icon="monetization_on" label="Revenue Today" value={formatCurrency(overview.platform_revenue_today, "TZS")} caption="Since midnight" />
           <AdminKpiCard variant="brand" icon="monetization_on" label="Revenue This Month" value={formatCurrency(overview.platform_revenue, "TZS")} caption="Month to date" />
           <AdminKpiCard variant="brand" icon="assignment_ind" label="Pending Onboarding" value={overview.pending_onboarding_requests.toLocaleString()} />

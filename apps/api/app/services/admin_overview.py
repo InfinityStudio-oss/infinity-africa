@@ -19,8 +19,9 @@ unbounded by nature and will need paging or an aggregate before they
 reach 1000 rows.
 """
 
+import logging
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from supabase import Client
 
@@ -31,6 +32,8 @@ from app.core.time import (
 )
 from app.schemas.enums import AccountStatus
 from app.services.crud import execute_maybe_single, fetch_all
+
+logger = logging.getLogger("infinity.admin.overview")
 
 
 def _parse_dt(value: str) -> datetime:
@@ -76,6 +79,55 @@ def _platform_revenue_since(client: Client, *, account_id: str | None, since: st
     return sum((Decimal(str(e["amount"])) for e in entries), Decimal(0))
 
 
+def _money_totals(client: Client, *, day_start: str, month_start: str) -> dict | None:
+    """All six money figures in one database call, or None.
+
+    public.admin_overview_money (migration 20261031030000) sums them in
+    Postgres. The alternative is what this module did before: read every
+    matching row a thousand at a time and add them up here, which at
+    28,695 collection transactions and 28,710 revenue entries would be
+    roughly sixty sequential requests for one dashboard, growing with
+    every payment the platform takes.
+
+    Returns None if the function is not there - the migration ships
+    separately and may not have been applied yet. The caller then falls
+    back to the old per-row summing for today and this month, and reports
+    the lifetime figures as unavailable rather than guessing at them.
+    """
+    try:
+        result = client.rpc(
+            "admin_overview_money",
+            {"p_day_start": day_start, "p_month_start": month_start},
+        ).execute()
+    except Exception:  # noqa: BLE001 - the dashboard must render regardless
+        logger.warning("admin_overview_money_unavailable - apply migration 20261031030000")
+        return None
+
+    data = result.data
+    if not isinstance(data, dict):
+        logger.warning("admin_overview_money_unexpected_shape")
+        return None
+
+    try:
+        # Text in, Decimal here. The function returns these as strings on
+        # purpose: a numeric(14,2) read back through a JSON number arrives
+        # as a float, and these are money.
+        return {key: Decimal(str(data[key])) for key in _MONEY_KEYS}
+    except (KeyError, InvalidOperation, TypeError):
+        logger.warning("admin_overview_money_unparsable")
+        return None
+
+
+_MONEY_KEYS = (
+    "collections_today",
+    "collections_this_month",
+    "collections_total",
+    "revenue_today",
+    "revenue_this_month",
+    "revenue_total",
+)
+
+
 def get_admin_overview(client: Client) -> dict:
     now = datetime.now(timezone.utc)
 
@@ -115,18 +167,48 @@ def get_admin_overview(client: Client) -> dict:
             .gte("created_at", since)
         )
 
-    successful_collections = _successful_collections_since(day_start)
-    collections_today = sum(
-        (Decimal(str(t["gross_amount"])) for t in successful_collections if _is_today(t["created_at"], now)),
-        Decimal(0),
-    )
+    # One database call for all six money figures. Falls back to the
+    # per-row summing below if the function has not been applied yet.
+    money = _money_totals(client, day_start=day_start, month_start=month_start)
 
-    # Month to date, on the merchant's calendar - the same month boundary
-    # platform revenue uses, so the two cards describe the same period.
-    collections_this_month = sum(
-        (Decimal(str(t["gross_amount"])) for t in _successful_collections_since(month_start)),
-        Decimal(0),
-    )
+    if money is None:
+        successful_collections = _successful_collections_since(day_start)
+        collections_today = sum(
+            (
+                Decimal(str(t["gross_amount"]))
+                for t in successful_collections
+                if _is_today(t["created_at"], now)
+            ),
+            Decimal(0),
+        )
+
+        # Month to date, on the merchant's calendar - the same month
+        # boundary platform revenue uses, so the two cards describe the
+        # same period.
+        collections_this_month = sum(
+            (Decimal(str(t["gross_amount"])) for t in _successful_collections_since(month_start)),
+            Decimal(0),
+        )
+        platform_revenue_today = _platform_revenue_since(
+            client, account_id=revenue_account_id, since=day_start
+        )
+        platform_revenue_month = _platform_revenue_since(
+            client, account_id=revenue_account_id, since=month_start
+        )
+        # Not computable this way: a lifetime figure read a thousand rows
+        # at a time is exactly what the function exists to avoid, and a
+        # number that silently stops at the first page is worse than no
+        # number. The card says so rather than showing a wrong total or a
+        # misleading zero.
+        collections_total: Decimal | None = None
+        revenue_total: Decimal | None = None
+    else:
+        collections_today = money["collections_today"]
+        collections_this_month = money["collections_this_month"]
+        collections_total = money["collections_total"]
+        platform_revenue_today = money["revenue_today"]
+        platform_revenue_month = money["revenue_this_month"]
+        revenue_total = money["revenue_total"]
 
     # Counted by the database, not by how many rows came back. This used
     # to sum a plain select, and PostgREST caps a response at 1000 rows —
@@ -208,15 +290,19 @@ def get_admin_overview(client: Client) -> dict:
         "paid_invoices_today": paid_invoices_today,
         "outstanding_invoice_value": outstanding_invoice_value,
         "failed_transactions": failed_transactions,
-        # Two windows, one account. "Today" is what the platform has
+        # Three windows, one account. "Today" is what the platform has
         # earned since midnight in Dar es Salaam; "this month" since the
-        # 1st, same clock.
-        "platform_revenue_today": _platform_revenue_since(
-            client, account_id=revenue_account_id, since=day_start
-        ),
-        "platform_revenue": _platform_revenue_since(
-            client, account_id=revenue_account_id, since=month_start
-        ),
+        # 1st, same clock; the total since the platform began.
+        #
+        # The lifetime pair carries no period at all, so nothing about it
+        # changes at a month or year boundary - 1 November moves the two
+        # monthly cards to November and leaves these untouched, because a
+        # period is only ever derived from the timestamps in the query.
+        # Nothing resets them and nothing needs to.
+        "platform_revenue_today": platform_revenue_today,
+        "platform_revenue": platform_revenue_month,
+        "collections_total": collections_total,
+        "revenue_total": revenue_total,
         "pending_onboarding_requests": pending_onboarding_requests,
         "pending_withdrawals": pending_withdrawals,
     }

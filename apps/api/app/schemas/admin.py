@@ -29,6 +29,13 @@ class AdminOverviewResponse(BaseModel):
     # month. Both from the platform_revenue ledger account.
     platform_revenue_today: Decimal
     platform_revenue: Decimal
+    # All time, same two definitions with no lower bound. Null when
+    # public.admin_overview_money (migration 20261031030000) is not
+    # available — the dashboard then says so, because a lifetime total
+    # shown as 0.00 reads as "the platform has earned nothing", which is
+    # a far worse answer than "could not load".
+    collections_total: Decimal | None = None
+    revenue_total: Decimal | None = None
     pending_onboarding_requests: int
     pending_withdrawals: int
 

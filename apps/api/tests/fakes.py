@@ -498,6 +498,8 @@ class _FakeRpcCall:
             return self._client._post_ledger_entries(self._params.get("p_entries") or [])
         if self._fn_name == "finalize_withdrawal_limits":
             return self._client._finalize_withdrawal_limits(self._params)
+        if self._fn_name == "admin_overview_money":
+            return self._client._admin_overview_money(self._params)
         raise NotImplementedError(self._fn_name)
 
 
@@ -778,6 +780,66 @@ class FakeSupabaseClient:
 
     def rpc(self, fn_name: str, params: dict | None = None) -> _FakeRpcCall:
         return _FakeRpcCall(self, fn_name, params or {})
+
+    def _admin_overview_money(self, params: dict) -> _Result:
+        """Mirrors supabase/migrations/20261031030000_admin_overview_money.sql.
+
+        Six sums over two tables: successful collection transactions by
+        gross_amount, and credit entries on the single platform_revenue
+        ledger account — each for today, this month, and all time.
+
+        Returns every amount as a STRING, exactly as the real function
+        does. That is not cosmetic: the function casts to text so a
+        numeric(14,2) does not come back through a JSON number as a
+        float, and a fake that handed back Decimals would hide a caller
+        that had forgotten to parse.
+        """
+        day_start = params.get("p_day_start")
+        month_start = params.get("p_month_start")
+
+        revenue_account_id = next(
+            (
+                a["id"]
+                for a in self.table("ledger_accounts")._table.rows
+                if a.get("purpose") == "platform_revenue" and not a.get("merchant_id")
+            ),
+            None,
+        )
+
+        def total(rows, field: str, since: str | None) -> Decimal:
+            running = Decimal(0)
+            for row in rows:
+                created = row.get("created_at")
+                if since is not None and (not created or str(created) < str(since)):
+                    continue
+                running += Decimal(str(row.get(field) or 0))
+            return running
+
+        collections = [
+            t
+            for t in self.table("transactions")._table.rows
+            if t.get("type") == "collection" and t.get("status") == "successful"
+        ]
+        revenue = [
+            e
+            for e in self.table("ledger_entries")._table.rows
+            if revenue_account_id
+            and str(e.get("ledger_account_id")) == str(revenue_account_id)
+            # Credits only. Reversals are debits and are deliberately not
+            # subtracted — see the migration header.
+            and e.get("direction") == "credit"
+        ]
+
+        return _Result(
+            {
+                "collections_today": str(total(collections, "gross_amount", day_start)),
+                "collections_this_month": str(total(collections, "gross_amount", month_start)),
+                "collections_total": str(total(collections, "gross_amount", None)),
+                "revenue_today": str(total(revenue, "amount", day_start)),
+                "revenue_this_month": str(total(revenue, "amount", month_start)),
+                "revenue_total": str(total(revenue, "amount", None)),
+            }
+        )
 
     def _finalize_withdrawal_limits(self, params: dict) -> _Result:
         """Mirrors supabase/migrations/20260922030000_finalize_withdrawal_limits.sql:

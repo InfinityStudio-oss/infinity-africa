@@ -23,6 +23,12 @@ export interface AdminOverview {
   platform_revenue_today: string;
   /** Since the 1st, EAT. */
   platform_revenue: string;
+  /** All time, no lower bound — so a month or year boundary does not
+   * touch them. Null means the backend could not compute them, which is
+   * NOT the same as zero and must never render as TZS 0.00: a lifetime
+   * total of zero reads as "this platform has never earned anything". */
+  collections_total: string | null;
+  revenue_total: string | null;
   pending_onboarding_requests: number;
   pending_withdrawals: number;
 }
