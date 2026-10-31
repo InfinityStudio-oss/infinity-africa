@@ -394,7 +394,7 @@ def test_both_messages_lead_with_the_brand_on_its_own_line():
         ),
     ):
         lines = body.split("\n")
-        assert lines[0] == "INFINITYPAY"
+        assert lines[0] == "Infinity Pay"
         assert len(lines) >= 3
         assert lines[-1].startswith("Review")
         # Still one message, not several: the newlines are layout, and the

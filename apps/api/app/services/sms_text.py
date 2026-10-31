@@ -97,7 +97,7 @@ def format_amount(value: Decimal | str | int | None) -> str:
 # No emoji, no decorative characters: everything here stays inside GSM-7 so
 # a receipt costs the fewest parts it can.
 COLLECTION_ALERT_TEMPLATE = (
-    "InfinityPay: Umepokea TZS {amount}. "
+    "Infinity Pay: Umepokea TZS {amount}. "
     "Makato: TZS {fee}. "
     "Kiasi halisi: TZS {net}. "
     "Salio baada ya muamala: TZS {closing_balance}. "
@@ -131,7 +131,7 @@ MESSAGE_TAIL = "Kwa msaada: 255747730270"
 # 2026-10-17 and the mechanism went with it - there is no claim left to
 # get wrong, and nothing to keep in step with pricing.
 WELCOME_TEMPLATE = (
-    "Karibu InfinityPay! Akaunti yako imeidhinishwa. "
+    "Karibu Infinity Pay! Akaunti yako imeidhinishwa. "
     "Pokea malipo, tengeneza API keys na weka webhooks. " + MESSAGE_TAIL
 )
 
@@ -148,13 +148,14 @@ def render_welcome() -> str:
 
 
 
-# No "InfinityPay:" prefix. The sender ID the message arrives from is
-# already INFINITYPAY, so the name appeared twice on the handset before
-# the first full stop - and those are the characters this message can
-# least afford.
+# No "Infinity Pay:" prefix. The sender ID the message arrives from is
+# already the brand, so the name appeared twice on the handset before the
+# first full stop - and those are the characters this message can least
+# afford. It still appears once mid-sentence, where it says who the money
+# came from.
 WITHDRAWAL_COMPLETE_TEMPLATE = (
     "Imethibitishwa. "
-    "Umepokea TZS {amount} kutoka INFINITYPAY. "
+    "Umepokea TZS {amount} kutoka Infinity Pay. "
     "Ada: TZS {fee}. "
     "Salio baada ya muamala: TZS {closing_balance}. "
     "Kumb: {reference}. " + MESSAGE_TAIL
@@ -267,12 +268,12 @@ ADMIN_PORTAL_URL = "https://www.infinitypay.me/admin-login"
 # a registered account is status='pending', kyc_status='unverified', and
 # an operator reading this on a phone must not come away thinking a
 # business is live.
-# INFINITYPAY on its own line, then the news, then where to go. A newline
+# The brand on its own line, then the news, then where to go. A newline
 # is a plain GSM-7 character costing one septet - the same as the ": " it
 # replaces, minus one - so the layout is a character cheaper than the
 # inline form, not more expensive.
 NEW_MERCHANT_ADMIN_TEMPLATE = (
-    "INFINITYPAY\n"
+    "Infinity Pay\n"
     "{business_name} has opened a new account. Not yet approved.\n"
     "Review on portal: " + ADMIN_PORTAL_URL
 )
@@ -282,7 +283,7 @@ NEW_MERCHANT_ADMIN_TEMPLATE = (
 # and a reference is 8, so the cap is what keeps the worst case at two
 # parts instead of letting a long name run it to three.
 WITHDRAWAL_REQUEST_ADMIN_TEMPLATE = (
-    "INFINITYPAY\n"
+    "Infinity Pay\n"
     "{business_name} requested TZS {amount}. Bal: TZS {available_balance}.\n"
     "Ref: {reference}. Awaiting approval.\n"
     "Review: " + ADMIN_PORTAL_URL
@@ -301,7 +302,7 @@ WITHDRAWAL_REQUEST_ADMIN_TEMPLATE = (
 # account name and the bank. Those are decided by opening the queue and
 # are a worse thing to leave sitting in a mailbox.
 WITHDRAWAL_AUTO_ADMIN_TEMPLATE = (
-    "INFINITYPAY\n"
+    "Infinity Pay\n"
     "{business_name} TZS {amount} paid out automatically.\n"
     "Ref: {reference}. No approval needed.\n"
     "Review: " + ADMIN_PORTAL_URL

@@ -284,6 +284,12 @@ SECURITY_TESTS = [
     # An operator losing sight of unattended payouts is a security
     # property, not a notification nicety.
     "tests/test_admin_auto_withdrawal_alerts.py",
+    # Holds the guard that compares every enqueue_* function against the
+    # dispatcher's list. A purpose missing from that list is a message
+    # that queues forever and is never sent, which has happened twice -
+    # and on 2026-10-31 this file was not in the daily selection, so the
+    # guard caught a third only when the whole suite was run by hand.
+    "tests/test_sms_lifecycle.py",
 ]
 
 
