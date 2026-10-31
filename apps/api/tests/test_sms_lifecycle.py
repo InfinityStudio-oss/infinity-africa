@@ -216,7 +216,7 @@ def test_the_worker_dispatches_a_real_welcome_end_to_end(fake_client, monkeypatc
     dispatch_pending_sms(fake_client)
 
     assert len(sent) == 1
-    assert "Karibu Infinity Pay!" in sent[0]
+    assert "Karibu InfinityPay!" in sent[0]
     assert _rows(fake_client, "welcome")[0]["status"] == "sent"
 
 
@@ -433,7 +433,7 @@ def test_the_amount_and_reference_come_from_committed_records(fake_client):
     row = _rows(fake_client, "withdrawal_complete")[0]
     assert row["gross_amount"] == "22000.00"
     assert row["reference"] == transaction["reference"]
-    assert "Umepokea TZS 22,000 kutoka Infinity Pay." in row["body"]
+    assert "Umepokea TZS 22,000 kutoka InfinityPay." in row["body"]
     assert transaction["reference"] in row["body"]
 
 

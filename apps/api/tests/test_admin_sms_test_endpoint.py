@@ -103,7 +103,7 @@ def test_preview_reports_each_flag_and_where_it_came_from(fake_client, admin, se
 def test_preview_shows_the_real_message_and_its_cost(fake_client, admin, sent):
     body = _post(admin, "preview").json()["data"]
 
-    assert body["sample_message"].startswith("Infinity Pay\n")
+    assert body["sample_message"].startswith("InfinityPay\n")
     assert body["segments"] == 1
     assert body["encoding"] == "GSM-7"
 
