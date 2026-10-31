@@ -292,6 +292,33 @@ describe("Automatic Withdrawal Controls", () => {
     expect(screen.getByText(/admin@infinitypay\.me/)).toBeInTheDocument();
     expect(screen.getByText(/Policy version 1/)).toBeInTheDocument();
   });
+
+  it("does not claim someone changed a policy nobody has touched", () => {
+    // Seen in production on the day this shipped. updated_at is never
+    // null - the row is created with one - so the freshly seeded policy
+    // read "Updated 31 Oct 2026, 18:54", which looks exactly like an
+    // administrator having set the limits minutes earlier. updated_by is
+    // the field that actually answers the question.
+    render(
+      <WithdrawalAutomationCard
+        policy={{ ...offPolicy, updated_at: "2026-10-31T15:54:45Z", updated_by: null, updated_by_email: null }}
+      />,
+    );
+
+    expect(screen.getByText("Not changed since setup")).toBeInTheDocument();
+    expect(screen.queryByText(/^Updated /)).not.toBeInTheDocument();
+  });
+
+  it("shows amounts exactly as the API sent them, to the last decimal place", () => {
+    // The API normalises money to two decimal places; the card must not
+    // re-render it some other way. "TZS 500,000.0" on the one field where
+    // 500 and 500,000 are a keystroke apart is the bug this pins.
+    render(<WithdrawalAutomationCard policy={offPolicy} />);
+
+    expect(screen.getByPlaceholderText("e.g. 500000")).toHaveValue("500000.00");
+    expect(screen.queryByText(/TZS 500,000\.0 or less/)).not.toBeInTheDocument();
+    expect(screen.getByText(/TZS 500,000\.00 or less may process automatically/)).toBeInTheDocument();
+  });
 });
 
 describe("compareDecimalStrings", () => {

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { Icon } from "@/components/portal/icon";
+import { formatDateTime } from "@/lib/format";
 import { saveWithdrawalAutomationPolicyAction } from "@/lib/admin/live-actions";
 import {
   EMPTY_POLICY_STATE,
@@ -163,13 +164,20 @@ function PolicyEditor({
         </div>
         <div className="text-xs text-on-surface-variant text-right">
           {current.version !== null && <p>Policy version {current.version}</p>}
-          {current.updated_at && (
+          {/* updated_at is never null - the row is created with one - so
+              it cannot be used to mean "nobody has changed this". The
+              seeded row carried the migration's own timestamp, which read
+              as though an administrator had set the policy minutes
+              earlier. updated_by is the field that actually answers it:
+              the backend writes it only when a person saves. */}
+          {current.updated_by ? (
             <p className="mt-0.5">
-              Updated {new Date(current.updated_at).toLocaleString()}
+              Updated {formatDateTime(current.updated_at!)}
               {current.updated_by_email ? ` by ${current.updated_by_email}` : ""}
             </p>
+          ) : (
+            <p className="mt-0.5">Not changed since setup</p>
           )}
-          {!current.updated_at && <p className="mt-0.5">Never changed</p>}
         </div>
       </div>
 

@@ -759,7 +759,7 @@ def test_lowering_a_limit_never_needs_confirmation(fake_client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["max_amount_tzs"] == "20000"
+    assert response.json()["data"]["max_amount_tzs"] == "20000.00"
 
 
 @pytest.mark.parametrize(
@@ -1240,7 +1240,7 @@ def test_a_policy_change_is_audited_with_both_versions_and_a_correlation_id(fake
     assert metadata["previous"]["enabled"] is False
     assert metadata["new"]["version"] == 2
     assert metadata["new"]["enabled"] is True
-    assert metadata["new"]["max_amount_tzs"] == "50000"
+    assert metadata["new"]["max_amount_tzs"] == "50000.00"
     assert metadata["confirmed"] is True
     assert uuid.UUID(metadata["correlation_id"])
     # Amounts recorded as strings, never floats.
@@ -1299,8 +1299,8 @@ def test_the_audit_record_shows_what_the_deployment_ceiling_made_of_it(fake_clie
         for r in fake_client.table("audit_logs")._table.rows
         if r["action"] == "withdrawal_automation_policy.updated"
     )
-    assert entry["metadata"]["new"]["max_amount_tzs"] == "200000"
-    assert entry["metadata"]["effective"]["max_amount_tzs"] == "30000"
+    assert entry["metadata"]["new"]["max_amount_tzs"] == "200000.00"
+    assert entry["metadata"]["effective"]["max_amount_tzs"] == "30000.00"
 
 
 # --- The read endpoint ------------------------------------------------------
@@ -1323,6 +1323,61 @@ def test_the_read_endpoint_reports_the_effective_state_not_just_the_stored_one(f
     assert data["manual_only_override"] is True
     assert data["blocked_reason_code"] == "AUTO_POLICY_DISABLED"
     assert "deployment override" in data["blocked_explanation"]
+
+
+def test_every_amount_is_reported_at_two_decimal_places(fake_client, monkeypatch):
+    """Seen in production on the day this shipped: the portal rendered
+    "TZS 500,000.0 or less may process automatically".
+
+    PostgREST serialises a numeric column as a JSON *number*, so
+    500000.00 reaches the API as the float 500000.0 - which the fake,
+    storing strings, never reproduced. A trailing single zero is noise on
+    the one field where mistaking 500 for 500,000 is the whole hazard, and
+    a limit that renders two different ways on one screen reads as a
+    rendering fault.
+    """
+    _permit_automation(monkeypatch)
+    admin_id = _admin(fake_client)
+    # Exactly what PostgREST hands back for numeric(14, 2).
+    row = fake_client.table("withdrawal_automation_policy")._table.rows[0]
+    row["max_amount_tzs"] = 500000.0
+    row["merchant_rolling_24h_limit_tzs"] = 1000000.0
+
+    data = client.get(POLICY_PATH, headers=auth_headers(admin_id)).json()["data"]
+
+    assert data["max_amount_tzs"] == "500000.00"
+    assert data["merchant_rolling_24h_limit_tzs"] == "1000000.00"
+    for field in (
+        "effective_max_amount_tzs",
+        "effective_rolling_24h_limit_tzs",
+        "hard_max_amount_tzs",
+        "hard_rolling_24h_limit_tzs",
+        "platform_min_withdrawal_amount_tzs",
+        "platform_max_withdrawal_amount_tzs",
+        "platform_rolling_24h_limit_tzs",
+    ):
+        _, _, fraction = data[field].partition(".")
+        assert len(fraction) == 2, f"{field} came back as {data[field]!r}, not 2 decimal places"
+
+
+def test_a_float_from_the_database_never_changes_the_decision(fake_client, monkeypatch):
+    """The formatting fix must not quietly move a limit. A float that came
+    from numeric(14, 2) recovers exactly, so the boundary stays where it
+    was: 20,000 eligible, 20,000.01 not."""
+    _permit_automation(monkeypatch)
+    fake_client.enable_withdrawal_automation_policy()
+    row = fake_client.table("withdrawal_automation_policy")._table.rows[0]
+    row["max_amount_tzs"] = 20000.0
+    row["merchant_rolling_24h_limit_tzs"] = 1000000.0
+
+    policy = resolve_effective_policy(fake_client)
+    assert policy.max_amount_tzs == Decimal("20000.00")
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+
+    assert _auto(_row(fake_client, _request_withdrawal(merchant_id, user_id, "20000")["id"])) is True
+    assert _auto(_row(fake_client, _request_withdrawal(merchant_id, user_id, "20000.01")["id"])) is False
 
 
 def test_the_read_endpoint_returns_amounts_as_strings(fake_client, monkeypatch):

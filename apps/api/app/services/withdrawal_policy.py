@@ -49,7 +49,7 @@ one indexed single-row read per withdrawal request.
 import logging
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 
 from supabase import Client
 
@@ -137,6 +137,26 @@ class EffectiveWithdrawalPolicy:
         return "Automatic processing is switched off. Every withdrawal is waiting for manual approval."
 
 
+MONEY = Decimal("0.01")
+
+
+def money(value: Decimal) -> Decimal:
+    """A TZS amount at the two decimal places every money column uses.
+
+    PostgREST serialises a ``numeric`` column as a JSON *number*, so
+    ``500000.00`` arrives as the float ``500000.0`` and, left alone, goes
+    back out of the API as the string ``"500000.0"``. The portal then
+    rendered "TZS 500,000.0 or less may process automatically" on the one
+    field where mistaking 500 for 500,000 is the whole hazard — a trailing
+    single zero is noise exactly where the number has to be read at a
+    glance.
+
+    Lossless for anything that came out of ``numeric(14, 2)``, which
+    cannot hold a third decimal place in the first place.
+    """
+    return value.quantize(MONEY)
+
+
 def _decimal_or_none(value: object) -> Decimal | None:
     """A money column that will not parse is a reason to fall back to
     manual, not a reason to guess. Never float(): a binary float cannot
@@ -187,8 +207,8 @@ def load_stored_policy(client: Client) -> dict | None:
 
     return {
         "enabled": bool(row.get("enabled")),
-        "max_amount_tzs": max_amount,
-        "merchant_rolling_24h_limit_tzs": rolling,
+        "max_amount_tzs": money(max_amount),
+        "merchant_rolling_24h_limit_tzs": money(rolling),
         "version": version,
         "updated_at": row.get("updated_at"),
         "updated_by": row.get("updated_by"),
@@ -205,8 +225,13 @@ def resolve_effective_policy(client: Client) -> EffectiveWithdrawalPolicy:
     settings = get_settings()
     manual_only = settings.require_admin_approval_for_all_withdrawals
     deployment_allows = settings.auto_withdrawals_enabled and not manual_only
-    hard_max = settings.auto_withdrawal_max_amount_tzs
-    hard_rolling = settings.auto_withdrawal_daily_limit_tzs
+    # Normalised here rather than at the response, so the limit the RPC is
+    # given, the limit the portal shows and the limit the audit trail
+    # records are the same text. ROUND_DOWN because these are ceilings: a
+    # ceiling nudged down lets less money through unattended, and that is
+    # the only direction a rounding choice is allowed to err.
+    hard_max = settings.auto_withdrawal_max_amount_tzs.quantize(MONEY, rounding=ROUND_DOWN)
+    hard_rolling = settings.auto_withdrawal_daily_limit_tzs.quantize(MONEY, rounding=ROUND_DOWN)
 
     stored = load_stored_policy(client)
 

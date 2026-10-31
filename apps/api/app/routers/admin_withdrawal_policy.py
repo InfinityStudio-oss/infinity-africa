@@ -52,6 +52,7 @@ from app.services.audit import write_audit_log
 from app.services.security_alerts import notify_security_event
 from app.services.withdrawal_policy import (
     EffectiveWithdrawalPolicy,
+    money,
     requires_confirmation,
     resolve_effective_policy,
     update_policy,
@@ -63,14 +64,27 @@ router = APIRouter(prefix="/admin/withdrawal-automation", tags=["admin-withdrawa
 
 
 def _response(client, policy: EffectiveWithdrawalPolicy) -> WithdrawalAutomationPolicyResponse:
+    """Every amount leaves here at two decimal places.
+
+    A money field that renders as "500,000.0" in one place and
+    "500,000.00" in another reads as a rendering fault, and this screen is
+    where an operator checks a limit before trusting it. The deployment
+    ceilings and platform limits come from Settings as plain Decimals
+    (``Decimal(500000)``), so they need the same treatment as the ones
+    read from the database.
+    """
     settings = get_settings()
     return WithdrawalAutomationPolicyResponse(
         automation_active=policy.automation_active,
-        effective_max_amount_tzs=policy.max_amount_tzs,
-        effective_rolling_24h_limit_tzs=policy.merchant_rolling_24h_limit_tzs,
+        effective_max_amount_tzs=money(policy.max_amount_tzs),
+        effective_rolling_24h_limit_tzs=money(policy.merchant_rolling_24h_limit_tzs),
         enabled=policy.policy_enabled,
-        max_amount_tzs=policy.policy_max_amount_tzs,
-        merchant_rolling_24h_limit_tzs=policy.policy_rolling_24h_limit_tzs,
+        max_amount_tzs=money(policy.policy_max_amount_tzs) if policy.policy_max_amount_tzs is not None else None,
+        merchant_rolling_24h_limit_tzs=(
+            money(policy.policy_rolling_24h_limit_tzs)
+            if policy.policy_rolling_24h_limit_tzs is not None
+            else None
+        ),
         version=policy.policy_version,
         updated_at=policy.updated_at,
         updated_by=policy.updated_by,
@@ -81,12 +95,12 @@ def _response(client, policy: EffectiveWithdrawalPolicy) -> WithdrawalAutomation
         blocked_explanation=policy.blocked_explanation,
         manual_only_override=policy.manual_only_override,
         deployment_automation_allowed=policy.deployment_automation_allowed,
-        hard_max_amount_tzs=policy.hard_max_amount_tzs,
-        hard_rolling_24h_limit_tzs=policy.hard_rolling_24h_limit_tzs,
+        hard_max_amount_tzs=money(policy.hard_max_amount_tzs),
+        hard_rolling_24h_limit_tzs=money(policy.hard_rolling_24h_limit_tzs),
         policy_unavailable=policy.policy_unavailable,
-        platform_min_withdrawal_amount_tzs=settings.min_withdrawal_amount_tzs,
-        platform_max_withdrawal_amount_tzs=settings.max_withdrawal_amount_tzs,
-        platform_rolling_24h_limit_tzs=settings.daily_withdrawal_limit_tzs,
+        platform_min_withdrawal_amount_tzs=money(settings.min_withdrawal_amount_tzs),
+        platform_max_withdrawal_amount_tzs=money(settings.max_withdrawal_amount_tzs),
+        platform_rolling_24h_limit_tzs=money(settings.daily_withdrawal_limit_tzs),
     )
 
 
