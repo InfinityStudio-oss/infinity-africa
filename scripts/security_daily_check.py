@@ -271,6 +271,16 @@ SECURITY_TESTS = [
     "tests/test_signing_secret_failure_is_not_a_downgrade.py",
     "tests/test_super_admin_sms_alerts.py",
     "tests/test_admin_sms_test_endpoint.py",
+    # Withdrawal automation is a control over money leaving the platform
+    # without a human, so its policy, its precedence and its fail-closed
+    # behaviour belong in the daily run rather than only in a full suite
+    # somebody remembers to invoke. The _postgres file is listed too: it
+    # skips without TEST_DATABASE_URL, and a skip that is visible in the
+    # daily log is the point - it says, every day, that the advisory-lock
+    # behaviour was not exercised.
+    "tests/test_withdrawal_automation.py",
+    "tests/test_withdrawal_automation_policy.py",
+    "tests/test_withdrawal_automation_policy_postgres.py",
 ]
 
 

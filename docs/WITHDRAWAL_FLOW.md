@@ -5,7 +5,10 @@ behind it. For pricing see
 [`docs/collection-and-withdrawal-pricing.md`](./collection-and-withdrawal-pricing.md)
 (withdrawals charge nothing during MVP); for the approval/status mechanics
 and Selcom sequencing see
-[`docs/withdrawal-pricing-and-approval.md`](./withdrawal-pricing-and-approval.md).
+[`docs/withdrawal-pricing-and-approval.md`](./withdrawal-pricing-and-approval.md);
+for the Super Admin switch that decides whether an eligible withdrawal
+needs a human at all see
+[`docs/WITHDRAWAL_AUTOMATION_POLICY.md`](./WITHDRAWAL_AUTOMATION_POLICY.md).
 
 ## The merchant's steps
 

@@ -37,6 +37,7 @@ on:
       - "apps/api/tests/test_no_committed_secrets.py"
       - "apps/api/tests/test_security_daily_check.py"
       - "apps/api/tests/test_database_security_invariants.py"
+      - "apps/api/tests/test_withdrawal_automation_policy.py"
       - "apps/web/src/security-secret-scan.test.ts"
       - "supabase/migrations/**"
       - "apps/api/app/config/settings.py"

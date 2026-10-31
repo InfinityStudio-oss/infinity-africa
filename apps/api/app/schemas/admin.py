@@ -261,6 +261,13 @@ class AdminWithdrawalResponse(BaseModel):
     # (still populated for a withdrawal that fell back to manual review).
     auto_approved: bool = False
     auto_decision_reason: str | None = None
+    # The same decision, in the three forms an auditor actually needs:
+    # a stable code to filter on, the policy version that decided it, and
+    # when the decision was taken (which is not initiated_at and not
+    # approved_at). Null on rows decided before migration 20261031010000.
+    auto_decision_code: str | None = None
+    auto_policy_version: int | None = None
+    auto_decided_at: datetime | None = None
     provider_reference: str | None = None
     # Fee snapshot, so the approval queue can show total charges/reserved/
     # recipient-receives without a second lookup — see

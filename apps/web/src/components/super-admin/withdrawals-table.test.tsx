@@ -34,6 +34,9 @@ const pendingRow: AdminWithdrawalRow = {
   requires_approval: true,
   auto_approved: false,
   auto_decision_reason: null,
+  auto_decision_code: null,
+  auto_policy_version: null,
+  auto_decided_at: null,
   provider_reference: null,
   total_charges: "1800.00",
   total_reserved_amount: "101800.00",
@@ -215,5 +218,46 @@ describe("retrying a payout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm Retry" }));
     await waitFor(() => expect(retryWithdrawalPayoutAction).toHaveBeenCalledTimes(1));
     expect(retryWithdrawalPayoutAction.mock.calls[0][0]).toBe("wd-retry");
+  });
+});
+
+describe("telling an automatic payout from a manual one", () => {
+  it("names the policy version that authorized an automatic payout", async () => {
+    // Asked months later when reconciling a payout nobody approved: which
+    // policy let this through? The reason sentence says why; this says
+    // which version said it.
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(
+      <WithdrawalsTable
+        rows={[
+          {
+            ...pendingRow,
+            withdrawal_id: "wd-auto",
+            status: "SUCCESS",
+            requires_approval: false,
+            auto_approved: true,
+            auto_decision_reason: "Eligible: within auto-withdrawal limits.",
+            auto_decision_code: "AUTO_ELIGIBLE",
+            auto_policy_version: 4,
+            auto_decided_at: "2026-10-31T09:00:00Z",
+          },
+        ]}
+        queue={[]}
+      />,
+    );
+
+    expect(screen.getByText(/automation policy v4 · AUTO_ELIGIBLE/)).toBeInTheDocument();
+  });
+
+  it("credits no policy version to a manually approved payout", async () => {
+    const { WithdrawalsTable } = await import("./withdrawals-table");
+    render(
+      <WithdrawalsTable
+        rows={[{ ...pendingRow, withdrawal_id: "wd-manual", status: "SUCCESS", auto_approved: false }]}
+        queue={[]}
+      />,
+    );
+
+    expect(screen.queryByText(/automation policy v/)).not.toBeInTheDocument();
   });
 });

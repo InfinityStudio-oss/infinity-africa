@@ -709,6 +709,60 @@ class FakeSupabaseClient:
         self._storage_objects: dict[str, bytes] = {}
         self.storage = _FakeStorage(self._storage_objects)
         self.auth = _FakeAuth()
+        self._seed_withdrawal_automation_policy()
+
+    def _seed_withdrawal_automation_policy(self) -> None:
+        """One disabled policy row, exactly as migration 20261031010000
+        creates it.
+
+        Seeded in the constructor rather than by each test because the
+        state that matters is the default: every test starts from "every
+        withdrawal needs a human", and a test that wants automation has to
+        say so. A fake with no row at all would instead exercise the
+        AUTO_POLICY_UNAVAILABLE fallback everywhere, which is a different
+        thing and would hide the difference between "off" and "unreadable".
+        """
+        self.seed(
+            "withdrawal_automation_policy",
+            {
+                "id": True,
+                "enabled": False,
+                "max_amount_tzs": "500000.00",
+                "merchant_rolling_24h_limit_tzs": "1000000.00",
+                "version": 1,
+                "updated_at": None,
+                "updated_by": None,
+            },
+        )
+
+    def enable_withdrawal_automation_policy(
+        self, *, max_amount_tzs: str = "500000.00", rolling_24h_limit_tzs: str = "1000000.00"
+    ) -> dict:
+        """Turn the database half of withdrawal automation on.
+
+        Automation needs BOTH the deployment flags and this policy row (see
+        app/services/withdrawal_policy.py for the precedence), so a test
+        that sets only the environment variables gets manual approval -
+        correctly. This is the other half.
+        """
+        rows = self.table("withdrawal_automation_policy")._table.rows
+        rows[0].update(
+            {
+                "enabled": True,
+                "max_amount_tzs": max_amount_tzs,
+                "merchant_rolling_24h_limit_tzs": rolling_24h_limit_tzs,
+            }
+        )
+        return rows[0]
+
+    def break_withdrawal_automation_policy(self) -> None:
+        """Leave the policy unreadable, to exercise the fail-closed path.
+
+        Removing the row is the closest in-memory equivalent of the row
+        being absent, several rows existing, or a read erroring - all of
+        which load_stored_policy collapses to the same answer.
+        """
+        self.table("withdrawal_automation_policy")._table.rows.clear()
 
     def table(self, name: str) -> _FakeTableHandle:
         if name not in self._tables:
@@ -751,6 +805,19 @@ class FakeSupabaseClient:
         auto_max = Decimal(str(params["p_auto_max"]))
         auto_daily_limit = Decimal(str(params["p_auto_daily_limit"]))
         automation_enabled = bool(params["p_automation_enabled"])
+        # Added by 20261031010000. Absent when an older caller uses the
+        # 5-argument compatibility wrapper, which passes null.
+        policy_version = params.get("p_policy_version")
+
+        def _decide(outcome: str, reason: str, code: str, **extra) -> _Result:
+            """Writes the decision columns the real function writes, so a
+            test can assert on the code and the policy version rather than
+            parsing an English sentence."""
+            row["auto_decision_reason"] = reason
+            row["auto_decision_code"] = code
+            row["auto_policy_version"] = policy_version
+            row["auto_decided_at"] = datetime.now(timezone.utc).isoformat()
+            return _Result({"outcome": outcome, "reason": reason, "code": code, **extra})
 
         amount = Decimal(str(row["amount"]))
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -785,16 +852,21 @@ class FakeSupabaseClient:
                 f"(already requested in the last 24 hours: {requested_today} TZS)."
             )
             row["status"] = "REJECTED"
-            row["auto_decision_reason"] = reason
-            return _Result({"outcome": "rejected", "reason": reason, "already_requested_today": str(requested_today)})
+            return _decide(
+                "rejected", reason, "DAILY_LIMIT_EXCEEDED", already_requested_today=str(requested_today)
+            )
 
         if not automation_enabled:
             reason = "Manual approval required: withdrawal automation is not enabled."
+            code = "AUTO_POLICY_DISABLED"
         elif amount > auto_max:
+            # `>` and not `>=`: the ceiling is inclusive, so a withdrawal
+            # for exactly the maximum is eligible.
             reason = (
                 f"Manual approval required: exceeds the {auto_max} TZS "
                 "per-transaction limit for automatic processing."
             )
+            code = "AUTO_AMOUNT_LIMIT_EXCEEDED"
         else:
             auto_today = _earlier_rows(auto_only=True)
             if auto_today + amount > auto_daily_limit:
@@ -802,14 +874,13 @@ class FakeSupabaseClient:
                     f"Manual approval required: would exceed the {auto_daily_limit} TZS "
                     f"daily limit for automatic processing (already auto-processed today: {auto_today} TZS)."
                 )
+                code = "AUTO_ROLLING_LIMIT_EXCEEDED"
             else:
                 reason = "Eligible: verified merchant, no open high-risk alerts, within auto-withdrawal limits."
                 row["auto_approved"] = True
-                row["auto_decision_reason"] = reason
-                return _Result({"outcome": "auto", "reason": reason})
+                return _decide("auto", reason, "AUTO_ELIGIBLE")
 
-        row["auto_decision_reason"] = reason
-        return _Result({"outcome": "manual", "reason": reason})
+        return _decide("manual", reason, code)
 
     def _post_ledger_entries(self, entries: list[dict]) -> _Result:
         """Mirrors supabase/migrations/20260814130002_post_ledger_entries_function.sql,

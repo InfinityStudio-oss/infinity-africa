@@ -83,6 +83,11 @@ from app.services.sms_messages import (
     enqueue_withdrawal_complete_sms,
 )
 from app.services.webhooks import enqueue_webhook_event
+from app.services.withdrawal_policy import (
+    CODE_POLICY_UNAVAILABLE,
+    CODE_RISK_REVIEW,
+    resolve_effective_policy,
+)
 from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
 
 logger = logging.getLogger("infinity.disbursements")
@@ -179,41 +184,80 @@ def _check_daily_withdrawal_limit(client: Client, *, merchant_id: uuid.UUID, amo
         )
 
 
-def _automation_is_enabled() -> bool:
-    """Both flags, deliberately — see Settings.auto_withdrawals_enabled.
-    A deploy that sets one but not the other still fails safe to "every
-    withdrawal needs a human"."""
-    settings = get_settings()
-    return settings.auto_withdrawals_enabled and not settings.require_admin_approval_for_all_withdrawals
-
-
 def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -> tuple[str, str]:
     """Atomically enforces the rolling 24h limits and decides auto-withdrawal
     eligibility for the row just inserted, via the
-    finalize_withdrawal_limits Postgres function (migration
-    20260922030000) — which holds a per-merchant advisory lock for the
-    whole decision, so two withdrawals submitted at the same instant can
-    never both pass a limit only one of them should have.
+    finalize_withdrawal_limits Postgres function (migrations
+    20260922030000 and 20261031010000) — which holds a per-merchant
+    advisory lock for the whole decision, so two withdrawals submitted at
+    the same instant can never both pass a limit only one of them should
+    have.
 
     This is the authoritative check. _check_withdrawal_amount_limits still
     runs before the row is created, for a fast, friendly rejection — same
     relationship _check_available_balance has with post_ledger_entries's
     own locked balance check (see 20260814140001). Returns
     (outcome, reason) where outcome is "rejected" | "auto" | "manual";
-    the function has already written `reason` onto the row either way."""
+    the function has already written `reason` and a safe reason code onto
+    the row either way.
+
+    **This is the payout authorization boundary, so the policy is read
+    from the database right here, immediately before the decision, and
+    never from a cache or a value carried from earlier in the request.**
+    resolve_effective_policy folds the deployment override and the
+    deployment amount ceilings into the stored policy (see
+    app/services/withdrawal_policy.py for the precedence), and a policy it
+    cannot read resolves to automation off — so a database that is down
+    sends withdrawals to a human rather than past one.
+
+    The window this leaves is one single-row read wide: a Super Admin
+    committing OFF after this read but before the advisory lock is taken
+    can still let this one request through. It cannot affect any later
+    request, because each reads the policy again. See the module docstring
+    in withdrawal_policy.py and docs/WITHDRAWAL_FLOW.md for why that
+    boundary is where it is.
+    """
     settings = get_settings()
+    policy = resolve_effective_policy(client)
     result = client.rpc(
         "finalize_withdrawal_limits",
         {
             "p_disbursement_id": str(disbursement_id),
+            # The hard rolling limit for ALL withdrawals, auto or manual,
+            # which the policy has no say over.
             "p_daily_limit": str(settings.daily_withdrawal_limit_tzs),
-            "p_auto_max": str(settings.auto_withdrawal_max_amount_tzs),
-            "p_auto_daily_limit": str(settings.auto_withdrawal_daily_limit_tzs),
-            "p_automation_enabled": _automation_is_enabled(),
+            # Already resolved against the deployment ceilings.
+            "p_auto_max": str(policy.max_amount_tzs),
+            "p_auto_daily_limit": str(policy.merchant_rolling_24h_limit_tzs),
+            "p_automation_enabled": policy.automation_active,
+            "p_policy_version": policy.policy_version,
         },
     ).execute()
     data = result.data or {}
-    return data.get("outcome", "manual"), data.get("reason", "")
+    outcome, reason = data.get("outcome", "manual"), data.get("reason", "")
+
+    if outcome == "manual" and policy.policy_unavailable:
+        # The function was told automation is off, which is true, and wrote
+        # AUTO_POLICY_DISABLED - a decision. It was not a decision: the
+        # policy could not be read. An operator looking at a queue of
+        # withdrawals needs to be able to tell a switch somebody turned off
+        # from a fault nobody knows about, so the fault is recorded as one.
+        # One extra write, only on a path that should never be taken.
+        reason = (
+            "Manual approval required: the automation policy could not be read, so this "
+            "withdrawal was sent for manual approval."
+        )
+        try:
+            update_row(
+                client,
+                "disbursements",
+                disbursement_id,
+                {"auto_decision_reason": reason, "auto_decision_code": CODE_POLICY_UNAVAILABLE},
+            )
+        except Exception:  # noqa: BLE001 - the row is already safely manual
+            logger.warning("withdrawal_policy_unavailable_code_not_recorded id=%s", disbursement_id)
+
+    return outcome, reason
 
 
 def quote_withdrawal_fee(
@@ -408,6 +452,14 @@ async def execute_disbursement(
                 {
                     "auto_approved": False,
                     "auto_decision_reason": f"Manual approval required: {exc}",
+                    # A hard risk block is NOT being downgraded to ordinary
+                    # approval here: _check_no_open_high_risk_alerts has
+                    # already refused, so this row cannot be approved by
+                    # anyone until that alert is cleared. The code records
+                    # that automation stood down for a risk reason, and
+                    # carries no detail about the alert itself.
+                    "auto_decision_code": CODE_RISK_REVIEW,
+                    "auto_decided_at": utc_now_iso(),
                 },
             )
 

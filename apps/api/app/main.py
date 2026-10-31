@@ -27,6 +27,7 @@ from app.routers import (
     admin_referrals,
     admin_risk,
     admin_sms,
+    admin_withdrawal_policy,
     admin_withdrawals,
     auth_actions,
     collections,
@@ -98,27 +99,42 @@ init_sentry()
 init_analytics()
 
 if not settings.require_admin_approval_for_all_withdrawals and settings.auto_withdrawals_enabled:
-    # Both flags being set is what actually enables withdrawal automation
+    # Both flags being set is what actually PERMITS withdrawal automation
     # — see Settings.auto_withdrawals_enabled's own docstring for the
     # full eligibility rules that still apply. Loud and early, same as
     # the warning below, so an operator sees this in deploy logs the
     # moment it takes effect rather than discovering it during an audit.
+    #
+    # Permitted is not the same as on. Since migration 20261031010000 the
+    # routine switch is withdrawal_automation_policy.enabled in the
+    # database, which a Super Admin owns and which is False until someone
+    # turns it on in the portal — so this warning says what the deployment
+    # now allows, not what it is doing. The live state is read per
+    # withdrawal by app/services/withdrawal_policy.py and shown on the
+    # Withdrawal Monitoring page; it is not reported here because a value
+    # read once at boot would go stale the first time the switch moved.
     logging.getLogger("infinity.config").warning(
-        "Withdrawal automation is ENABLED (REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false and "
-        "AUTO_WITHDRAWALS_ENABLED=true) — eligible withdrawals will reach Selcom without a Super "
-        "Admin approving them first. Confirm AUTO_WITHDRAWAL_MAX_AMOUNT_TZS/"
-        "AUTO_WITHDRAWAL_DAILY_LIMIT_TZS are set deliberately, not left at defaults."
+        "Withdrawal automation is PERMITTED by this deployment "
+        "(REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false and AUTO_WITHDRAWALS_ENABLED=true). "
+        "Whether it is actually on is the Super Admin policy in the database; while that is "
+        "enabled, eligible withdrawals will reach Selcom without a Super Admin approving them "
+        "first. AUTO_WITHDRAWAL_MAX_AMOUNT_TZS/AUTO_WITHDRAWAL_DAILY_LIMIT_TZS now act as hard "
+        "ceilings above that policy — confirm they are set deliberately, not left at defaults."
     )
 elif not settings.require_admin_approval_for_all_withdrawals:
     # The belt-and-suspenders case: someone flipped this flag without
     # also enabling auto_withdrawals_enabled — automation is still fully
     # off (every withdrawal still needs a human), so this has no effect
-    # beyond the misconfiguration itself being worth flagging.
+    # beyond the misconfiguration itself being worth flagging. The Super
+    # Admin page says the same thing in plain language, so an operator who
+    # cannot see deploy logs is not left guessing why the switch does
+    # nothing.
     logging.getLogger("infinity.config").warning(
         "REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS is set to false, but AUTO_WITHDRAWALS_ENABLED "
-        "is not — every withdrawal still requires Super Admin approval exactly as before. This "
-        "combination has no effect other than this warning. Set AUTO_WITHDRAWALS_ENABLED=true too "
-        "if withdrawal automation is actually intended, or revert this var if not."
+        "is not — every withdrawal still requires Super Admin approval exactly as before, and the "
+        "Super Admin automation switch cannot take effect. This combination has no effect other "
+        "than this warning. Set AUTO_WITHDRAWALS_ENABLED=true too if withdrawal automation is "
+        "actually intended, or revert this var if not."
     )
 
 
@@ -459,6 +475,7 @@ app.include_router(admin.router, prefix="/v1")
 app.include_router(admin_risk.router, prefix="/v1")
 app.include_router(admin_disputes.router, prefix="/v1")
 app.include_router(admin_withdrawals.router, prefix="/v1")
+app.include_router(admin_withdrawal_policy.router, prefix="/v1")
 app.include_router(admin_pricing.router, prefix="/v1")
 app.include_router(admin_collection_pricing.router, prefix="/v1")
 app.include_router(admin_diagnostics.router, prefix="/v1")

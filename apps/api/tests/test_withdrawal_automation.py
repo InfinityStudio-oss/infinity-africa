@@ -1,11 +1,17 @@
 """Withdrawal automation — app/services/disbursements.py::
-_evaluate_auto_withdrawal_eligibility and its wiring into
-execute_disbursement. Automation only ever takes effect when BOTH
-AUTO_WITHDRAWALS_ENABLED=true and REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false
-are set (belt-and-suspenders — see Settings.auto_withdrawals_enabled's own
-docstring); every test here sets both explicitly rather than relying on
-either default, so this file stays correct even if those defaults ever
-change.
+_finalize_withdrawal_limits and its wiring into execute_disbursement.
+
+Automation takes effect only when all three of these agree: the
+deployment permits it (AUTO_WITHDRAWALS_ENABLED=true and
+REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS=false — belt-and-suspenders,
+see Settings.auto_withdrawals_enabled's own docstring), AND the Super
+Admin policy row in the database is enabled. _enable_automation below sets
+all of them; every test here does so explicitly rather than relying on any
+default, so this file stays correct even if those defaults change.
+
+The policy row and the precedence it sits in are covered in
+tests/test_withdrawal_automation_policy.py. This file is about what
+happens to a withdrawal once the answer is known.
 """
 
 import uuid
@@ -48,10 +54,18 @@ def _configure_settings(monkeypatch):
     get_selcom_business_client.cache_clear()
 
 
-def _enable_automation(monkeypatch):
+def _enable_automation(fake_client, monkeypatch):
+    """Both halves. Since migration 20261031010000 the environment flags
+    are the deployment's *permission* for automation and the database
+    policy row is the switch a Super Admin actually operates, so setting
+    only the variables correctly yields manual approval - see
+    app/services/withdrawal_policy.py for the precedence. Every test that
+    wants automation running needs both, and the two are turned on
+    together here so no test can accidentally prove the wrong one."""
     monkeypatch.setenv("AUTO_WITHDRAWALS_ENABLED", "true")
     monkeypatch.setenv("REQUIRE_ADMIN_APPROVAL_FOR_ALL_WITHDRAWALS", "false")
     get_settings.cache_clear()
+    fake_client.enable_withdrawal_automation_policy()
 
 
 class _FakeResend:
@@ -114,7 +128,7 @@ def _request_withdrawal(merchant_id: uuid.UUID, admin_id: uuid.UUID, amount: str
 
 
 def test_eligible_withdrawal_auto_processes_when_enabled(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -158,7 +172,7 @@ def test_require_admin_approval_flag_alone_does_not_enable_automation(fake_clien
 
 
 def test_pending_merchant_cannot_withdraw_even_with_automation_enabled(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client, status="pending", kyc_status="unverified")
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -182,7 +196,7 @@ def test_pending_merchant_cannot_withdraw_even_with_automation_enabled(fake_clie
 
 
 def test_suspended_merchant_cannot_withdraw(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client, status="suspended")
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -205,7 +219,7 @@ def test_suspended_merchant_cannot_withdraw(fake_client, fake_resend, monkeypatc
 def test_open_high_risk_fraud_alert_blocks_withdrawal_even_with_automation_enabled(
     fake_client, fake_resend, monkeypatch
 ):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
     fake_client.seed(
@@ -230,7 +244,7 @@ def test_open_high_risk_fraud_alert_blocks_withdrawal_even_with_automation_enabl
 
 
 def test_insufficient_balance_rejected_even_with_automation_enabled(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "10000.00")
 
@@ -255,7 +269,7 @@ def test_insufficient_balance_rejected_even_with_automation_enabled(fake_client,
 
 
 def test_amount_over_auto_max_falls_back_to_manual_approval(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "10000000.00")
 
@@ -272,7 +286,7 @@ def test_amount_over_auto_max_falls_back_to_manual_approval(fake_client, fake_re
 
 
 def test_amount_within_auto_max_but_over_daily_auto_cap_falls_back_to_manual(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "10000000.00")
 
@@ -302,7 +316,7 @@ def test_failed_auto_processed_payout_reverses_the_reservation(fake_client, fake
         return SelcomBusinessResult(transaction_id=trans_id, status="failed", failure_reason="Invalid destination account")
 
     monkeypatch.setattr(MockSelcomBusinessClient, "process_transaction", _fail)
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -326,7 +340,7 @@ def test_failed_auto_processed_payout_reverses_the_reservation(fake_client, fake
 
 
 def test_duplicate_idempotency_key_never_auto_processes_twice(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -358,7 +372,7 @@ def test_duplicate_idempotency_key_never_auto_processes_twice(fake_client, fake_
 
 
 def test_auto_processed_withdrawal_writes_an_audit_log(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
 
@@ -405,7 +419,7 @@ def test_no_ceo_notification_when_no_ceo_email_is_configured(fake_client, fake_r
 
 
 def test_super_admin_sees_auto_processed_status_and_reason(fake_client, fake_resend, monkeypatch):
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
     body = _request_withdrawal(merchant_id, admin_id, "50000.00")
@@ -446,7 +460,7 @@ def _set_secret_sentinels(monkeypatch):
 def test_auto_processed_withdrawal_response_exposes_no_secrets(fake_client, fake_resend, monkeypatch):
     """auto_decision_reason is merchant-visible and is built from Settings —
     it must only ever carry business limits/status, never a credential."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     _set_secret_sentinels(monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "1000000.00")
@@ -464,7 +478,7 @@ def test_auto_processed_withdrawal_response_exposes_no_secrets(fake_client, fake
 def test_manual_fallback_reason_exposes_no_secrets(fake_client, fake_resend, monkeypatch):
     """Same guarantee on the ineligible path, where auto_decision_reason is
     assembled from a different set of Settings values."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     _set_secret_sentinels(monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
@@ -603,7 +617,7 @@ def test_pre_check_still_rejects_an_over_limit_request_before_any_row_exists(fak
 def test_concurrent_auto_withdrawals_cannot_bypass_the_auto_daily_cap(fake_client, fake_resend, monkeypatch):
     """The auto-only rolling cap has the same race. The later request must
     fall back to manual approval — never be rejected, and never auto-process."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
 
@@ -628,7 +642,7 @@ def test_the_earlier_of_two_racing_requests_still_wins(fake_client, fake_resend,
     """The ordering rule must not deadlock both requests into rejection: a
     competing row initiated strictly *after* this one doesn't count against
     it, so the earlier request proceeds normally."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
 
@@ -675,7 +689,7 @@ def test_auto_withdrawal_aborts_if_merchant_is_suspended_just_before_payout(
     """The final re-check immediately before money moves: if merchant standing
     changed after the row was created, fall back to manual approval rather
     than paying out or rejecting."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
 
@@ -711,7 +725,7 @@ def test_an_undecided_earlier_request_still_counts_against_the_auto_cap(
     the other and both would auto-process, blowing past the auto daily cap.
     The earlier, still-undecided row must count, so this one falls back to
     manual approval rather than auto-processing."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
 
@@ -739,7 +753,7 @@ def test_a_settled_manual_earlier_request_does_not_block_the_auto_cap(
     decided as manual is not in flight any more, so it must NOT consume the
     auto cap — otherwise every manual withdrawal would suppress automation
     for the rest of the window."""
-    _enable_automation(monkeypatch)
+    _enable_automation(fake_client, monkeypatch)
     merchant_id, admin_id = _merchant_and_admin(fake_client)
     _fund_wallet(fake_client, merchant_id, "5000000.00")
 

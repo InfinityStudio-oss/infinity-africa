@@ -187,6 +187,12 @@ export interface AdminWithdrawalRow {
    * whichever way the check went. */
   auto_approved: boolean;
   auto_decision_reason: string | null;
+  /** The automation decision in the three forms an auditor needs: a
+   * stable code, the policy version that decided it, and when. Null on
+   * payouts decided before the policy existed. */
+  auto_decision_code: string | null;
+  auto_policy_version: number | null;
+  auto_decided_at: string | null;
   provider_reference: string | null;
   total_charges: string;
   total_reserved_amount: string | null;
@@ -218,6 +224,76 @@ export interface DisbursementFloatBalance {
   currency: string;
   reason: "not_configured" | "provider_unavailable" | "unrecognised_response" | null;
 }
+
+/** The withdrawal automation policy, as the Super Admin page renders it.
+ *
+ * Two sets of numbers on purpose. `enabled` / `max_amount_tzs` /
+ * `merchant_rolling_24h_limit_tzs` are what is STORED, and are what the
+ * form edits. `automation_active` / `effective_*` are what the platform
+ * will actually DO once the deployment override and the deployment
+ * ceilings have been applied. They disagree whenever a deployment
+ * variable is tighter than the policy, and the page has to show the
+ * effective ones as the truth — a green switch over a deployment override
+ * that is forcing manual approval would be a lie about money.
+ *
+ * Every amount is a string. The API sends decimal strings and they stay
+ * strings all the way to the input field; parsing them into a JS number
+ * would put binary floating point between an operator and a limit that
+ * decides whether a payout needs a human. */
+export interface WithdrawalAutomationPolicy {
+  automation_active: boolean;
+  effective_max_amount_tzs: string;
+  effective_rolling_24h_limit_tzs: string;
+
+  enabled: boolean;
+  max_amount_tzs: string | null;
+  merchant_rolling_24h_limit_tzs: string | null;
+  version: number | null;
+  updated_at: string | null;
+  updated_by: string | null;
+  updated_by_email: string | null;
+
+  blocked_reason_code: string | null;
+  blocked_explanation: string | null;
+
+  manual_only_override: boolean;
+  deployment_automation_allowed: boolean;
+  hard_max_amount_tzs: string;
+  hard_rolling_24h_limit_tzs: string;
+  policy_unavailable: boolean;
+
+  platform_min_withdrawal_amount_tzs: string;
+  platform_max_withdrawal_amount_tzs: string;
+  platform_rolling_24h_limit_tzs: string;
+}
+
+/** Result of saving the withdrawal automation policy.
+ *
+ * Its own shape rather than reusing WithdrawalActionState because the
+ * card needs two things the other withdrawal actions do not: the fresh
+ * policy to re-render from, and a `conflict` flag. A conflict is not an
+ * ordinary error - it means another administrator saved first, and the
+ * right response is to reload and show their values rather than ask this
+ * operator to retype theirs.
+ *
+ * Declared here, not in live-actions.ts, because that file is
+ * "use server" and such a module may export only async functions -
+ * EMPTY_POLICY_STATE there builds under tsc and fails `next build`. */
+export interface PolicyActionState {
+  error: string | null;
+  ok: boolean;
+  message: string | null;
+  conflict: boolean;
+  policy: WithdrawalAutomationPolicy | null;
+}
+
+export const EMPTY_POLICY_STATE: PolicyActionState = {
+  error: null,
+  ok: false,
+  message: null,
+  conflict: false,
+  policy: null,
+};
 
 export interface PricingRuleRow {
   id: string;

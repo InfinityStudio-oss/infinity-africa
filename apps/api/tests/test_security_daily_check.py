@@ -113,7 +113,7 @@ def test_every_created_table_has_rls_enabled(check):
     )
 
 
-def test_the_deny_all_tables_are_the_expected_thirteen(check):
+def test_the_deny_all_tables_are_the_expected_fourteen(check):
     """RLS on with no policy denies every anon and authenticated request.
     That is the intended, stronger state for these - they are reached only
     by the service-role backend, which enforces merchant ownership in
@@ -140,6 +140,13 @@ def test_the_deny_all_tables_are_the_expected_thirteen(check):
         "sms_campaigns",
         "sms_messages",
         "sms_provider_events",
+        # Added 2026-10-31 with the Super Admin withdrawal automation
+        # policy. Deny-all is the correct state and not an oversight: it
+        # decides whether a payout can leave without a human, it is
+        # written only by the require_super_admin endpoints in
+        # app/routers/admin_withdrawal_policy.py, and nothing in a browser
+        # has any business reading it with the anon key.
+        "withdrawal_automation_policy",
     ], (
         "the set of deny-all tables changed. If a policy was added to one of these, "
         "confirm it was deliberate and not an attempt to silence an advisor warning: "

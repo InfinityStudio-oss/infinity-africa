@@ -397,6 +397,19 @@ export function WithdrawalsTable({ rows, queue }: { rows: AdminWithdrawalRow[]; 
                         {row.auto_decision_reason && (
                           <p className="text-[11px] text-on-surface-variant mt-1">{row.auto_decision_reason}</p>
                         )}
+                        {/* Which policy decided this, for a payout that
+                            no human approved. The reason above says why in
+                            words; this says which version of the automation
+                            policy said it, which is the question asked
+                            months later when reconciling an unattended
+                            payout. Not shown for manually approved rows,
+                            where a person is the answer. */}
+                        {row.auto_approved && row.auto_policy_version !== null && (
+                          <p className="text-[11px] text-outline mt-0.5 font-mono">
+                            automation policy v{row.auto_policy_version}
+                            {row.auto_decision_code ? ` · ${row.auto_decision_code}` : ""}
+                          </p>
+                        )}
                         {row.request_email_status === "failed" && (
                           <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
                             <Icon name="mail" className="text-[12px]" />

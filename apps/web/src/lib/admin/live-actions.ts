@@ -43,10 +43,12 @@ import {
   updatePricingRule,
   updateRefundStatus,
   updateRiskAlertStatus,
+  updateWithdrawalAutomationPolicy,
+  AdminApiError,
   type CollectionPricingRuleInput,
   type PricingRuleInput,
 } from "./live-api";
-import type { MerchantAccountStatus } from "./types";
+import { EMPTY_POLICY_STATE, type MerchantAccountStatus, type PolicyActionState } from "./types";
 
 export interface MerchantActionState {
   error: string | null;
@@ -260,6 +262,64 @@ async function runWithdrawalAction(run: () => Promise<string | void>): Promise<W
   }
   revalidatePath("/super-admin/withdrawals");
   return { error: null, ok: true, message: message ?? null };
+}
+
+/** Saving the automation policy. PolicyActionState and
+ * EMPTY_POLICY_STATE live in ./types because this file is "use server"
+ * and such a module may export only async functions. */
+export async function saveWithdrawalAutomationPolicyAction(
+  _prevState: PolicyActionState | null,
+  formData: FormData,
+): Promise<PolicyActionState> {
+  const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
+  // Kept as text the whole way. Trimmed only, never parsed: Number()
+  // here would turn "100000.10" into a float and hand the backend a
+  // different limit than the operator typed.
+  const maxAmountTzs = String(formData.get("max_amount_tzs") ?? "").trim();
+  const merchantRolling24hLimitTzs = String(formData.get("merchant_rolling_24h_limit_tzs") ?? "").trim();
+  const version = Number(formData.get("version"));
+  const confirm = formData.get("confirm") === "true";
+
+  if (!maxAmountTzs || !merchantRolling24hLimitTzs) {
+    return { ...EMPTY_POLICY_STATE, error: "Enter both limits." };
+  }
+  if (!Number.isInteger(version) || version < 1) {
+    // The page could not have rendered a form without a version, so this
+    // means the policy failed to load. Saving against a guessed version
+    // is exactly what the version check exists to prevent.
+    return {
+      ...EMPTY_POLICY_STATE,
+      error: "Couldn't tell which version of the policy you were editing. Reload the page and try again.",
+    };
+  }
+
+  try {
+    const policy = await updateWithdrawalAutomationPolicy({
+      enabled,
+      maxAmountTzs,
+      merchantRolling24hLimitTzs,
+      version,
+      confirm,
+    });
+    revalidatePath("/super-admin/withdrawals");
+    return {
+      error: null,
+      ok: true,
+      conflict: false,
+      policy,
+      message: policy.automation_active
+        ? "Saved. Automatic processing is ON."
+        : "Saved. Every withdrawal requires manual approval.",
+    };
+  } catch (err) {
+    const code = err instanceof AdminApiError ? err.code : undefined;
+    return {
+      ...EMPTY_POLICY_STATE,
+      conflict: code === "conflict",
+      error:
+        err instanceof Error ? err.message : "Couldn't save the policy. Nothing was changed. Try again.",
+    };
+  }
 }
 
 // The approve/refresh/reconcile actions don't read the form body, so they

@@ -29,6 +29,7 @@ import type {
   AdminWebhookEventRow,
   AdminWithdrawalRow,
   DisbursementFloatBalance,
+  WithdrawalAutomationPolicy,
   MerchantOption,
   AuditLogRow,
   CollectionPricingRuleRow,
@@ -176,7 +177,7 @@ async function apiListAll<T>(path: string, params?: URLSearchParams): Promise<T[
 
 async function apiWrite<T>(
   path: string,
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   input?: unknown,
 ): Promise<T> {
   let res: Response;
@@ -523,6 +524,45 @@ export async function listAdminWithdrawals(filters?: {
 
 export async function approveWithdrawal(disbursementId: string): Promise<void> {
   await apiWrite(`/v1/admin/withdrawals/${disbursementId}/approve`, "POST");
+}
+
+/** The withdrawal automation policy, or null if it cannot be read.
+ *
+ * Reads degrade to null here like every other read in this file, and the
+ * card renders an explicit "couldn't load" state rather than an empty
+ * form — a blank switch would read as OFF, and "I looked and it said off"
+ * is exactly the wrong thing to believe about a control over payouts.
+ *
+ * Never cached. `apiGet` already sends `cache: "no-store"`, and this is
+ * the screen an operator checks to confirm automation is off. */
+export async function getWithdrawalAutomationPolicy(): Promise<WithdrawalAutomationPolicy | null> {
+  return apiGet<WithdrawalAutomationPolicy>("/v1/admin/withdrawal-automation/policy");
+}
+
+export interface WithdrawalAutomationPolicyInput {
+  enabled: boolean;
+  /** Decimal strings, straight from the form. Never parsed into a number
+   * on the way through — the backend validates and stores the text. */
+  maxAmountTzs: string;
+  merchantRolling24hLimitTzs: string;
+  /** The version the operator was looking at. The backend refuses the
+   * write if it is no longer current. */
+  version: number;
+  /** Required by the backend for any change that widens what can happen
+   * without a human. */
+  confirm: boolean;
+}
+
+export async function updateWithdrawalAutomationPolicy(
+  input: WithdrawalAutomationPolicyInput,
+): Promise<WithdrawalAutomationPolicy> {
+  return apiWrite<WithdrawalAutomationPolicy>("/v1/admin/withdrawal-automation/policy", "PUT", {
+    enabled: input.enabled,
+    max_amount_tzs: input.maxAmountTzs,
+    merchant_rolling_24h_limit_tzs: input.merchantRolling24hLimitTzs,
+    version: input.version,
+    confirm: input.confirm,
+  });
 }
 
 export async function rejectWithdrawal(disbursementId: string, rejectionReason: string): Promise<void> {
