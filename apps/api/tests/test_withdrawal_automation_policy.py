@@ -1375,3 +1375,153 @@ def test_the_read_endpoint_exposes_no_secrets(fake_client, monkeypatch):
 
     for leak in ("secret", "api_key", "sk_live", "password", "token", "selcom"):
         assert leak not in body
+
+
+# --- Deploying the API before the migration --------------------------------
+#
+# The migration says "apply me first" and somebody will not. These pin what
+# happens then, because the failure without them lands on a merchant: the
+# withdrawal row is already inserted when the RPC is called, so a hard
+# failure there is a 500 on a request that had already half-succeeded.
+
+
+class _OldDatabaseRpc:
+    """A database that predates migration 20261031010000: only the
+    five-argument finalize_withdrawal_limits exists, so PostgREST refuses
+    the six-argument call with PGRST202 during function resolution."""
+
+    def __init__(self, fake_client, *, fail_all=False):
+        self._fake = fake_client
+        self._real = fake_client.rpc
+        self.calls: list[dict] = []
+        self.fail_all = fail_all
+
+    def __call__(self, fn_name: str, params: dict | None = None):
+        params = params or {}
+        if fn_name == "finalize_withdrawal_limits":
+            self.calls.append(dict(params))
+            if self.fail_all or "p_policy_version" in params:
+                error = Exception(
+                    "Could not find the function public.finalize_withdrawal_limits("
+                    "p_auto_daily_limit, p_auto_max, p_automation_enabled, p_daily_limit, "
+                    "p_disbursement_id, p_policy_version) in the schema cache"
+                )
+                error.code = "PGRST202"
+                raise error
+            params = {k: v for k, v in params.items() if k != "p_policy_version"}
+        return self._real(fn_name, params)
+
+
+def test_a_withdrawal_still_works_against_a_database_without_the_migration(
+    fake_client, monkeypatch
+):
+    """The API deployed ahead of the migration must not break withdrawals.
+    It falls back to the signature that does exist, and the withdrawal is
+    created and left for a human exactly as before this feature."""
+    _permit_automation(monkeypatch)
+    # No policy table either, which is the real shape of that database.
+    fake_client.break_withdrawal_automation_policy()
+    rpc = _OldDatabaseRpc(fake_client)
+    monkeypatch.setattr(fake_client, "rpc", rpc)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+
+    data = _request_withdrawal(merchant_id, user_id, "5000")
+
+    assert data["status"] == "PENDING_ADMIN_APPROVAL"
+    assert data["auto_approved"] is False
+    # Tried the new signature, then the old one. Twice, not more.
+    attempts = [c for c in rpc.calls]
+    assert len(attempts) == 2
+    assert "p_policy_version" in attempts[0]
+    assert "p_policy_version" not in attempts[1]
+    # One withdrawal, decided once.
+    assert len(fake_client.table("disbursements")._table.rows) == 1
+
+
+def test_the_fallback_does_not_let_automation_run_on_an_unmigrated_database(
+    fake_client, monkeypatch
+):
+    """Falling back must not become a way to auto-process without the
+    policy. Without the table there is no policy to enable, so the call is
+    made with automation off."""
+    _permit_automation(monkeypatch)
+    fake_client.break_withdrawal_automation_policy()
+    rpc = _OldDatabaseRpc(fake_client)
+    monkeypatch.setattr(fake_client, "rpc", rpc)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+
+    row = _row(fake_client, _request_withdrawal(merchant_id, user_id, "5000")["id"])
+
+    assert _auto(row) is False
+    for attempt in rpc.calls:
+        assert attempt["p_automation_enabled"] is False
+
+
+def test_any_other_rpc_failure_is_never_retried(fake_client, monkeypatch):
+    """The retry is safe only because PGRST202 happens before anything
+    executes. A failure that could have run must be raised, not repeated -
+    repeating it could decide the same row twice."""
+    _enable_both(fake_client, monkeypatch)
+
+    calls: list[dict] = []
+    real_rpc = fake_client.rpc
+
+    def exploding_rpc(fn_name: str, params: dict | None = None):
+        if fn_name == "finalize_withdrawal_limits":
+            calls.append(dict(params or {}))
+            error = Exception("deadlock detected")
+            error.code = "40P01"
+            raise error
+        return real_rpc(fn_name, params or {})
+
+    monkeypatch.setattr(fake_client, "rpc", exploding_rpc)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+
+    with pytest.raises(Exception, match="deadlock"):
+        client.post(
+            "/v1/disbursements/mobile-money",
+            headers={**auth_headers(user_id), "Idempotency-Key": str(uuid.uuid4())},
+            json={
+                "merchant_id": str(merchant_id),
+                "amount": "5000",
+                "destination_name": "Jane Doe",
+                "destination_identifier": "+255700000000",
+                "destination_code": "MPESA",
+            },
+        )
+
+    assert len(calls) == 1, "a failure that may have executed must not be retried"
+
+
+def test_a_missing_function_entirely_is_not_swallowed(fake_client, monkeypatch):
+    """If neither signature exists the error must surface. Silently
+    continuing would mean a withdrawal that skipped the limit check."""
+    _enable_both(fake_client, monkeypatch)
+    rpc = _OldDatabaseRpc(fake_client, fail_all=True)
+    monkeypatch.setattr(fake_client, "rpc", rpc)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+
+    with pytest.raises(Exception, match="Could not find the function"):
+        client.post(
+            "/v1/disbursements/mobile-money",
+            headers={**auth_headers(user_id), "Idempotency-Key": str(uuid.uuid4())},
+            json={
+                "merchant_id": str(merchant_id),
+                "amount": "5000",
+                "destination_name": "Jane Doe",
+                "destination_identifier": "+255700000000",
+                "destination_code": "MPESA",
+            },
+        )
+
+    # Tried both signatures, then gave up rather than continuing without a
+    # limit check.
+    assert len(rpc.calls) == 2

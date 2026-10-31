@@ -45,7 +45,10 @@
 --   * Schema: the 5-argument finalize_withdrawal_limits below is preserved
 --     as a wrapper precisely so an older API build keeps working, so this
 --     migration can be applied before the API is deployed and left in
---     place if the API is rolled back. If the function itself must be
+--     place if the API is rolled back. The reverse order survives too: an
+--     API that finds the 6-argument signature missing retries the
+--     5-argument one (app/services/disbursements.py), so neither half can
+--     break withdrawals by going out first. If the function itself must be
 --     reverted, restore the body from
 --     20260922030000_finalize_withdrawal_limits.sql and drop the
 --     6-argument overload. Dropping the table or the new disbursements

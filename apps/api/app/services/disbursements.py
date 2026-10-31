@@ -184,6 +184,20 @@ def _check_daily_withdrawal_limit(client: Client, *, merchant_id: uuid.UUID, amo
         )
 
 
+def _finalize_signature_missing(exc: Exception) -> bool:
+    """Whether PostgREST refused the call because that *signature* does not
+    exist, as opposed to the call failing while it ran.
+
+    The distinction is the whole safety of the retry above. PGRST202 is
+    raised during function resolution, before any statement executes, so
+    retrying cannot repeat work or decide a row twice. Matched on the
+    error code with the message as a fallback, because the code is stable
+    and the wording is not.
+    """
+    text = f"{getattr(exc, 'code', '')} {getattr(exc, 'message', '')} {exc}".lower()
+    return "pgrst202" in text or "could not find the function" in text
+
+
 def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -> tuple[str, str]:
     """Atomically enforces the rolling 24h limits and decides auto-withdrawal
     eligibility for the row just inserted, via the
@@ -219,20 +233,50 @@ def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -
     """
     settings = get_settings()
     policy = resolve_effective_policy(client)
-    result = client.rpc(
-        "finalize_withdrawal_limits",
-        {
-            "p_disbursement_id": str(disbursement_id),
-            # The hard rolling limit for ALL withdrawals, auto or manual,
-            # which the policy has no say over.
-            "p_daily_limit": str(settings.daily_withdrawal_limit_tzs),
-            # Already resolved against the deployment ceilings.
-            "p_auto_max": str(policy.max_amount_tzs),
-            "p_auto_daily_limit": str(policy.merchant_rolling_24h_limit_tzs),
-            "p_automation_enabled": policy.automation_active,
-            "p_policy_version": policy.policy_version,
-        },
-    ).execute()
+    base_params = {
+        "p_disbursement_id": str(disbursement_id),
+        # The hard rolling limit for ALL withdrawals, auto or manual,
+        # which the policy has no say over.
+        "p_daily_limit": str(settings.daily_withdrawal_limit_tzs),
+        # Already resolved against the deployment ceilings.
+        "p_auto_max": str(policy.max_amount_tzs),
+        "p_auto_daily_limit": str(policy.merchant_rolling_24h_limit_tzs),
+        "p_automation_enabled": policy.automation_active,
+    }
+
+    try:
+        result = client.rpc(
+            "finalize_withdrawal_limits",
+            {**base_params, "p_policy_version": policy.policy_version},
+        ).execute()
+    except Exception as exc:  # narrowed immediately below, and re-raised if it does not match
+        if not _finalize_signature_missing(exc):
+            raise
+        # The API is running against a database that predates migration
+        # 20261031010000, so only the five-argument signature exists.
+        #
+        # This is the deploy order nobody plans for and somebody always
+        # does: the migration documents "apply me first", and if the API
+        # ships ahead of it every withdrawal request would 500 on a
+        # function PostgREST cannot find - after the row had already been
+        # inserted. The merchant would see their own withdrawal fail.
+        #
+        # PostgREST reports an unknown signature before executing
+        # anything, so there is nothing to undo and this retry cannot
+        # decide the same row twice. Any other failure is re-raised
+        # untouched: a blind retry here could.
+        #
+        # Automation is already impossible in this state - the policy
+        # table does not exist either, so resolve_effective_policy
+        # returned automation off - which is why falling back is safe
+        # rather than merely convenient. Every withdrawal goes to a human,
+        # exactly as it did before this feature.
+        logger.warning(
+            "finalize_withdrawal_limits_policy_version_unsupported disbursement_id=%s "
+            "- database predates migration 20261031010000; apply it",
+            disbursement_id,
+        )
+        result = client.rpc("finalize_withdrawal_limits", base_params).execute()
     data = result.data or {}
     outcome, reason = data.get("outcome", "manual"), data.get("reason", "")
 

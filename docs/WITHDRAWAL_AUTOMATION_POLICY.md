@@ -217,3 +217,20 @@ No rollback deletes a financial record, a reservation or an audit row.
 
 Applying the migration on its own changes no behaviour. Every withdrawal
 keeps going to manual approval until all four layers agree.
+
+### If the API goes out first anyway
+
+It tolerates it. The new code calls `finalize_withdrawal_limits` with an
+extra `p_policy_version` argument that only exists after the migration; if
+PostgREST reports that signature as unknown, the API retries the
+five-argument signature that does exist and the withdrawal proceeds to
+manual approval exactly as it did before this feature. The retry is safe
+because PostgREST refuses an unknown signature *before* executing
+anything, so nothing can be decided twice — and any other failure is
+raised rather than retried.
+
+Automation cannot run in that state regardless: without the policy table
+there is no policy to enable, so it resolves to off. The API logs
+`finalize_withdrawal_limits_policy_version_unsupported` on every
+withdrawal until the migration is applied, which is the signal to apply
+it.
