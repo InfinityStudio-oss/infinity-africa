@@ -60,6 +60,9 @@ logger = logging.getLogger("infinity.sms")
 # 'collection_alert' is absent deliberately: retired 2026-10-17, and the
 # migration cancels what was queued. Historical rows stay readable.
 _DISPATCH_ORDER = (
+    # First: money has already left and nobody approved it. Everything
+    # else in this list describes something that can still be caught.
+    ("admin_withdrawal_auto", "alerts"),
     ("admin_withdrawal_request", "alerts"),
     ("admin_new_merchant", "alerts"),
     ("welcome", "alerts"),

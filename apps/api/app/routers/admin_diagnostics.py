@@ -212,6 +212,23 @@ _REPORTED_SETTINGS = (
     "super_admin_sms_enabled",
     "super_admin_sms_new_merchant_enabled",
     "super_admin_sms_withdrawal_request_enabled",
+    "super_admin_sms_withdrawal_auto_enabled",
+    # Withdrawal automation. Added 2026-10-31, when enabling it meant
+    # setting two Railway variables and then finding out whether they had
+    # taken by looking at a portal page - this endpoint exists precisely
+    # so that question has a direct answer. `source` is the whole point:
+    # "env" means a variable supplied the value, "default" means nothing
+    # did, which is what a missing or misspelled variable looks like.
+    #
+    # Booleans and numbers only, same as every other row here. The
+    # database policy that sits under these is not reported: it changes
+    # without a deploy, so a value read at request time belongs on the
+    # Withdrawal Monitoring page where it is read fresh, not in a
+    # diagnostics endpoint about this process's configuration.
+    "require_admin_approval_for_all_withdrawals",
+    "auto_withdrawals_enabled",
+    "auto_withdrawal_max_amount_tzs",
+    "auto_withdrawal_daily_limit_tzs",
 )
 
 

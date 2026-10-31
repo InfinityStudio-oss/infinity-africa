@@ -71,6 +71,24 @@ CODE_ROLLING_LIMIT = "AUTO_ROLLING_LIMIT_EXCEEDED"
 CODE_POLICY_UNAVAILABLE = "AUTO_POLICY_UNAVAILABLE"
 CODE_RISK_REVIEW = "AUTO_RISK_REVIEW_REQUIRED"
 
+# The statuses that mean an automatically authorized payout actually
+# reached Selcom.
+#
+# auto_approved alone does NOT mean that. The flag is written inside the
+# advisory lock the instant eligibility is decided, which is before the
+# provider is called - so a row can carry auto_approved=true while the
+# payout is still in flight, or while it has already failed. Both
+# operator notifications are gated on this, and they are gated on the
+# same tuple rather than on two copies of it, because a message telling
+# an operator money went out when it did not is the one failure this
+# whole alert exists to prevent.
+#
+# It lives here rather than beside either caller because both need it and
+# neither may import the other: app/services/disbursements.py already
+# imports this module, and app/services/sms_messages.py cannot import
+# disbursements without a cycle.
+PAYOUT_REACHED_PROVIDER_STATUSES = ("PROCESSING", "SUCCESS", "NEEDS_RECONCILIATION")
+
 
 @dataclass(frozen=True)
 class EffectiveWithdrawalPolicy:

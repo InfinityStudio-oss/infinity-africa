@@ -281,6 +281,9 @@ SECURITY_TESTS = [
     "tests/test_withdrawal_automation.py",
     "tests/test_withdrawal_automation_policy.py",
     "tests/test_withdrawal_automation_policy_postgres.py",
+    # An operator losing sight of unattended payouts is a security
+    # property, not a notification nicety.
+    "tests/test_admin_auto_withdrawal_alerts.py",
 ]
 
 

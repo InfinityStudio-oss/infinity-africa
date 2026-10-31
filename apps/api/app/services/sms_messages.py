@@ -42,9 +42,11 @@ from app.services.sms_text import (
     message_cost,
     render_new_merchant_admin,
     render_welcome,
+    render_withdrawal_auto_admin,
     render_withdrawal_complete,
     render_withdrawal_request_admin,
 )
+from app.services.withdrawal_policy import PAYOUT_REACHED_PROVIDER_STATUSES
 
 logger = logging.getLogger("infinity.sms")
 
@@ -118,6 +120,7 @@ LIMIT = 64
 _SHORT = {
     "admin_new_merchant": "anm",
     "admin_withdrawal_request": "awr",
+    "admin_withdrawal_auto": "awa",
 }
 
 
@@ -505,5 +508,61 @@ def enqueue_admin_withdrawal_request_sms(
     except Exception:
         logger.exception(
             "admin_withdrawal_sms_enqueue_failed disbursement_id=%s", disbursement.get("id")
+        )
+        return []
+
+
+def enqueue_admin_auto_withdrawal_sms(
+    client: Client, *, disbursement: dict, business_name: str
+) -> list[dict]:
+    """Tell an operator that a withdrawal was paid without them.
+
+    The exact complement of enqueue_admin_withdrawal_request_sms: that one
+    fires only at PENDING_ADMIN_APPROVAL, this one only when the policy
+    sent the payout to the provider instead. A withdrawal is either
+    waiting for a human or it is not, so between them no payout produces
+    both messages and none produces neither.
+
+    Guarded on auto_approved AND the status, not on either alone. The flag
+    is written inside the advisory lock the moment eligibility is decided,
+    which is before the provider is called - so a row can carry
+    auto_approved=True while the payout is still being attempted, or while
+    it has already failed. Telling an operator money went out when it did
+    not would be worse than the silence this is here to fix.
+
+    Never raises: the payout is committed by the time this runs, and a
+    message about it must not be able to change that.
+    """
+    settings = get_settings()
+    if not (settings.super_admin_sms_enabled and settings.super_admin_sms_withdrawal_auto_enabled):
+        return []
+    try:
+        if not disbursement.get("auto_approved"):
+            return []
+        if str(disbursement.get("status")) not in PAYOUT_REACHED_PROVIDER_STATUSES:
+            return []
+        disbursement_id = uuid.UUID(str(disbursement["id"]))
+        merchant_id = uuid.UUID(str(disbursement["merchant_id"]))
+        return _admin_rows(
+            client,
+            purpose="admin_withdrawal_auto",
+            merchant_id=merchant_id,
+            anchor=disbursement_id,
+            body=render_withdrawal_auto_admin(
+                business_name=business_name,
+                amount=Decimal(str(disbursement.get("amount") or 0)),
+                # Unlike the request alert, the provider reference usually
+                # exists by now - it is assigned when the payout runs. The
+                # id prefix is the fallback, and is what the withdrawals
+                # queue shows either way.
+                reference=str(
+                    disbursement.get("provider_reference") or str(disbursement["id"])[:8]
+                ),
+            ),
+            disbursement_id=str(disbursement_id),
+        )
+    except Exception:
+        logger.exception(
+            "admin_auto_withdrawal_sms_enqueue_failed disbursement_id=%s", disbursement.get("id")
         )
         return []

@@ -289,6 +289,25 @@ WITHDRAWAL_REQUEST_ADMIN_TEMPLATE = (
 )
 
 
+# The complement of WITHDRAWAL_REQUEST_ADMIN_TEMPLATE, for the payout
+# that did NOT wait for anybody. Same shape and the same 32-char name cap,
+# so the worst case stays at two parts.
+#
+# "No approval needed" rather than "approved automatically": nothing
+# approved it. The policy decided it was eligible, which is a different
+# claim and the one the audit trail actually records.
+#
+# Deliberately absent, same as the request alert: the destination, the
+# account name and the bank. Those are decided by opening the queue and
+# are a worse thing to leave sitting in a mailbox.
+WITHDRAWAL_AUTO_ADMIN_TEMPLATE = (
+    "INFINITYPAY\n"
+    "{business_name} TZS {amount} paid out automatically.\n"
+    "Ref: {reference}. No approval needed.\n"
+    "Review: " + ADMIN_PORTAL_URL
+)
+
+
 def render_new_merchant_admin(*, business_name: str) -> str:
     """A merchant has registered — not been approved.
 
@@ -300,6 +319,33 @@ def render_new_merchant_admin(*, business_name: str) -> str:
     """
     return NEW_MERCHANT_ADMIN_TEMPLATE.format(
         business_name=sanitise_for_sms(business_name, limit=_MAX_NAME),
+    )
+
+
+def render_withdrawal_auto_admin(
+    *, business_name: str, amount: Decimal, reference: str
+) -> str:
+    """A withdrawal reached the provider without a human.
+
+    The one event neither existing alert can describe. The request alert
+    says "awaiting approval", which is false here; the approval email
+    links to a queue the payout is no longer in. This says what happened,
+    in the past tense, and still points at the portal because that is
+    where an operator goes if it looks wrong.
+
+    `amount` is the Decimal from the committed row, rendered by the same
+    format_amount every other money message uses, so it never passes
+    through a float.
+
+    No balance, unlike the request alert. That figure is there to help an
+    operator judge whether a payout can be covered before approving it;
+    this payout is already made, so the number would be decoration on a
+    message that has to stay short.
+    """
+    return WITHDRAWAL_AUTO_ADMIN_TEMPLATE.format(
+        business_name=sanitise_for_sms(business_name, limit=_MAX_NAME),
+        amount=format_amount(amount),
+        reference=sanitise_for_sms(reference, limit=_MAX_REFERENCE),
     )
 
 

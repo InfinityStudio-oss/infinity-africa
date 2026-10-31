@@ -1098,6 +1098,120 @@ def send_withdrawal_request_notification_email(
     )
 
 
+def send_auto_withdrawal_notification_email(
+    client: Client, *, merchant: dict, disbursement: dict
+) -> dict | None:
+    """Tell an operator that a withdrawal was paid without them.
+
+    The complement of send_withdrawal_request_notification_email above.
+    That message says there is something to approve and its button says
+    "Review Withdrawal", which for an automatic payout sends a human to a
+    queue the payout is no longer in — it asks them to approve money that
+    has already gone. This one is written in the past tense and carries
+    the three things that answer "why did this not need me?": the policy
+    version in force, the decision code, and the amount.
+
+    Best-effort — never raises. The payout is committed by the time this
+    runs, so a failed notification must never be mistaken for a failed
+    payout. An unset CEO_EMAIL skips it: nowhere to send.
+    """
+    settings = get_settings()
+    if not settings.ceo_emails:
+        return None
+
+    business_name = merchant.get("business_name") or "A merchant"
+    merchant_code = merchant.get("merchant_code")
+    amount = disbursement.get("amount")
+    currency = disbursement.get("currency") or "TZS"
+    subject = f"Withdrawal paid automatically — {business_name}"
+    sender = settings.email_from
+    review_url = f"{settings.app_url}/super-admin/withdrawals"
+
+    destination_identifier = disbursement.get("destination_identifier") or ""
+    masked_destination = _mask_identifier(destination_identifier) if destination_identifier else "—"
+    bank_name = disbursement.get("bank_name")
+    destination_label = f"{bank_name} — {masked_destination}" if bank_name else masked_destination
+    method = (disbursement.get("method") or "").replace("_", " ").title() or "—"
+    status_label = (disbursement.get("status") or "").replace("_", " ").title() or "—"
+    policy_version = disbursement.get("auto_policy_version")
+
+    rows: list[tuple[str, str]] = [
+        ("Merchant", business_name),
+        ("Merchant ID", merchant_code or "—"),
+        ("Amount", _money(amount, currency)),
+        ("Method", method),
+        ("Destination", destination_label),
+        ("Requested", disbursement.get("initiated_at") or ""),
+        ("Status", status_label),
+        ("Provider Reference", disbursement.get("provider_reference") or "—"),
+        # Which policy let this through, so the decision is answerable
+        # months later without opening the database.
+        ("Automation Policy", f"v{policy_version}" if policy_version is not None else "—"),
+        ("Decision", disbursement.get("auto_decision_code") or "—"),
+    ]
+
+    rows_html = "".join(
+        f"""
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:#6b7280;">{label}</td>
+          <td style="padding:6px 0;font-size:14px;color:#1f2937;text-align:right;">{value}</td>
+        </tr>"""
+        for label, value in rows
+        if value
+    )
+
+    # No "Review Withdrawal" button: there is nothing to decide. The link
+    # is there because an operator who thinks this is wrong needs to get
+    # to the queue, and it says so.
+    body = f"""
+    <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Automatic Withdrawal</p>
+    <h1 style="margin:0 0 8px;font-size:20px;color:#1f2937;">{_money(amount, currency)} paid to {business_name}</h1>
+    <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">
+      This withdrawal met the automatic processing limits, so it was sent to the provider without
+      waiting for approval. No action is needed. Every other check still applied: the merchant is
+      verified and active, the withdrawal OTP was confirmed, there were no open high-risk alerts,
+      and the balance covered the full debit including fees.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      {rows_html}
+    </table>
+    {_cta_button(review_url, "Open Withdrawals")}
+    """
+    html = _email_shell(body_html=body)
+
+    try:
+        message_id = send_email(
+            to=settings.ceo_emails, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
+        )
+    except EmailDeliveryError as exc:
+        _log_delivery(
+            client,
+            merchant_id=merchant.get("id"),
+            email_type="withdrawal_auto_notification",
+            related_resource_type="disbursement",
+            related_resource_id=disbursement.get("id"),
+            recipient_email=", ".join(settings.ceo_emails),
+            sender_email=sender,
+            subject=subject,
+            status="failed",
+            error_message=str(exc),
+        )
+        return None
+
+    return _log_delivery(
+        client,
+        merchant_id=merchant.get("id"),
+        email_type="withdrawal_auto_notification",
+        related_resource_type="disbursement",
+        related_resource_id=disbursement.get("id"),
+        recipient_email=", ".join(settings.ceo_emails),
+        sender_email=sender,
+        subject=subject,
+        status="sent",
+        provider_message_id=message_id or None,
+    )
+
+
 # --- 8. Withdrawal success (to merchant) ----------------------------------------
 
 

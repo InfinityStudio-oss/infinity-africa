@@ -572,6 +572,17 @@ class Settings(BaseSettings):
     super_admin_sms_enabled: bool = False
     super_admin_sms_new_merchant_enabled: bool = False
     super_admin_sms_withdrawal_request_enabled: bool = False
+    # Defaults True, unlike the two above, because it alerts on a
+    # different kind of event. Those two describe something WAITING for an
+    # operator, and missing one costs a delay. This one describes money
+    # that has already left without anybody approving it, and missing it
+    # costs the operator their only live view of unattended payouts.
+    # Silence is the dangerous state here, so the safe default is on.
+    #
+    # super_admin_sms_enabled above is still the master switch and still
+    # defaults False, so this cannot send anything on its own - a
+    # deployment that has never turned on operator SMS stays silent.
+    super_admin_sms_withdrawal_auto_enabled: bool = True
 
     # Comma-separated, same shape as CEO_EMAIL. Never a NEXT_PUBLIC_ or
     # EXPO_PUBLIC_ value, and never settable by a merchant.

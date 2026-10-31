@@ -67,6 +67,7 @@ from app.schemas.withdrawals import FeeBreakdown
 from app.services.audit import write_audit_log
 from app.services.crud import execute_maybe_single, get_by_id, insert_row, update_row
 from app.services.email import (
+    send_auto_withdrawal_notification_email,
     send_withdrawal_request_notification_email,
     send_withdrawal_success_email,
 )
@@ -77,8 +78,10 @@ from app.services.ledger import (
 )
 from app.services.notifications_service import notify_merchant
 from app.services.reconciliation_schedule import next_check_at
+from app.services.security_alerts import notify_security_event
 from app.services.selcom_business.client import get_selcom_business_client
 from app.services.sms_messages import (
+    enqueue_admin_auto_withdrawal_sms,
     enqueue_admin_withdrawal_request_sms,
     enqueue_withdrawal_complete_sms,
 )
@@ -86,6 +89,7 @@ from app.services.webhooks import enqueue_webhook_event
 from app.services.withdrawal_policy import (
     CODE_POLICY_UNAVAILABLE,
     CODE_RISK_REVIEW,
+    PAYOUT_REACHED_PROVIDER_STATUSES,
     resolve_effective_policy,
 )
 from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
@@ -442,20 +446,16 @@ async def execute_disbursement(
         # whether the limit was caught before or after insert.
         raise WithdrawalRestrictedError(decision_reason)
 
-    # Courtesy notification — the withdrawal request is already saved above;
-    # a failed send must never look like a failed withdrawal request. See
-    # send_withdrawal_request_notification_email's own try/except (never
-    # raises) — this is a second layer of defense in case that contract is
-    # ever violated by a future change, matching collections.py/onboarding.py's
-    # identical pattern for their own best-effort emails.
-    try:
-        merchant = get_by_id(client, "merchants", merchant_id)
-        if merchant:
-            send_withdrawal_request_notification_email(
-                client, merchant=merchant, disbursement=disbursement, available_balance=available
-            )
-    except Exception:  # noqa: BLE001, S110 — best-effort, never blocks the withdrawal request
-        pass
+    # The operator notifications used to be split: this email went out
+    # here, before automation ran, while the SMS below waited for the
+    # final status. That was right when every withdrawal needed a human
+    # and wrong the moment one did not — an auto-processed payout produced
+    # an email headed "New withdrawal request" with a button reading
+    # "Review Withdrawal", pointing at a queue the payout was no longer
+    # in. It asked an operator to approve money that had already gone.
+    #
+    # Both now happen at the end, gated on the row's FINAL state, which is
+    # the rule the SMS block already followed and documented. See there.
 
     if outcome == "auto":
         # Same code path a Super Admin's manual approval uses — no
@@ -533,10 +533,19 @@ async def execute_disbursement(
     # way, and a message about it must not be able to change that.
     try:
         merchant_row = get_by_id(client, "merchants", merchant_id)
+        business_name = (merchant_row or {}).get("business_name") or ""
+
+        # Exactly one of these two describes what happened, and each
+        # decides for itself by re-reading the committed row: the request
+        # pair only when the withdrawal is resting at
+        # PENDING_ADMIN_APPROVAL, the automatic pair only when the policy
+        # sent it to the provider instead. A withdrawal is either waiting
+        # for an operator or it is not, so no payout produces both
+        # messages and none produces neither.
         enqueue_admin_withdrawal_request_sms(
             client,
             disbursement=disbursement,
-            business_name=(merchant_row or {}).get("business_name") or "",
+            business_name=business_name,
             # `available` from the pre-insert read above - the same value
             # handed to send_withdrawal_request_notification_email, so the
             # email and the SMS quote one number rather than two. Nothing
@@ -544,6 +553,56 @@ async def execute_disbursement(
             # has reserved nothing.
             available_balance=available,
         )
+        enqueue_admin_auto_withdrawal_sms(
+            client, disbursement=disbursement, business_name=business_name
+        )
+
+        if merchant_row:
+            if str(disbursement.get("status")) in _AWAITING_ADMIN_STATUSES:
+                send_withdrawal_request_notification_email(
+                    client,
+                    merchant=merchant_row,
+                    disbursement=disbursement,
+                    available_balance=available,
+                )
+            elif (
+                disbursement.get("auto_approved")
+                and str(disbursement.get("status")) in PAYOUT_REACHED_PROVIDER_STATUSES
+            ):
+                # The status check is not redundant with auto_approved.
+                # That flag is set the instant eligibility is decided,
+                # inside the advisory lock, which is before Selcom is
+                # called - so a payout that was authorized and then FAILED
+                # still carries it. Without this, a failed payout would be
+                # announced as "paid automatically", which is the one
+                # thing these messages must never say wrongly.
+                send_auto_withdrawal_notification_email(
+                    client, merchant=merchant_row, disbursement=disbursement
+                )
+            elif disbursement.get("auto_approved"):
+                # Authorized automatically, then did not reach the
+                # provider. Nobody is waiting for it in the queue and no
+                # payout happened, so neither message above fits - and an
+                # unattended payout that failed is precisely the thing an
+                # operator should not find out about from a dashboard
+                # later. Best-effort: the row is already committed.
+                try:
+                    merchant_for_alert = merchant_row or {}
+                    notify_security_event(
+                        client,
+                        event="withdrawal.auto_payout_failed",
+                        title="Automatic withdrawal did not reach the provider",
+                        merchant_name=merchant_for_alert.get("business_name"),
+                        amount=disbursement.get("amount"),
+                        currency=disbursement.get("currency") or "TZS",
+                        extra={
+                            "Status": str(disbursement.get("status")),
+                            "Withdrawal": str(disbursement.get("id")),
+                            "Automation policy": str(disbursement.get("auto_policy_version")),
+                        },
+                    )
+                except Exception:  # noqa: BLE001, S110 - never blocks a withdrawal
+                    pass
     except Exception:  # noqa: BLE001, S110 - best-effort, never blocks a withdrawal
         pass
 
