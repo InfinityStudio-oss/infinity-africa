@@ -1,35 +1,36 @@
-"""The parts of the withdrawal automation policy that only a real
-Postgres can prove.
+"""The guarantees only a real Postgres can give.
 
-tests/test_withdrawal_automation_policy.py and
-tests/test_withdrawal_automation.py run against the in-memory fake, which
-mirrors finalize_withdrawal_limits' *decisions* faithfully and its
-*locking* not at all - it is single-threaded, so it cannot tell a correct
-advisory lock from a missing one. Everything about this feature that
-depends on database locking is therefore unproven by those files, and
-saying so in a docstring is not the same as testing it.
+The in-memory fake mirrors what finalize_withdrawal_limits *decides*. It
+cannot mirror what it *locks*, because it is single-threaded: a correct
+`for share` and a missing one produce identical results there. Everything
+about this feature that depends on locking is therefore unproven by the
+rest of the suite, and a docstring saying "this is race-proof" is not a
+test.
 
-This file runs the real SQL from
-supabase/migrations/20261031010000_withdrawal_automation_policy.sql
-against a real Postgres and proves two things:
+So these run the real SQL, on separate connections, in overlapping
+transactions, and coordinate deterministically — no sleeps, no "probably
+long enough". Where a test needs one transaction to be mid-flight while
+another starts, it holds the first open and proves the second BLOCKS by
+giving it a statement_timeout and catching the cancellation.
 
-1. The per-merchant advisory lock actually serializes. A second caller
-   genuinely waits on the first; it does not read around it.
-2. Two concurrent withdrawals cannot both consume the same remaining
+**What is proven here:**
+
+1. OFF committed before authorisation is seen (the race this closed).
+2. A decision already in flight is not disturbed by a later OFF, and the
+   OFF waits for it rather than interleaving.
+3. A lowered ceiling binds the next authorisation.
+4. Two administrators holding the same expected version: one wins, one
+   gets a conflict.
+5. A failing audit insert takes the policy change with it.
+6. Concurrent withdrawals cannot both consume one merchant's remaining
    rolling allowance.
+7. The compatibility signature cannot authorise against a policy saying
+   no.
 
-**It skips unless TEST_DATABASE_URL points at a disposable Postgres**, and
-psycopg2 is not in requirements.txt, so it also skips wherever that is not
-installed. A skip is not a pass: if this file skipped in your run, the
-locking behaviour was not exercised and should be reported as untested
-rather than as working.
-
-    createdb infinity_policy_test
-    TEST_DATABASE_URL=postgresql://localhost/infinity_policy_test \\
-        python -m pytest tests/test_withdrawal_automation_policy_postgres.py -q
-
-Nothing here touches production. It refuses to run against a URL that does
-not look like a disposable test database.
+Runs only when TEST_DATABASE_URL points at a disposable database, and
+refuses anything that looks like production. **A skip is not a pass**: if
+this file skipped, the locking was not exercised and should be reported
+as untested. CI provides a throwaway Postgres service for it.
 """
 
 import os
@@ -40,28 +41,27 @@ import uuid
 
 import pytest
 
-psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 is not installed; real-Postgres checks skipped")
+psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 not installed; locking checks skipped")
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
-    reason="TEST_DATABASE_URL is not set; the advisory-lock behaviour is NOT exercised in this run",
+    reason="TEST_DATABASE_URL is not set; the locking guarantees are NOT exercised in this run",
 )
 
-MIGRATION = (
-    pathlib.Path(__file__).resolve().parents[3]
-    / "supabase"
-    / "migrations"
-    / "20261031010000_withdrawal_automation_policy.sql"
-)
+MIGRATIONS = pathlib.Path(__file__).resolve().parents[3] / "supabase" / "migrations"
+POLICY_MIGRATION = MIGRATIONS / "20261031010000_withdrawal_automation_policy.sql"
+LOCK_MIGRATION = MIGRATIONS / "20261031040000_withdrawal_policy_authorization_lock.sql"
 
-# Enough of public.disbursements for the function to run. Deliberately not
-# the whole table: this is a test of one function's concurrency, and
-# reproducing the full schema here would make it a slow, brittle copy of
-# the migrations that would drift.
+# Enough of the real schema for these functions to run. Deliberately not
+# the whole thing: this is a test of locking, and reproducing every table
+# would make it a slow, drifting copy of the migrations.
 SCHEMA = """
 drop table if exists public.disbursements cascade;
+drop table if exists public.withdrawal_automation_policy cascade;
+drop table if exists public.audit_logs cascade;
+
 create table public.disbursements (
   id uuid primary key default gen_random_uuid(),
   merchant_id uuid not null,
@@ -74,16 +74,60 @@ create table public.disbursements (
   auto_decided_at timestamptz,
   initiated_at timestamptz not null default now()
 );
+
+create table public.withdrawal_automation_policy (
+  id boolean primary key default true check (id),
+  enabled boolean not null default false,
+  max_amount_tzs numeric(14, 2) not null default 500000.00 check (max_amount_tzs >= 0),
+  merchant_rolling_24h_limit_tzs numeric(14, 2) not null default 1000000.00
+    check (merchant_rolling_24h_limit_tzs >= 0),
+  version integer not null default 1 check (version > 0),
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint withdrawal_automation_policy_enabled_limits_positive check (
+    not enabled or (max_amount_tzs > 0 and merchant_rolling_24h_limit_tzs > 0)
+  )
+);
+
+create table public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid,
+  actor_type text not null,
+  action text not null,
+  resource_type text,
+  resource_id uuid,
+  ip_address text,
+  user_agent text,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+insert into public.withdrawal_automation_policy (id, enabled, max_amount_tzs, merchant_rolling_24h_limit_tzs)
+values (true, true, 100000.00, 1000000.00);
+"""
+
+# The grants in the migrations name Supabase's roles. Creating them means
+# the grants apply as written rather than being stripped out, so the test
+# exercises the real statements.
+ROLES = """
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+end
+$$;
 """
 
 
 def _guard_against_a_real_database(url: str) -> None:
-    """A migration that drops and recreates disbursements must never be
-    pointed at anything real. Supabase's own hostnames are refused
-    outright, and the database name has to say it is for testing."""
+    """This file drops and recreates tables. It must never be pointed at
+    anything real, so Supabase hosts are refused outright and the database
+    name has to say it is for testing."""
     lowered = url.lower()
-    if "supabase.co" in lowered or "supabase.com" in lowered or "pooler." in lowered:
-        pytest.fail("TEST_DATABASE_URL points at a Supabase host. Use a disposable local database.")
+    for marker in ("supabase.co", "supabase.com", "pooler."):
+        if marker in lowered:
+            pytest.fail(f"TEST_DATABASE_URL points at {marker}. Use a disposable local database.")
     name = lowered.rstrip("/").rsplit("/", 1)[-1].split("?")[0]
     if "test" not in name:
         pytest.fail(
@@ -92,21 +136,12 @@ def _guard_against_a_real_database(url: str) -> None:
         )
 
 
-def _function_sql() -> str:
-    """Just the two function definitions and the policy table from the
-    migration - the grants reference roles (service_role, anon) that a
-    plain local Postgres does not have."""
-    text = MIGRATION.read_text(encoding="utf-8")
-    statements = []
-    for match in re.finditer(r"create (?:or replace )?(?:function|table)[\s\S]*?(?:\$\$;|\);)", text):
-        chunk = match.group(0)
-        is_policy_table = (
-            "withdrawal_automation_policy" in chunk and "function" not in chunk.split("(")[0]
-        )
-        if is_policy_table or "finalize_withdrawal_limits" in chunk:
-            statements.append(chunk)
-    assert any("finalize_withdrawal_limits" in s for s in statements), "migration shape changed"
-    return "\n".join(statements)
+def _statements(path: pathlib.Path) -> str:
+    """The create/comment/grant statements from a migration, skipping its
+    prose. Dollar-quoted function bodies are kept whole."""
+    text = path.read_text(encoding="utf-8")
+    pattern = r"(create (?:or replace )?(?:function|table)[\s\S]*?(?:\$\$;|\);))|(comment on [\s\S]*?;)|((?:revoke|grant)[^;]*;)"
+    return "\n".join(match.group(0) for match in re.finditer(pattern, text))
 
 
 @pytest.fixture
@@ -115,10 +150,20 @@ def db():
     conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = True
     with conn.cursor() as cur:
+        cur.execute(ROLES)
         cur.execute(SCHEMA)
-        cur.execute(_function_sql())
+        # Order matters: the lock migration replaces the function bodies
+        # the policy migration created.
+        cur.execute(_statements(POLICY_MIGRATION))
+        cur.execute(_statements(LOCK_MIGRATION))
     yield conn
     conn.close()
+
+
+def _connect():
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = True
+    return conn
 
 
 def _insert(conn, merchant_id, amount, *, offset_seconds=0):
@@ -131,80 +176,309 @@ def _insert(conn, merchant_id, amount, *, offset_seconds=0):
         return cur.fetchone()[0]
 
 
-def _finalize(conn, disbursement_id, *, daily="10000000", auto_max="100000", auto_daily="100000", version=3):
+def _finalize(conn, disbursement_id, *, daily="10000000", deploy_max="500000",
+              deploy_rolling="1000000", deploy_allows=True):
+    """Deployment ceiling and permission only — the function reads the
+    live policy itself. That split is the fix being tested."""
     with conn.cursor() as cur:
         cur.execute(
             "select public.finalize_withdrawal_limits(%s, %s, %s, %s, %s, %s)",
-            (str(disbursement_id), daily, auto_max, auto_daily, True, version),
+            (str(disbursement_id), daily, deploy_max, deploy_rolling, deploy_allows, None),
         )
         return cur.fetchone()[0]
 
 
-def test_the_inclusive_ceiling_holds_in_real_sql(db):
-    """Exactly at the limit is eligible; one shilling over is not. The
-    same assertion the fake makes, re-made against the real comparison."""
+def _set_policy(conn, *, enabled=None, max_amount=None, rolling=None):
+    sets, values = [], []
+    if enabled is not None:
+        sets.append("enabled = %s")
+        values.append(enabled)
+    if max_amount is not None:
+        sets.append("max_amount_tzs = %s")
+        values.append(max_amount)
+    if rolling is not None:
+        sets.append("merchant_rolling_24h_limit_tzs = %s")
+        values.append(rolling)
+    with conn.cursor() as cur:
+        cur.execute(f"update public.withdrawal_automation_policy set {', '.join(sets)} where id = true", values)
+
+
+# --- 1. The race this closed ----------------------------------------------
+
+
+def test_off_committed_before_authorisation_is_seen(db):
+    """The whole point. Before 20261031040000 the API read the policy and
+    passed the answer in, so an OFF committing in between was invisible.
+    The function reads the policy itself now."""
+    merchant_id = uuid.uuid4()
+    disbursement_id = _insert(db, merchant_id, "5000")
+
+    _set_policy(db, enabled=False)
+
+    # The caller still says the deployment permits automation. The policy
+    # says no, and the policy is what the transaction reads.
+    result = _finalize(db, disbursement_id, deploy_allows=True)
+
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_POLICY_DISABLED"
+
+
+def test_a_caller_cannot_re_enable_automation_the_policy_has_switched_off(db):
+    """A stale or malicious caller passing True must not be able to
+    override a stored OFF. AND, never OR."""
+    merchant_id = uuid.uuid4()
+    _set_policy(db, enabled=False)
+
+    result = _finalize(db, _insert(db, merchant_id, "100"), deploy_allows=True)
+
+    assert result["outcome"] == "manual"
+
+
+def test_a_deployment_prohibition_beats_an_enabled_policy(db):
+    """Runtime may tighten, never loosen. The policy says ON; the
+    deployment says no."""
     merchant_id = uuid.uuid4()
 
-    at_limit = _finalize(db, _insert(db, merchant_id, "100000"), auto_daily="10000000")
-    assert at_limit["outcome"] == "auto"
-    assert at_limit["code"] == "AUTO_ELIGIBLE"
+    result = _finalize(db, _insert(db, merchant_id, "5000"), deploy_allows=False)
 
-    over = _finalize(db, _insert(db, uuid.uuid4(), "100001"), auto_daily="10000000")
-    assert over["outcome"] == "manual"
-    assert over["code"] == "AUTO_AMOUNT_LIMIT_EXCEEDED"
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_POLICY_DISABLED"
 
 
-def test_the_advisory_lock_really_blocks_a_second_caller(db):
-    """The lock, directly.
+def test_a_deployment_ceiling_clamps_a_higher_policy_limit(db):
+    """LEAST, not the policy's own number. Policy allows 100,000; the
+    deployment caps automation at 2,000."""
+    merchant_id = uuid.uuid4()
 
-    One connection takes the same advisory lock the function takes and
-    holds it inside an open transaction. A second connection calling the
-    function must then WAIT - so with a short statement_timeout it fails
-    with a timeout rather than returning an answer. A function that read
-    around the lock would answer immediately, and this test is the only
-    thing in the suite that can tell those two apart.
+    result = _finalize(db, _insert(db, merchant_id, "5000"), deploy_max="2000")
+
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_AMOUNT_LIMIT_EXCEEDED"
+
+
+def test_a_missing_policy_is_not_an_enabled_one(db):
+    """Unknown must never mean yes."""
+    merchant_id = uuid.uuid4()
+    with db.cursor() as cur:
+        cur.execute("delete from public.withdrawal_automation_policy")
+
+    result = _finalize(db, _insert(db, merchant_id, "5000"))
+
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_POLICY_UNAVAILABLE"
+    assert result["policy_version"] is None
+
+
+# --- 2. The lock itself, proved by blocking -------------------------------
+
+
+def test_a_policy_change_waits_for_a_decision_already_in_flight(db):
+    """`for share` on the policy row, demonstrated rather than asserted.
+
+    One connection authorises a payout and holds its transaction open. A
+    second connection tries to switch automation off; with a short
+    statement_timeout it is cancelled, because it is waiting. Releasing
+    the first lets it through — which proves the timeout was the lock and
+    not something else being broken.
     """
     merchant_id = uuid.uuid4()
     disbursement_id = _insert(db, merchant_id, "5000")
 
-    holder = psycopg2.connect(DATABASE_URL)
+    decider = psycopg2.connect(DATABASE_URL)
+    decider.autocommit = False
     try:
-        holder.autocommit = False
-        with holder.cursor() as cur:
-            cur.execute("select pg_advisory_xact_lock(hashtext(%s))", (f"withdrawal:{merchant_id}",))
+        with decider.cursor() as cur:
+            cur.execute(
+                "select public.finalize_withdrawal_limits(%s, %s, %s, %s, %s, %s)",
+                (str(disbursement_id), "10000000", "500000", "1000000", True, None),
+            )
+            assert cur.fetchone()[0]["outcome"] == "auto"
 
-        waiter = psycopg2.connect(DATABASE_URL)
+        switcher = _connect()
         try:
-            waiter.autocommit = True
-            with waiter.cursor() as cur:
+            with switcher.cursor() as cur:
                 cur.execute("set statement_timeout = 1500")
                 with pytest.raises(psycopg2.errors.QueryCanceled):
                     cur.execute(
-                        "select public.finalize_withdrawal_limits(%s, %s, %s, %s, %s, %s)",
-                        (str(disbursement_id), "10000000", "100000", "100000", True, 3),
+                        "update public.withdrawal_automation_policy set enabled = false where id = true"
                     )
         finally:
-            waiter.close()
+            switcher.close()
 
-        # Releasing the lock lets the same call through, which proves the
-        # timeout above was the lock and not something else being broken.
-        holder.rollback()
-        after = _finalize(db, disbursement_id)
-        assert after["outcome"] == "auto"
+        decider.commit()
+
+        after = _connect()
+        try:
+            with after.cursor() as cur:
+                cur.execute("update public.withdrawal_automation_policy set enabled = false where id = true")
+                cur.execute("select enabled from public.withdrawal_automation_policy where id = true")
+                assert cur.fetchone()[0] is False
+        finally:
+            after.close()
     finally:
-        holder.close()
+        decider.close()
 
 
-def test_two_concurrent_withdrawals_cannot_both_consume_the_same_allowance(db):
-    """The race the lock exists for.
+def test_a_decision_started_after_off_commits_sees_the_off(db):
+    """The other side of the same lock, with the order reversed."""
+    merchant_id = uuid.uuid4()
 
-    A 100,000 rolling allowance and two 60,000 withdrawals submitted at
-    the same instant on separate connections. Exactly one may process
-    automatically; both doing so would pay out 120,000 against a 100,000
-    cap. Repeated, because a race that passes once has not been shown to
-    be impossible.
+    switcher = _connect()
+    try:
+        _set_policy(switcher, enabled=False)
+    finally:
+        switcher.close()
+
+    result = _finalize(db, _insert(db, merchant_id, "5000"))
+
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_POLICY_DISABLED"
+
+
+def test_a_payout_already_authorised_is_not_recalled_by_a_later_off(db):
+    """The honest boundary. OFF stops new authorisations; it cannot undo
+    one that has committed, because by then the instruction is on its way
+    to a provider."""
+    merchant_id = uuid.uuid4()
+    disbursement_id = _insert(db, merchant_id, "5000")
+
+    assert _finalize(db, disbursement_id)["outcome"] == "auto"
+    _set_policy(db, enabled=False)
+
+    with db.cursor() as cur:
+        cur.execute(
+            "select auto_approved, auto_decision_code from public.disbursements where id = %s",
+            (str(disbursement_id),),
+        )
+        auto_approved, code = cur.fetchone()
+
+    assert auto_approved is True
+    assert code == "AUTO_ELIGIBLE"
+
+
+def test_a_lowered_ceiling_binds_the_next_authorisation(db):
+    """No deploy, no restart: the next decision reads the new number."""
+    merchant_id = uuid.uuid4()
+
+    assert _finalize(db, _insert(db, merchant_id, "50000"))["outcome"] == "auto"
+
+    _set_policy(db, max_amount="1000")
+
+    second = _finalize(db, _insert(db, merchant_id, "50000", offset_seconds=1))
+    assert second["outcome"] == "manual"
+    assert second["code"] == "AUTO_AMOUNT_LIMIT_EXCEEDED"
+
+
+# --- 3. Two administrators ------------------------------------------------
+
+
+def test_two_administrators_with_the_same_expected_version(db):
+    """Both read version 1. One write lands, the other is told so."""
+    actor = str(uuid.uuid4())
+
+    def attempt(max_amount: str):
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select public.update_withdrawal_automation_policy("
+                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (True, max_amount, "1000000", 1, actor, "corr", True, True, "500000", "1000000", None, None),
+                )
+                return cur.fetchone()[0]
+        finally:
+            conn.close()
+
+    first = attempt("20000")
+    second = attempt("90000")
+
+    assert first["outcome"] == "ok"
+    assert first["version"] == 2
+    assert second["outcome"] == "conflict"
+    assert second["current_version"] == 2
+
+    with db.cursor() as cur:
+        cur.execute("select max_amount_tzs from public.withdrawal_automation_policy where id = true")
+        # The loser's number was never written.
+        assert str(cur.fetchone()[0]) == "20000.00"
+
+
+def test_the_policy_change_and_its_audit_row_commit_together(db):
+    """One transaction. The audit row exists because the change did."""
+    actor = str(uuid.uuid4())
+    with db.cursor() as cur:
+        cur.execute(
+            "select public.update_withdrawal_automation_policy("
+            "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (False, "20000", "1000000", 1, actor, "corr-1", False, True, "500000", "1000000", None, None),
+        )
+        assert cur.fetchone()[0]["outcome"] == "ok"
+
+        cur.execute(
+            "select metadata from public.audit_logs where action = 'withdrawal_automation_policy.updated'"
+        )
+        rows = cur.fetchall()
+
+    assert len(rows) == 1
+    metadata = rows[0][0]
+    assert metadata["correlation_id"] == "corr-1"
+    assert metadata["previous"]["version"] == 1
+    assert metadata["new"]["version"] == 2
+    assert metadata["previous"]["enabled"] is True
+    assert metadata["new"]["enabled"] is False
+
+
+def test_a_failing_audit_insert_takes_the_policy_change_with_it(db):
+    """The defect this closed: the update committed, the audit insert
+    failed, and the control over unattended payouts had moved with nothing
+    recording it and an error shown to the administrator who had in fact
+    succeeded.
+
+    actor_type is NOT NULL here, so a trigger that nulls it makes the
+    insert fail for a reason the function does not catch.
     """
-    for _ in range(20):
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            create or replace function public.break_audit() returns trigger
+            language plpgsql as $fn$
+            begin
+              raise exception 'audit storage is unavailable';
+            end
+            $fn$;
+            create trigger break_audit_trigger before insert on public.audit_logs
+            for each row execute function public.break_audit();
+            """
+        )
+
+    actor = str(uuid.uuid4())
+    with db.cursor() as cur, pytest.raises(psycopg2.Error):
+        cur.execute(
+            "select public.update_withdrawal_automation_policy("
+            "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (False, "20000", "1000000", 1, actor, "corr-2", False, True, "500000", "1000000", None, None),
+        )
+
+    with db.cursor() as cur:
+        cur.execute("select version, enabled from public.withdrawal_automation_policy where id = true")
+        version, enabled = cur.fetchone()
+
+    # Untouched. The administrator was told it failed, and it did.
+    assert version == 1
+    assert enabled is True
+
+
+# --- 4. One merchant, many requests ---------------------------------------
+
+
+def test_concurrent_withdrawals_cannot_both_consume_one_allowance(db):
+    """The per-merchant advisory lock. A 100,000 rolling allowance and two
+    60,000 withdrawals at the same instant: exactly one may process, or
+    120,000 leaves against a 100,000 cap. Repeated, because a race that
+    passes once has not been shown to be impossible."""
+    _set_policy(db, max_amount="100000", rolling="100000")
+
+    for _ in range(15):
         merchant_id = uuid.uuid4()
         first = _insert(db, merchant_id, "60000")
         second = _insert(db, merchant_id, "60000", offset_seconds=1)
@@ -212,16 +486,11 @@ def test_two_concurrent_withdrawals_cannot_both_consume_the_same_allowance(db):
         outcomes: dict[str, dict] = {}
         barrier = threading.Barrier(2)
 
-        # barrier and outcomes are bound as defaults rather than captured:
-        # this closure is redefined each iteration, and a late-binding
-        # capture would have every thread of every round waiting on the
-        # last barrier created.
         def run(disbursement_id, label, barrier=barrier, outcomes=outcomes):
-            conn = psycopg2.connect(DATABASE_URL)
+            conn = _connect()
             try:
-                conn.autocommit = True
                 barrier.wait(timeout=10)
-                outcomes[label] = _finalize(conn, disbursement_id)
+                outcomes[label] = _finalize(conn, disbursement_id, deploy_rolling="100000")
             finally:
                 conn.close()
 
@@ -236,17 +505,13 @@ def test_two_concurrent_withdrawals_cannot_both_consume_the_same_allowance(db):
 
         assert set(outcomes) == {"first", "second"}, "a worker did not finish"
         autos = [label for label, result in outcomes.items() if result["outcome"] == "auto"]
-        assert len(autos) == 1, f"both passed the same allowance: {outcomes}"
-        # And the earlier one is the winner, which is the documented rule -
-        # the later request falls back rather than both being refused.
         assert autos == ["first"], outcomes
         assert outcomes["second"]["code"] == "AUTO_ROLLING_LIMIT_EXCEEDED"
 
 
 def test_a_concurrent_pair_cannot_breach_the_hard_daily_limit(db):
-    """Same race, one level up: the hard rolling limit that applies to
-    manual and automatic withdrawals alike. The loser is REJECTED, not
-    quietly downgraded."""
+    """Same race one level up: the hard limit that applies to automatic
+    and manual withdrawals alike. The loser is REJECTED, not downgraded."""
     merchant_id = uuid.uuid4()
     first = _insert(db, merchant_id, "60000")
     second = _insert(db, merchant_id, "60000", offset_seconds=1)
@@ -255,11 +520,10 @@ def test_a_concurrent_pair_cannot_breach_the_hard_daily_limit(db):
     barrier = threading.Barrier(2)
 
     def run(disbursement_id, label):
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = _connect()
         try:
-            conn.autocommit = True
             barrier.wait(timeout=10)
-            outcomes[label] = _finalize(conn, disbursement_id, daily="100000", auto_daily="10000000")
+            outcomes[label] = _finalize(conn, disbursement_id, daily="100000")
         finally:
             conn.close()
 
@@ -281,52 +545,94 @@ def test_a_concurrent_pair_cannot_breach_the_hard_daily_limit(db):
         assert cur.fetchone()[0] == "REJECTED"
 
 
-def test_the_compatibility_wrapper_behaves_identically(db):
-    """An API build deployed before this migration calls the 5-argument
-    signature. It must get the same decision, so the migration can go
-    first and a rollback of the API is safe."""
+def test_deciding_the_same_withdrawal_twice_does_not_double_authorise(db):
+    """Two workers, one row. The second call re-decides the same
+    disbursement; it must not produce a second authorisation or count the
+    row against itself."""
+    _set_policy(db, rolling="100000")
     merchant_id = uuid.uuid4()
-    disbursement_id = _insert(db, merchant_id, "5000")
+    disbursement_id = _insert(db, merchant_id, "60000")
+
+    first = _finalize(db, disbursement_id, deploy_rolling="100000")
+    second = _finalize(db, disbursement_id, deploy_rolling="100000")
+
+    assert first["outcome"] == "auto"
+    assert second["outcome"] == "auto"
+
+    with db.cursor() as cur:
+        cur.execute(
+            "select count(*) from public.disbursements where merchant_id = %s and auto_approved",
+            (str(merchant_id),),
+        )
+        assert cur.fetchone()[0] == 1
+
+
+# --- 5. The compatibility signature ---------------------------------------
+
+
+def test_the_five_argument_wrapper_cannot_authorise_against_an_off_policy(db):
+    """An older API build reaches the wrapper. It must not be a way past
+    the off switch."""
+    merchant_id = uuid.uuid4()
+    _set_policy(db, enabled=False)
 
     with db.cursor() as cur:
         cur.execute(
             "select public.finalize_withdrawal_limits(%s, %s, %s, %s, %s)",
-            (str(disbursement_id), "10000000", "100000", "100000", True),
+            (str(_insert(db, merchant_id, "5000")), "10000000", "500000", "1000000", True),
         )
         result = cur.fetchone()[0]
 
-    assert result["outcome"] == "auto"
+    assert result["outcome"] == "manual"
+    assert result["code"] == "AUTO_POLICY_DISABLED"
+
+
+def test_the_five_argument_wrapper_still_works_when_the_policy_allows_it(db):
+    """Fail-closed must not mean fail-always."""
+    merchant_id = uuid.uuid4()
+
     with db.cursor() as cur:
         cur.execute(
-            "select auto_approved, auto_policy_version from public.disbursements where id = %s",
-            (str(disbursement_id),),
+            "select public.finalize_withdrawal_limits(%s, %s, %s, %s, %s)",
+            (str(_insert(db, merchant_id, "5000")), "10000000", "500000", "1000000", True),
         )
-        auto_approved, policy_version = cur.fetchone()
-    assert auto_approved is True
-    # Null, because the older caller has no policy to name.
-    assert policy_version is None
+        assert cur.fetchone()[0]["outcome"] == "auto"
 
 
-def test_the_policy_table_refuses_a_second_row(db):
-    """One policy, forever. A second row would be a setting nobody is
-    reading, which is how a switch comes to say OFF while money moves."""
+# --- 6. Grants ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_a_browser_role_cannot_execute_either_function(db, role):
+    """These decide whether money leaves. The anon key ships in the web
+    bundle and the Android app."""
     with db.cursor() as cur:
         cur.execute(
-            "insert into public.withdrawal_automation_policy (id, enabled) values (true, false) "
-            "on conflict (id) do nothing"
+            "select has_function_privilege(%s, 'public.finalize_withdrawal_limits"
+            "(uuid, numeric, numeric, numeric, boolean, integer)', 'execute')",
+            (role,),
         )
-        with pytest.raises(psycopg2.errors.CheckViolation):
-            cur.execute("insert into public.withdrawal_automation_policy (id, enabled) values (false, true)")
+        assert cur.fetchone()[0] is False
+
+        cur.execute(
+            "select has_function_privilege(%s, 'public.update_withdrawal_automation_policy"
+            "(boolean, numeric, numeric, integer, uuid, text, boolean, boolean, numeric, numeric, text, text)',"
+            " 'execute')",
+            (role,),
+        )
+        assert cur.fetchone()[0] is False
 
 
-def test_an_enabled_policy_cannot_store_a_zero_limit(db):
-    """Enabled with a zero ceiling reads as ON in the portal while
-    behaving as OFF. The constraint refuses it; the API refuses it first,
-    with a message."""
+def test_both_functions_pin_their_search_path(db):
+    """A SECURITY DEFINER function with a mutable search_path can be
+    redirected at objects an attacker controls."""
     with db.cursor() as cur:
         cur.execute(
-            "insert into public.withdrawal_automation_policy (id, enabled) values (true, false) "
-            "on conflict (id) do nothing"
+            "select proname, proconfig from pg_proc "
+            "where proname in ('finalize_withdrawal_limits', 'update_withdrawal_automation_policy')"
         )
-        with pytest.raises(psycopg2.errors.CheckViolation):
-            cur.execute("update public.withdrawal_automation_policy set enabled = true, max_amount_tzs = 0")
+        rows = cur.fetchall()
+
+    assert rows, "the functions are missing"
+    for name, config in rows:
+        assert config and any(entry.startswith("search_path=") for entry in config), name

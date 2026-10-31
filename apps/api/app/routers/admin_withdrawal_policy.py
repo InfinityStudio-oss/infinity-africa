@@ -48,7 +48,6 @@ from app.schemas.withdrawal_policy import (
     WithdrawalAutomationPolicyUpdate,
 )
 from app.services.admin_directory import best_effort_user_profile
-from app.services.audit import write_audit_log
 from app.services.security_alerts import notify_security_event
 from app.services.withdrawal_policy import (
     EffectiveWithdrawalPolicy,
@@ -136,15 +135,14 @@ def update_withdrawal_automation_policy(
     1. Read the current effective policy, because both the staleness check
        and the confirmation rule are relative to it.
     2. Refuse a widening change that did not say it meant to.
-    3. Validate and write under the version filter, which is what makes
-       two administrators safe.
-    4. Audit, then alert.
-
-    The audit row is written with the raising ``write_audit_log``, not the
-    best-effort variant: this is a change to a control over money leaving
-    the platform, and a change nobody can prove happened is worse than a
-    change that failed. The alert afterwards is best-effort — an email
-    provider must not be able to undo a committed policy change.
+    3. Write the policy and its audit row in ONE database transaction,
+       under ``for update`` on the policy row. They commit together or not
+       at all, so a change nobody can prove happened is no longer
+       reachable, and neither is an error returned to an administrator
+       whose change in fact succeeded.
+    4. Alert, best-effort — an email or SMS provider must never be able to
+       undo a committed financial control, nor make one look like it
+       failed.
 
     **What this does NOT do.** Turning automation ON never touches a
     withdrawal that is already waiting for manual approval: those rows
@@ -180,8 +178,11 @@ def update_withdrawal_automation_policy(
             f"(inclusive), {payload.merchant_rolling_24h_limit_tzs} TZS per merchant per rolling 24 hours."
         )
 
+    # The policy change and its audit row commit together inside
+    # update_withdrawal_automation_policy, so there is no longer a second
+    # write here that could fail after the control had already moved.
     # Raises ConflictError (409) on a stale version and ValidationAPIError
-    # on a value that must not be stored.
+    # on a value that must not be stored; both mean nothing was written.
     update_policy(
         client,
         enabled=payload.enabled,
@@ -189,47 +190,13 @@ def update_withdrawal_automation_policy(
         merchant_rolling_24h_limit_tzs=payload.merchant_rolling_24h_limit_tzs,
         expected_version=payload.version,
         actor_id=uuid.UUID(str(admin.id)),
+        correlation_id=correlation_id,
+        confirmed=payload.confirm,
+        ip_address=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
     )
 
     after = resolve_effective_policy(client)
-
-    # Amounts as strings: this metadata is read back during an incident and
-    # a float would be the wrong record of a money limit. No token, no OTP,
-    # no credential, no provider payload — only what changed.
-    write_audit_log(
-        client,
-        action="withdrawal_automation_policy.updated",
-        resource_type="withdrawal_automation_policy",
-        actor_id=uuid.UUID(str(admin.id)),
-        actor_type="user",
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-        metadata={
-            "correlation_id": correlation_id,
-            "previous": {
-                "version": before.policy_version,
-                "enabled": before.policy_enabled,
-                "max_amount_tzs": str(before.policy_max_amount_tzs),
-                "merchant_rolling_24h_limit_tzs": str(before.policy_rolling_24h_limit_tzs),
-                "automation_active": before.automation_active,
-            },
-            "new": {
-                "version": after.policy_version,
-                "enabled": after.policy_enabled,
-                "max_amount_tzs": str(after.policy_max_amount_tzs),
-                "merchant_rolling_24h_limit_tzs": str(after.policy_rolling_24h_limit_tzs),
-                "automation_active": after.automation_active,
-            },
-            # What the deployment ceilings made of it. A policy raised to a
-            # number the deployment caps is a real source of confusion
-            # later, so the record says what actually took effect.
-            "effective": {
-                "max_amount_tzs": str(after.max_amount_tzs),
-                "rolling_24h_limit_tzs": str(after.merchant_rolling_24h_limit_tzs),
-            },
-            "confirmed": payload.confirm,
-        },
-    )
 
     logger.info(
         "withdrawal_automation_policy_updated correlation_id=%s enabled=%s active=%s version=%s->%s",

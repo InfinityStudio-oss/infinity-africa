@@ -55,7 +55,6 @@ from supabase import Client
 
 from app.config import get_settings
 from app.core.errors import ConflictError, ValidationAPIError
-from app.core.time import utc_now_iso
 
 logger = logging.getLogger("infinity.withdrawal_policy")
 
@@ -88,6 +87,45 @@ CODE_RISK_REVIEW = "AUTO_RISK_REVIEW_REQUIRED"
 # imports this module, and app/services/sms_messages.py cannot import
 # disbursements without a cycle.
 PAYOUT_REACHED_PROVIDER_STATUSES = ("PROCESSING", "SUCCESS", "NEEDS_RECONCILIATION")
+
+
+@dataclass(frozen=True)
+class DeploymentAutomationLimits:
+    """What the deployment permits, with no database in the answer.
+
+    This is the half of the decision that cannot be read inside a
+    transaction, because it lives in this process's environment rather
+    than in Postgres. It is passed to finalize_withdrawal_limits as a
+    ceiling and a permission; that function reads the live policy itself
+    and combines the two with AND and LEAST, so runtime can only tighten.
+
+    Keeping it separate from EffectiveWithdrawalPolicy matters: the
+    effective policy is a *display* answer assembled from two
+    transactions, and handing it to the payout path is exactly the race
+    that migration 20261031040000 closed.
+    """
+
+    automation_allowed: bool
+    max_amount_tzs: Decimal
+    rolling_24h_limit_tzs: Decimal
+
+
+def deployment_automation_limits() -> DeploymentAutomationLimits:
+    """The deployment ceiling and permission, for the payout path.
+
+    Both env flags must agree before automation is permitted at all —
+    unchanged, and still deliberately two, so one mis-set variable cannot
+    start unattended payouts. ROUND_DOWN on the ceilings for the same
+    reason as everywhere else here: a ceiling nudged down lets less money
+    through unattended.
+    """
+    settings = get_settings()
+    allowed = settings.auto_withdrawals_enabled and not settings.require_admin_approval_for_all_withdrawals
+    return DeploymentAutomationLimits(
+        automation_allowed=allowed,
+        max_amount_tzs=settings.auto_withdrawal_max_amount_tzs.quantize(MONEY, rounding=ROUND_DOWN),
+        rolling_24h_limit_tzs=settings.auto_withdrawal_daily_limit_tzs.quantize(MONEY, rounding=ROUND_DOWN),
+    )
 
 
 @dataclass(frozen=True)
@@ -382,44 +420,86 @@ def update_policy(
     merchant_rolling_24h_limit_tzs: Decimal,
     expected_version: int,
     actor_id: uuid.UUID,
+    correlation_id: str,
+    confirmed: bool,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> dict:
-    """Write the policy, or refuse because someone else already did.
+    """Write the policy AND its audit row, together or not at all.
 
-    The version filter is the whole concurrency mechanism: Postgres
-    serialises the two updates, so a second administrator working from a
-    policy they loaded before the first one saved matches no rows and gets
-    a conflict instead of silently reverting a change they never saw.
+    Both used to be separate requests: the update committed, then the
+    router wrote the audit row. If that second write failed, the control
+    over unattended payouts had changed, nothing recorded that anybody
+    changed it, and the administrator who had in fact succeeded was shown
+    an error. All three are bad, and the third is the kind of thing that
+    gets a change made twice.
 
-    ``actor_id`` is the authenticated admin from the request context. It is
-    never read from the request body - a client-supplied administrator id
-    would make the audit trail worthless.
+    update_withdrawal_automation_policy (migration 20261031040000) does
+    both under ``for update`` on the single policy row, so they commit
+    together, the version check and the write are one decision rather than
+    two, and the before/after values in the audit row come from the row
+    this transaction locked rather than from an earlier read that may
+    already be stale.
+
+    ``actor_id`` is the authenticated admin from the request context, never
+    the request body — a client-supplied administrator id would make the
+    audit trail worthless.
 
     Raises ValidationAPIError for a value that cannot be stored and
     ConflictError for a stale version. Returns the stored row.
     """
     _validate_amounts(enabled=enabled, max_amount=max_amount_tzs, rolling=merchant_rolling_24h_limit_tzs)
+    deployment = deployment_automation_limits()
 
-    result = (
-        client.table(TABLE)
-        .update(
+    try:
+        result = client.rpc(
+            "update_withdrawal_automation_policy",
             {
-                "enabled": enabled,
-                "max_amount_tzs": str(max_amount_tzs),
-                "merchant_rolling_24h_limit_tzs": str(merchant_rolling_24h_limit_tzs),
-                "version": expected_version + 1,
-                "updated_at": utc_now_iso(),
-                "updated_by": str(actor_id),
-            }
-        )
-        .eq("id", True)
-        .eq("version", expected_version)
-        .execute()
-    )
+                "p_enabled": enabled,
+                "p_max_amount": str(max_amount_tzs),
+                "p_rolling_limit": str(merchant_rolling_24h_limit_tzs),
+                "p_expected_version": expected_version,
+                "p_actor_id": str(actor_id),
+                "p_correlation_id": correlation_id,
+                "p_confirmed": confirmed,
+                # Recorded in the audit row, not enforced here —
+                # enforcement is finalize_withdrawal_limits' job, at the
+                # moment a payout is authorised.
+                "p_deployment_allows": deployment.automation_allowed,
+                "p_deployment_max": str(deployment.max_amount_tzs),
+                "p_deployment_rolling": str(deployment.rolling_24h_limit_tzs),
+                "p_ip": ip_address,
+                "p_user_agent": user_agent,
+            },
+        ).execute()
+    except Exception as exc:  # narrowed below, re-raised otherwise
+        raise ConflictError(
+            "The automation policy could not be saved. Nothing was changed. "
+            "Reload the current settings and try again."
+        ) from exc
 
-    rows = result.data if isinstance(result.data, list) else None
-    if not rows:
+    data = result.data if isinstance(result.data, dict) else {}
+    outcome = data.get("outcome")
+
+    if outcome == "conflict":
         raise ConflictError(
             "This policy was changed by someone else while you were editing it. "
             "Reload the current settings and apply your change again."
         )
-    return rows[0]
+    if outcome != "ok":
+        # 'unavailable', or a shape this code does not recognise. Either
+        # way nothing was written, and saying so is the only honest
+        # answer available.
+        raise ConflictError(
+            "The automation policy could not be read, so it was not changed. "
+            "Withdrawals are going to manual approval in the meantime. Reload and try again."
+        )
+
+    return {
+        "enabled": data["enabled"],
+        "max_amount_tzs": data["max_amount_tzs"],
+        "merchant_rolling_24h_limit_tzs": data["merchant_rolling_24h_limit_tzs"],
+        "version": data["version"],
+        "updated_at": data.get("updated_at"),
+        "updated_by": str(actor_id),
+    }

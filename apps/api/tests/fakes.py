@@ -500,6 +500,8 @@ class _FakeRpcCall:
             return self._client._finalize_withdrawal_limits(self._params)
         if self._fn_name == "admin_overview_money":
             return self._client._admin_overview_money(self._params)
+        if self._fn_name == "update_withdrawal_automation_policy":
+            return self._client._update_withdrawal_automation_policy(self._params)
         raise NotImplementedError(self._fn_name)
 
 
@@ -781,6 +783,113 @@ class FakeSupabaseClient:
     def rpc(self, fn_name: str, params: dict | None = None) -> _FakeRpcCall:
         return _FakeRpcCall(self, fn_name, params or {})
 
+    def _update_withdrawal_automation_policy(self, params: dict) -> _Result:
+        """Mirrors supabase/migrations/20261031040000.
+
+        The point of the real function is that the policy write and its
+        audit row are ONE transaction, so this writes both too — and a
+        test that makes the audit insert fail must see the policy
+        unchanged, which is the behaviour the separate-requests version
+        could not offer.
+        """
+        rows = self.table("withdrawal_automation_policy")._table.rows
+        row = next(iter(rows), None)
+        if row is None:
+            return _Result({"outcome": "unavailable"})
+
+        if row.get("version") != params["p_expected_version"]:
+            return _Result(
+                {
+                    "outcome": "conflict",
+                    "current_version": row.get("version"),
+                    "current_enabled": row.get("enabled"),
+                    "current_max_amount_tzs": str(row.get("max_amount_tzs")),
+                    "current_rolling_24h_limit_tzs": str(row.get("merchant_rolling_24h_limit_tzs")),
+                }
+            )
+
+        before = dict(row)
+        money = Decimal("0.01")
+        after = {
+            "enabled": bool(params["p_enabled"]),
+            "max_amount_tzs": str(Decimal(str(params["p_max_amount"])).quantize(money)),
+            "merchant_rolling_24h_limit_tzs": str(
+                Decimal(str(params["p_rolling_limit"])).quantize(money)
+            ),
+            "version": before["version"] + 1,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": params["p_actor_id"],
+        }
+
+        # Written before the policy is mutated, so that a failure here
+        # leaves the policy alone — one transaction, as the real function
+        # has. A test can make this raise by seeding an audit_logs
+        # constraint the fake enforces.
+        self.table("audit_logs")._table.insert(
+            {
+                "actor_id": params["p_actor_id"],
+                "actor_type": "user",
+                "action": "withdrawal_automation_policy.updated",
+                "resource_type": "withdrawal_automation_policy",
+                "ip_address": params.get("p_ip"),
+                "user_agent": params.get("p_user_agent"),
+                "metadata": {
+                    "correlation_id": params.get("p_correlation_id"),
+                    "confirmed": bool(params.get("p_confirmed")),
+                    "previous": {
+                        "version": before["version"],
+                        "enabled": before["enabled"],
+                        "max_amount_tzs": str(
+                            Decimal(str(before["max_amount_tzs"])).quantize(Decimal("0.01"))
+                        ),
+                        "merchant_rolling_24h_limit_tzs": str(
+                            Decimal(str(before["merchant_rolling_24h_limit_tzs"])).quantize(
+                                Decimal("0.01")
+                            )
+                        ),
+                        "automation_active": bool(params.get("p_deployment_allows"))
+                        and bool(before["enabled"]),
+                    },
+                    "new": {
+                        "version": after["version"],
+                        "enabled": after["enabled"],
+                        "max_amount_tzs": after["max_amount_tzs"],
+                        "merchant_rolling_24h_limit_tzs": after["merchant_rolling_24h_limit_tzs"],
+                        "automation_active": bool(params.get("p_deployment_allows"))
+                        and after["enabled"],
+                    },
+                    "effective": {
+                        "max_amount_tzs": str(
+                            min(
+                                Decimal(str(params.get("p_deployment_max") or 0)),
+                                Decimal(after["max_amount_tzs"]),
+                            ).quantize(money)
+                        ),
+                        "rolling_24h_limit_tzs": str(
+                            min(
+                                Decimal(str(params.get("p_deployment_rolling") or 0)),
+                                Decimal(after["merchant_rolling_24h_limit_tzs"]),
+                            ).quantize(money)
+                        ),
+                    },
+                },
+            }
+        )
+
+        row.update(after)
+        return _Result(
+            {
+                "outcome": "ok",
+                "version": after["version"],
+                "enabled": after["enabled"],
+                "max_amount_tzs": after["max_amount_tzs"],
+                "merchant_rolling_24h_limit_tzs": after["merchant_rolling_24h_limit_tzs"],
+                "updated_at": after["updated_at"],
+                "previous_version": before["version"],
+                "previous_enabled": before["enabled"],
+            }
+        )
+
     def _admin_overview_money(self, params: dict) -> _Result:
         """Mirrors supabase/migrations/20261031030000_admin_overview_money.sql.
 
@@ -864,12 +973,35 @@ class FakeSupabaseClient:
             raise Exception(f"DISBURSEMENT_NOT_FOUND: {params['p_disbursement_id']}")  # noqa: TRY002
 
         daily_limit = Decimal(str(params["p_daily_limit"]))
-        auto_max = Decimal(str(params["p_auto_max"]))
-        auto_daily_limit = Decimal(str(params["p_auto_daily_limit"]))
-        automation_enabled = bool(params["p_automation_enabled"])
-        # Added by 20261031010000. Absent when an older caller uses the
-        # 5-argument compatibility wrapper, which passes null.
-        policy_version = params.get("p_policy_version")
+
+        # DEPLOYMENT ceiling and permission. Since 20261031040000 the
+        # function no longer trusts a caller's view of the live policy:
+        # it reads the row itself, in the transaction that authorises the
+        # payout, and combines the two with AND and LEAST so runtime can
+        # only tighten. p_policy_version is accepted and ignored for the
+        # same reason - the version that matters is the one on the row
+        # this transaction locked.
+        deployment_max = Decimal(str(params["p_auto_max"]))
+        deployment_rolling = Decimal(str(params["p_auto_daily_limit"]))
+        deployment_allows = bool(params["p_automation_enabled"])
+
+        policy = next(iter(self.table("withdrawal_automation_policy")._table.rows), None)
+        if policy is None:
+            automation_enabled = False
+            auto_max = Decimal(0)
+            auto_daily_limit = Decimal(0)
+            policy_version = None
+        else:
+            automation_enabled = deployment_allows and bool(policy.get("enabled"))
+            auto_max = min(deployment_max, Decimal(str(policy.get("max_amount_tzs") or 0)))
+            auto_daily_limit = min(
+                deployment_rolling,
+                Decimal(str(policy.get("merchant_rolling_24h_limit_tzs") or 0)),
+            )
+            policy_version = policy.get("version")
+
+        if auto_max <= 0 or auto_daily_limit <= 0:
+            automation_enabled = False
 
         def _decide(outcome: str, reason: str, code: str, **extra) -> _Result:
             """Writes the decision columns the real function writes, so a
@@ -919,8 +1051,12 @@ class FakeSupabaseClient:
             )
 
         if not automation_enabled:
-            reason = "Manual approval required: withdrawal automation is not enabled."
-            code = "AUTO_POLICY_DISABLED"
+            if policy_version is None:
+                reason = "Manual approval required: the automation policy could not be read."
+                code = "AUTO_POLICY_UNAVAILABLE"
+            else:
+                reason = "Manual approval required: withdrawal automation is not enabled."
+                code = "AUTO_POLICY_DISABLED"
         elif amount > auto_max:
             # `>` and not `>=`: the ceiling is inclusive, so a withdrawal
             # for exactly the maximum is eligible.

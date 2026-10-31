@@ -87,10 +87,9 @@ from app.services.sms_messages import (
 )
 from app.services.webhooks import enqueue_webhook_event
 from app.services.withdrawal_policy import (
-    CODE_POLICY_UNAVAILABLE,
     CODE_RISK_REVIEW,
     PAYOUT_REACHED_PROVIDER_STATUSES,
-    resolve_effective_policy,
+    deployment_automation_limits,
 )
 from app.services.withdrawals.fee_calculator import calculate_withdrawal_fee
 
@@ -236,22 +235,28 @@ def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -
     boundary is where it is.
     """
     settings = get_settings()
-    policy = resolve_effective_policy(client)
+    deployment = deployment_automation_limits()
     base_params = {
         "p_disbursement_id": str(disbursement_id),
         # The hard rolling limit for ALL withdrawals, auto or manual,
         # which the policy has no say over.
         "p_daily_limit": str(settings.daily_withdrawal_limit_tzs),
-        # Already resolved against the deployment ceilings.
-        "p_auto_max": str(policy.max_amount_tzs),
-        "p_auto_daily_limit": str(policy.merchant_rolling_24h_limit_tzs),
-        "p_automation_enabled": policy.automation_active,
+        # DEPLOYMENT ceilings and permission only. Not the live policy -
+        # the function reads that itself, inside the transaction that
+        # authorises the payout, and combines the two with AND and LEAST
+        # so runtime can only ever tighten what deployment allows.
+        "p_auto_max": str(deployment.max_amount_tzs),
+        "p_auto_daily_limit": str(deployment.rolling_24h_limit_tzs),
+        "p_automation_enabled": deployment.automation_allowed,
     }
 
     try:
         result = client.rpc(
             "finalize_withdrawal_limits",
-            {**base_params, "p_policy_version": policy.policy_version},
+            # Still sent so the signature matches; the function ignores it
+            # and uses the version on the row it locked, which is the only
+            # one that can be current.
+            {**base_params, "p_policy_version": None},
         ).execute()
     except Exception as exc:  # narrowed immediately below, and re-raised if it does not match
         if not _finalize_signature_missing(exc):
@@ -280,30 +285,29 @@ def _finalize_withdrawal_limits(client: Client, *, disbursement_id: uuid.UUID) -
             "- database predates migration 20261031010000; apply it",
             disbursement_id,
         )
-        result = client.rpc("finalize_withdrawal_limits", base_params).execute()
+        # **Fail closed, explicitly.** The parameters above carry the
+        # deployment PERMISSION, and only the current function checks that
+        # against the live policy. A function old enough to lack the
+        # 6-argument signature predates the policy table entirely, so it
+        # would take `p_automation_enabled` at face value and authorise a
+        # payout against a policy that does not exist to say otherwise.
+        #
+        # That is the compatibility path bypassing the off switch, and it
+        # is not a theoretical ordering: it is what sending the deployment
+        # permission to an older function means. On such a database
+        # automation cannot legitimately be on, so this says so.
+        result = client.rpc(
+            "finalize_withdrawal_limits", {**base_params, "p_automation_enabled": False}
+        ).execute()
     data = result.data or {}
     outcome, reason = data.get("outcome", "manual"), data.get("reason", "")
 
-    if outcome == "manual" and policy.policy_unavailable:
-        # The function was told automation is off, which is true, and wrote
-        # AUTO_POLICY_DISABLED - a decision. It was not a decision: the
-        # policy could not be read. An operator looking at a queue of
-        # withdrawals needs to be able to tell a switch somebody turned off
-        # from a fault nobody knows about, so the fault is recorded as one.
-        # One extra write, only on a path that should never be taken.
-        reason = (
-            "Manual approval required: the automation policy could not be read, so this "
-            "withdrawal was sent for manual approval."
-        )
-        try:
-            update_row(
-                client,
-                "disbursements",
-                disbursement_id,
-                {"auto_decision_reason": reason, "auto_decision_code": CODE_POLICY_UNAVAILABLE},
-            )
-        except Exception:  # noqa: BLE001 - the row is already safely manual
-            logger.warning("withdrawal_policy_unavailable_code_not_recorded id=%s", disbursement_id)
+    # AUTO_POLICY_UNAVAILABLE used to be written here, in a second
+    # request, because the API knew the policy had not loaded and the
+    # function did not. The function reads the policy itself now, so it
+    # distinguishes "switched off" from "could not be read" at the moment
+    # it decides - one write instead of two, and no window in which the
+    # row carries the wrong reason.
 
     return outcome, reason
 

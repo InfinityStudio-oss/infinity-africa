@@ -1498,9 +1498,19 @@ def test_a_withdrawal_still_works_against_a_database_without_the_migration(
 def test_the_fallback_does_not_let_automation_run_on_an_unmigrated_database(
     fake_client, monkeypatch
 ):
-    """Falling back must not become a way to auto-process without the
-    policy. Without the table there is no policy to enable, so the call is
-    made with automation off."""
+    """The compatibility path must not become a way around the off switch.
+
+    Since 20261031040000 the current function reads the policy itself, so
+    the API sends it the DEPLOYMENT permission and lets the database
+    decide — which is why the first attempt legitimately carries True.
+
+    A function old enough to lack that signature predates the policy table
+    and would take that True at face value, authorising a payout against a
+    policy that does not exist to object. So the fallback attempt sends
+    False explicitly. That is the whole guarantee: the only call that can
+    reach a function which does not check the policy is one that has
+    already said no.
+    """
     _permit_automation(monkeypatch)
     fake_client.break_withdrawal_automation_policy()
     rpc = _OldDatabaseRpc(fake_client)
@@ -1512,8 +1522,14 @@ def test_the_fallback_does_not_let_automation_run_on_an_unmigrated_database(
     row = _row(fake_client, _request_withdrawal(merchant_id, user_id, "5000")["id"])
 
     assert _auto(row) is False
-    for attempt in rpc.calls:
-        assert attempt["p_automation_enabled"] is False
+    assert len(rpc.calls) == 2
+    # The call to the current function: deployment permission, policy
+    # checked inside the transaction.
+    assert rpc.calls[0]["p_automation_enabled"] is True
+    assert "p_policy_version" in rpc.calls[0]
+    # The call to a function that cannot check: refused up front.
+    assert rpc.calls[1]["p_automation_enabled"] is False
+    assert "p_policy_version" not in rpc.calls[1]
 
 
 def test_any_other_rpc_failure_is_never_retried(fake_client, monkeypatch):
@@ -1580,3 +1596,128 @@ def test_a_missing_function_entirely_is_not_swallowed(fake_client, monkeypatch):
     # Tried both signatures, then gave up rather than continuing without a
     # limit check.
     assert len(rpc.calls) == 2
+
+
+# --- The off-switch race, at the decision level ---------------------------
+#
+# The locking half lives in tests/test_withdrawal_automation_policy_postgres.py,
+# because a single-threaded fake cannot tell a correct `for share` from a
+# missing one. What IS testable here is the half that made the lock
+# necessary: the API used to resolve the policy and pass the answer in, so
+# the database had no way to notice an OFF that landed in between. It now
+# sends only what the deployment permits.
+
+
+def _rpc_spy(fake_client, monkeypatch):
+    real = fake_client.rpc
+    seen: list[dict] = []
+
+    def spy(fn_name: str, params: dict | None = None):
+        if fn_name == "finalize_withdrawal_limits":
+            seen.append(dict(params or {}))
+        return real(fn_name, params or {})
+
+    monkeypatch.setattr(fake_client, "rpc", spy)
+    return seen
+
+
+def test_the_api_sends_deployment_ceilings_not_the_live_policy(fake_client, monkeypatch):
+    """The policy is 10,000 and the deployment ceiling is 500,000. If the
+    API still resolved the policy itself it would send 10,000, and the
+    database would have no way to know the number came from a read that
+    may already be stale."""
+    monkeypatch.setenv("AUTO_WITHDRAWAL_MAX_AMOUNT_TZS", "500000")
+    _enable_both(fake_client, monkeypatch, max_amount="10000")
+    seen = _rpc_spy(fake_client, monkeypatch)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+    _request_withdrawal(merchant_id, user_id, "5000")
+
+    assert len(seen) == 1
+    assert Decimal(seen[0]["p_auto_max"]) == Decimal("500000.00")
+    assert seen[0]["p_automation_enabled"] is True
+    # The decision still honours the tighter policy, because the function
+    # reads it.
+    row = _row(fake_client, fake_client.table("disbursements")._table.rows[0]["id"])
+    assert _auto(row) is True
+
+
+def test_the_tighter_of_the_two_is_what_binds(fake_client, monkeypatch):
+    """Policy 10,000, deployment 500,000, withdrawal 20,000: the policy
+    wins because it is lower, even though the API sent the higher
+    number."""
+    monkeypatch.setenv("AUTO_WITHDRAWAL_MAX_AMOUNT_TZS", "500000")
+    _enable_both(fake_client, monkeypatch, max_amount="10000")
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+    row = _row(fake_client, _request_withdrawal(merchant_id, user_id, "20000")["id"])
+
+    assert _auto(row) is False
+    assert row["auto_decision_code"] == "AUTO_AMOUNT_LIMIT_EXCEEDED"
+
+
+def test_an_off_landing_between_the_read_and_the_decision_is_honoured(
+    fake_client, monkeypatch
+):
+    """The race, simulated deterministically.
+
+    The policy is switched OFF at the instant the API calls the database —
+    after any read the API might have done, before the decision. Under the
+    old design that OFF was invisible, because the answer had already been
+    computed and passed in. The function reads the policy itself now, so
+    the switch lands first.
+    """
+    _enable_both(fake_client, monkeypatch)
+    real = fake_client.rpc
+
+    def switch_off_then_decide(fn_name: str, params: dict | None = None):
+        if fn_name == "finalize_withdrawal_limits":
+            fake_client.table("withdrawal_automation_policy")._table.rows[0]["enabled"] = False
+        return real(fn_name, params or {})
+
+    monkeypatch.setattr(fake_client, "rpc", switch_off_then_decide)
+
+    merchant_id, user_id = _merchant_and_admin(fake_client)
+    _fund_wallet(fake_client, merchant_id, "900000")
+    data = _request_withdrawal(merchant_id, user_id, "5000")
+
+    assert data["status"] == "PENDING_ADMIN_APPROVAL"
+    assert _auto(_row(fake_client, data["id"])) is False
+    assert _row(fake_client, data["id"])["auto_decision_code"] == "AUTO_POLICY_DISABLED"
+
+
+def test_a_policy_change_and_its_audit_row_are_one_write(fake_client, monkeypatch):
+    """They used to be two requests, so the policy could change while the
+    audit insert failed — the control moved, nothing recorded it, and the
+    administrator was told it had failed. One transaction now."""
+    _permit_automation(monkeypatch)
+    admin_id = _admin(fake_client)
+
+    real = fake_client.rpc
+
+    def break_the_audit(fn_name: str, params: dict | None = None):
+        if fn_name == "update_withdrawal_automation_policy":
+            raise RuntimeError("audit storage is unavailable")
+        return real(fn_name, params or {})
+
+    monkeypatch.setattr(fake_client, "rpc", break_the_audit)
+
+    response = client.put(
+        POLICY_PATH,
+        headers=auth_headers(admin_id),
+        json={
+            "enabled": True,
+            "max_amount_tzs": "50000",
+            "merchant_rolling_24h_limit_tzs": "500000",
+            "version": 1,
+            "confirm": True,
+        },
+    )
+
+    assert response.status_code == 409
+    # Unchanged, and the administrator was told so.
+    policy = resolve_effective_policy(fake_client)
+    assert policy.policy_enabled is False
+    assert policy.policy_version == 1

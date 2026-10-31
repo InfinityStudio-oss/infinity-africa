@@ -1,3 +1,10 @@
 -r requirements.txt
 pytest==8.4.1
 pytest-asyncio==0.25.2
+
+# Only tests use it: tests/test_withdrawal_automation_policy_postgres.py
+# talks to a throwaway Postgres to prove the withdrawal locking, which the
+# in-memory fake cannot do. Without this the file skips, and a skip is not
+# a pass. Not in requirements.txt - the API itself reaches Postgres
+# through PostgREST and needs no driver.
+psycopg2-binary==2.9.10
