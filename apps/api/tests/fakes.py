@@ -500,6 +500,23 @@ class _FakeTable:
                     "duplicate key value violates unique constraint "
                     "sms_provider_events_event_id_key"
                 )
+        # unique (merchant_id, summary_date) in migration 20261101010000,
+        # and that uniqueness IS the deduplication: the daily sweep claims
+        # a day by inserting, so two replicas waking together cannot both
+        # send. Without it enforced here the "never sent twice" test would
+        # pass on the application's own check alone and prove nothing
+        # about the race it is actually written for.
+        if self.name == "merchant_daily_notification_summaries" and any(
+            str(r.get("merchant_id")) == str(row.get("merchant_id"))
+            and str(r.get("summary_date")) == str(row.get("summary_date"))
+            for r in self.rows
+        ):
+            error = Exception(
+                "duplicate key value violates unique constraint "
+                "merchant_daily_notification_summaries_once_per_day"
+            )
+            error.code = "23505"
+            raise error
         if self.name in ("collections", "disbursements"):
             # `not null default now()` in
             # 20261017160000_reconciliation_next_check.sql. Without this

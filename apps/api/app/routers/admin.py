@@ -668,8 +668,8 @@ def list_admin_notification_settings(
         rows = fetch_in_chunks(
             lambda batch: client.table("merchant_notification_settings")
             .select(
-                "merchant_id, collection_notifications_enabled, primary_notification_email,"
-                " secondary_notification_email, updated_at"
+                "merchant_id, collection_notifications_enabled, collection_notification_frequency,"
+                " primary_notification_email, secondary_notification_email, updated_at"
             )
             .in_("merchant_id", batch),
             [m["id"] for m in merchants],
@@ -690,6 +690,10 @@ def list_admin_notification_settings(
                 merchant_name=merchant.get("business_name") or "",
                 merchant_code=merchant.get("merchant_code"),
                 collection_notifications_enabled=enabled,
+                collection_notification_frequency=(row or {}).get(
+                    "collection_notification_frequency"
+                )
+                or "per_payment",
                 primary_notification_email=primary,
                 secondary_notification_email=(row or {}).get("secondary_notification_email") or None,
                 # What an email would actually be sent to today. Falls back
@@ -772,6 +776,7 @@ def update_admin_merchant_notification_settings(
         collection_sms_enabled=payload.collection_sms_enabled,
         announcement_sms_enabled=payload.announcement_sms_enabled,
         sms_notification_phone=payload.sms_notification_phone,
+        collection_notification_frequency=payload.collection_notification_frequency,
     )
     write_audit_log(
         client,

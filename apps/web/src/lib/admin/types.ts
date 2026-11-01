@@ -455,6 +455,11 @@ export interface AdminNotificationSettingsRow {
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
+  /** 'per_payment' or 'daily_summary'. Optional because a response
+   * produced before migration 20261101010000 has no such field — and
+   * absent must read as per_payment, the behaviour that existed before
+   * the setting did. */
+  collection_notification_frequency?: string;
   /** Transactional payment alerts by SMS. Optional for backwards
    * compatibility with a response produced before these columns existed. */
   collection_sms_enabled?: boolean;

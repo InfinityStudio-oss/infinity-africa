@@ -106,6 +106,7 @@ def upsert_notification_settings(
     collection_sms_enabled: bool | None = None,
     announcement_sms_enabled: bool | None = None,
     sms_notification_phone: str | None = None,
+    collection_notification_frequency: str | None = None,
 ) -> dict:
     data: dict[str, Any] = {
         "primary_notification_email": primary_notification_email,
@@ -113,6 +114,13 @@ def upsert_notification_settings(
         "collection_notifications_enabled": collection_notifications_enabled,
         "updated_by": str(updated_by) if updated_by else None,
     }
+    if collection_notification_frequency is not None:
+        if collection_notification_frequency not in ("per_payment", "daily_summary"):
+            raise ValidationAPIError(
+                "Notification frequency must be either per_payment or daily_summary."
+            )
+        data["collection_notification_frequency"] = collection_notification_frequency
+
     # None means "not supplied", so a caller that knows nothing about SMS
     # cannot silently switch a merchant's alerts off by omission.
     if collection_sms_enabled is not None:

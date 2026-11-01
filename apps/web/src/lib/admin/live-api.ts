@@ -255,6 +255,10 @@ export interface NotificationSettingsInput {
   primary_notification_email: string | null;
   secondary_notification_email: string | null;
   collection_notifications_enabled: boolean;
+  /** 'per_payment' or 'daily_summary'. Omitted means leave unchanged,
+   * so a caller that predates this never moves a merchant onto a daily
+   * email they did not ask for. */
+  collection_notification_frequency?: string;
 }
 
 export async function updateAdminMerchantNotificationSettings(

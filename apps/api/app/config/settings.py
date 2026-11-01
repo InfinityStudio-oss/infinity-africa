@@ -520,6 +520,18 @@ class Settings(BaseSettings):
     # production value.
     oasis_sms_dispatch_interval_seconds: int = 0
 
+    # How often the daily-summary sweep wakes. Not how often a merchant
+    # is emailed — that is once per Dar es Salaam day, enforced by a
+    # unique row rather than by the timer. The sweep ticks often enough
+    # that a replica restart or a few minutes of downtime around local
+    # midnight does not lose a day, and finds nothing to do on almost
+    # every tick.
+    #
+    # 0 disables it, which is the default: a deployment that has not
+    # applied migration 20261101010000 has no table to claim a day in,
+    # and a sweep that cannot deduplicate must not run at all.
+    daily_summary_interval_seconds: int = 0
+
     # The documented account-wide limit is 300 send requests/minute, with a
     # separate per-IP guard of 600. 240 leaves a fifth of the account's
     # capacity for anything else sharing these credentials - the brief

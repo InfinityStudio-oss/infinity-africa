@@ -92,6 +92,31 @@ export function NotificationSettingsCard({
             Collection notifications enabled
           </label>
 
+          {/* The answer to "stop emailing me on every payment".
+              Measured 2026-11-01: 30,135 of these in thirty days, 16,215
+              to one merchant — 540 a day. Switching them off entirely
+              costs that merchant every email view of money arriving,
+              which is not what they were asking for. */}
+          <div>
+            <label className={labelClass} htmlFor="collection_notification_frequency">
+              How often
+            </label>
+            <select
+              id="collection_notification_frequency"
+              name="collection_notification_frequency"
+              defaultValue={settings.collection_notification_frequency ?? "per_payment"}
+              className={inputClass}
+            >
+              <option value="per_payment">An email for every payment</option>
+              <option value="daily_summary">One summary a day</option>
+            </select>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              A busy merchant can receive hundreds of emails a day. The daily summary sends one
+              message the next morning with the count and the total instead. Ignored while
+              collection notifications are switched off above.
+            </p>
+          </div>
+
           {/* How SMS is turned on merchant by merchant during rollout.
               Off by default for every merchant — enabling it for all 60
               at once is a cost and a consent decision. */}

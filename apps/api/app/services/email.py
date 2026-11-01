@@ -1212,6 +1212,96 @@ def send_auto_withdrawal_notification_email(
     )
 
 
+def send_daily_collection_summary_email(
+    client: Client,
+    *,
+    merchant: dict,
+    recipient: str,
+    summary_date,
+    collection_count: int,
+    gross_amount: Decimal,
+    currency: str = "TZS",
+) -> dict | None:
+    """Yesterday's payments, in one message.
+
+    The alternative to a per-payment email, for merchants who were
+    getting hundreds a day. Deliberately short: a count, a total, and a
+    link. Anyone who wants the detail opens the portal, and a message
+    that tried to list 540 payments would be no more readable than 540
+    messages.
+
+    Never raises — it is called from a scheduled sweep, where one bad
+    address must not stop the rest. The caller has already claimed the
+    day, so a failure here means that merchant misses one summary rather
+    than receiving two.
+    """
+    settings = get_settings()
+    business_name = merchant.get("business_name") or "your business"
+    subject = f"{business_name}: {collection_count} payments yesterday"
+    sender = settings.email_from
+    portal_url = f"{settings.app_url}/dashboard/collections"
+
+    body = f"""
+    <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Daily summary</p>
+    <h1 style="margin:0 0 8px;font-size:20px;color:#1f2937;">{_money(gross_amount, currency)} received</h1>
+    <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">
+      {business_name} took <strong>{collection_count}</strong>
+      {"payment" if collection_count == 1 else "payments"} on {summary_date:%d %B %Y}.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#6b7280;">Payments</td>
+        <td style="padding:6px 0;font-size:14px;color:#1f2937;text-align:right;">{collection_count}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#6b7280;">Total received</td>
+        <td style="padding:6px 0;font-size:14px;color:#1f2937;text-align:right;">{_money(gross_amount, currency)}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#6b7280;">Day</td>
+        <td style="padding:6px 0;font-size:14px;color:#1f2937;text-align:right;">{summary_date:%d %B %Y}</td>
+      </tr>
+    </table>
+    {_cta_button(portal_url, "View payments")}
+    <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;">
+      You receive one summary a day instead of an email for each payment. To change this, contact
+      InfinityPay support.
+    </p>
+    """
+    html = _email_shell(body_html=body)
+
+    try:
+        message_id = send_email(
+            to=[recipient], subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to
+        )
+    except EmailDeliveryError as exc:
+        return _log_delivery(
+            client,
+            merchant_id=merchant.get("id"),
+            email_type="merchant_daily_collection_summary",
+            related_resource_type="merchant",
+            related_resource_id=merchant.get("id"),
+            recipient_email=recipient,
+            sender_email=sender,
+            subject=subject,
+            status="failed",
+            error_message=str(exc),
+        )
+
+    return _log_delivery(
+        client,
+        merchant_id=merchant.get("id"),
+        email_type="merchant_daily_collection_summary",
+        related_resource_type="merchant",
+        related_resource_id=merchant.get("id"),
+        recipient_email=recipient,
+        sender_email=sender,
+        subject=subject,
+        status="sent",
+        provider_message_id=message_id or None,
+    )
+
+
 # --- 8. Withdrawal success (to merchant) ----------------------------------------
 
 
@@ -1500,6 +1590,18 @@ def send_merchant_collection_notification_email(
         "collection_notifications_enabled"
     ):
         # Explicitly switched off. Respected exactly.
+        return []
+
+    # On, but asked for one email a day rather than one per payment. The
+    # daily sweep (app/services/daily_notification_summary.py) sends that
+    # one; this path sends nothing, which is the whole point.
+    #
+    # Checked here rather than at the sweep alone, because this is the
+    # path that runs 540 times a day for the busiest merchant. A missing
+    # or unreadable value means per_payment — the behaviour that existed
+    # before the setting did, so a merchant cannot be silently moved to a
+    # daily email by a column that failed to read.
+    if (notification_settings or {}).get("collection_notification_frequency") == "daily_summary":
         return []
 
     settings_row = notification_settings or {}

@@ -659,6 +659,13 @@ export async function updateAdminMerchantNotificationSettingsAction(
       primary_notification_email: get("primary_notification_email"),
       secondary_notification_email: get("secondary_notification_email"),
       collection_notifications_enabled: formData.get("collection_notifications_enabled") === "on",
+      // Only ever one of the two the select offers. Anything else is
+      // refused by the backend and by a CHECK constraint, so a tampered
+      // form cannot store a frequency the sweep would not recognise.
+      collection_notification_frequency:
+        formData.get("collection_notification_frequency") === "daily_summary"
+          ? "daily_summary"
+          : "per_payment",
       // Super Admin is how SMS is enabled merchant by merchant during
       // rollout, so this form has to carry it. Sent explicitly rather
       // than omitted, because the form knows the real state of both

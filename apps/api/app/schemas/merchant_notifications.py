@@ -25,6 +25,11 @@ class MerchantNotificationSettingsUpdate(BaseModel):
     primary_notification_email: str | None = None
     secondary_notification_email: str | None = None
     collection_notifications_enabled: bool = True
+    # 'per_payment' or 'daily_summary'. None means leave it as it is, so
+    # a caller that only sends the toggle does not silently move a
+    # merchant back to an email per payment. Ignored entirely when
+    # notifications are off - that stays the toggle's own question.
+    collection_notification_frequency: str | None = None
 
     # SMS. Separate flags from the email ones above and from each other:
     # a merchant who stops wanting announcements must not thereby lose
@@ -44,6 +49,7 @@ class MerchantNotificationSettingsResponse(BaseModel):
     primary_notification_email: str | None = None
     secondary_notification_email: str | None = None
     collection_notifications_enabled: bool
+    collection_notification_frequency: str = "per_payment"
     collection_sms_enabled: bool = False
     announcement_sms_enabled: bool = True
     sms_notification_phone: str | None = None
@@ -107,6 +113,7 @@ class AdminNotificationSettingsListRow(BaseModel):
     merchant_name: str
     merchant_code: str | None = None
     collection_notifications_enabled: bool
+    collection_notification_frequency: str = "per_payment"
     primary_notification_email: str | None = None
     secondary_notification_email: str | None = None
     effective_recipient: str | None = None

@@ -113,7 +113,7 @@ def test_every_created_table_has_rls_enabled(check):
     )
 
 
-def test_the_deny_all_tables_are_the_expected_fourteen(check):
+def test_the_deny_all_tables_are_the_expected_fifteen(check):
     """RLS on with no policy denies every anon and authenticated request.
     That is the intended, stronger state for these - they are reached only
     by the service-role backend, which enforces merchant ownership in
@@ -131,6 +131,11 @@ def test_the_deny_all_tables_are_the_expected_fourteen(check):
         "api_request_logs",
         "checkout_orders",
         "idempotency_keys",
+        # Added 2026-11-01 with the daily collection summary. Deny-all is
+        # right: the sweep claims a day by inserting here, and nothing in
+        # a browser has any business reading or writing which merchants
+        # were emailed what totals.
+        "merchant_daily_notification_summaries",
         "merchant_pay_links",
         "merchant_referrals",
         "merchant_withdrawal_otp_challenges",

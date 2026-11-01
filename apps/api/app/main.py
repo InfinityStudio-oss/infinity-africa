@@ -50,6 +50,7 @@ from app.routers import (
 )
 from app.services.checkout_reconciliation import reconcile_pending_checkout_collections
 from app.services.collection_expiry import expire_stale_pushes
+from app.services.daily_notification_summary import send_daily_collection_summaries
 from app.services.disbursements import reconcile_pending_disbursements
 from app.services.referral_commissions import recalculate_open_referrals
 from app.services.scheduler_lease import acquire_lease, release_lease
@@ -339,6 +340,57 @@ async def _sms_dispatch_loop(interval_seconds: float) -> None:
             capture_exception(exc)
 
 
+async def _daily_summary_loop(interval_seconds: float) -> None:
+    """Sends yesterday's one-email-a-day summary to merchants on it.
+
+    Holds the 'daily_notification_summary' lease for the usual reason —
+    two replicas sweeping together would both try to send — but that is
+    belt and braces here rather than the real guarantee. The real one is
+    the unique (merchant_id, summary_date) row the sweep inserts to claim
+    a day: a lease can be lost, a row cannot be inserted twice.
+
+    Nothing in the sweep can affect a payment. It reads transactions and
+    merchants, writes its own table and the email delivery log, and
+    touches no ledger, collection or disbursement row.
+    """
+    logger.info("daily_summary_loop_running interval_seconds=%s", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            summary_client = get_supabase_admin()
+            if not acquire_lease(summary_client, "daily_notification_summary"):
+                continue
+            try:
+                # Off the event loop: this walks every merchant on the
+                # daily setting and talks to the email provider for each,
+                # which inline could stall the API for a long time.
+                result = await asyncio.to_thread(
+                    send_daily_collection_summaries, summary_client
+                )
+            finally:
+                release_lease(summary_client, "daily_notification_summary")
+            if result["sent"] or result["failed"]:
+                logger.info("scheduled_daily_summary %s", result)
+        except Exception as exc:
+            logger.exception("scheduled_daily_summary_failed")
+            capture_exception(exc)
+
+
+def _start_daily_summary_task() -> asyncio.Task | None:
+    """Off unless an interval is configured.
+
+    Deliberately not on by default: migration 20261101010000 creates the
+    table this sweep claims a day in, and a sweep without it would have
+    no way to tell "already sent" from "not yet", which on an email sent
+    to a merchant's inbox is the failure that matters.
+    """
+    interval = settings.daily_summary_interval_seconds
+    if interval <= 0:
+        logger.info("daily_summary_disabled - set DAILY_SUMMARY_INTERVAL_SECONDS to enable")
+        return None
+    return asyncio.create_task(_daily_summary_loop(interval))
+
+
 def _start_sms_dispatch_task() -> asyncio.Task | None:
     """Two switches, both of which must be on.
 
@@ -427,6 +479,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             _start_webhook_delivery_task(),
             _start_referral_recalculation_task(),
             _start_sms_dispatch_task(),
+            _start_daily_summary_task(),
         )
         if task is not None
     ]

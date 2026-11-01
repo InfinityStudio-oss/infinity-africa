@@ -297,6 +297,10 @@ SECURITY_TESTS = [
     # write policy for anyone to go around the API with - are
     # authorization regressions, not feature tests.
     "tests/test_merchant_notification_settings.py",
+    # The daily summary claims a day by inserting a unique row, so two
+    # replicas cannot email the same merchant the same figures twice.
+    # That is a correctness property worth watching daily.
+    "tests/test_daily_collection_summary.py",
 ]
 
 
