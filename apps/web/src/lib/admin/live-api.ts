@@ -20,6 +20,7 @@ import type {
   AdminNotificationRow,
   AdminTeamMember,
   AdminNotificationSettingsRow,
+  AdminNotificationSettingsListRow,
   AdminOverview,
   AdminPayByLinkListRow,
   AdminPayByLinkRow,
@@ -563,6 +564,25 @@ export async function updateWithdrawalAutomationPolicy(
     version: input.version,
     confirm: input.confirm,
   });
+}
+
+/** One page of merchants with their collection-email state.
+ *
+ * Searched and paged in the DATABASE, not here. This list is
+ * platform-wide and grows with the merchant count, so filtering a single
+ * fetched page in the browser is the mistake the Businesses page already
+ * made — it silently stops at the page boundary and the filters then
+ * search only what happened to arrive.
+ */
+export async function listAdminNotificationSettings(options?: {
+  search?: string;
+  page?: number;
+}): Promise<{ rows: AdminNotificationSettingsListRow[]; totalPages: number }> {
+  const query = new URLSearchParams();
+  query.set("page", String(options?.page ?? 1));
+  query.set("page_size", String(PAGE_SIZE));
+  if (options?.search) query.set("search", options.search);
+  return apiPage<AdminNotificationSettingsListRow>(`/v1/admin/notification-settings?${query.toString()}`);
 }
 
 export async function rejectWithdrawal(disbursementId: string, rejectionReason: string): Promise<void> {

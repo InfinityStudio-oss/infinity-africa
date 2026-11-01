@@ -610,17 +610,15 @@ export async function getMyNotificationSettings(): Promise<NotificationSettings 
   return apiGet<NotificationSettings>("/v1/merchant/notification-settings");
 }
 
-export interface UpdateNotificationSettingsInput {
-  primary_notification_email: string | null;
-  secondary_notification_email: string | null;
-  collection_notifications_enabled: boolean;
-}
-
-export async function updateMyNotificationSettings(
-  input: UpdateNotificationSettingsInput,
-): Promise<NotificationSettings> {
-  return apiWrite<NotificationSettings>("/v1/merchant/notification-settings", "PATCH", input);
-}
+// updateMyNotificationSettings was removed on 2026-11-01. Collection
+// notification settings became an InfinityPay control, and the backend
+// now refuses PATCH /v1/merchant/notification-settings with a 403 — so a
+// client function for it could only ever fail, while sitting in the file
+// looking like a supported call for the next person to wire up.
+//
+// The read above stays: the portal shows a read-only summary, which is
+// what a merchant needs in order to know what to ask support for.
+// Changes go through Super Admin → Notifications → Email.
 
 // --- Team / Users (LIVE) ------------------------------------------------------
 

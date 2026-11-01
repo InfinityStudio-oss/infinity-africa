@@ -113,6 +113,44 @@ class _FakeQuery:
         self._filters.append(("ilike", column, pattern))
         return self
 
+    def or_(self, expression: str):
+        """PostgREST's `or=(a.ilike.%x%,b.ilike.%x%)` — a row matches if
+        ANY branch does.
+
+        Added for the Super Admin notification-settings search, which
+        offers one box matching either the business name or the merchant
+        code. Only the operators that search actually uses are
+        implemented; anything else raises rather than quietly matching
+        nothing, because a filter that silently passes everything is how
+        a test proves the opposite of what it says.
+        """
+        branches = []
+        depth = 0
+        current = ""
+        # Split on top-level commas: a pattern may contain one.
+        for char in expression:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            if char == "," and depth == 0:
+                branches.append(current)
+                current = ""
+            else:
+                current += char
+        if current:
+            branches.append(current)
+
+        parsed = []
+        for branch in branches:
+            column, _, rest = branch.strip().partition(".")
+            op, _, value = rest.partition(".")
+            if op not in ("ilike", "eq"):
+                raise NotImplementedError(f"fake or_() does not implement {op!r}")
+            parsed.append((op, column, value))
+        self._filters.append(("or", None, parsed))
+        return self
+
     def neq(self, column, value):
         self._filters.append(("neq", column, value))
         return self
@@ -253,6 +291,15 @@ class _FakeQuery:
                 return False
             if kind == "neq" and str(self._value_for(row, column)) == str(value):
                 return False
+            if kind == "or":
+                if not any(
+                    self._ilike_matches(self._value_for(row, col), val)
+                    if op == "ilike"
+                    else str(self._value_for(row, col)) == str(val)
+                    for op, col, val in value
+                ):
+                    return False
+                continue
             if kind == "ilike" and not self._ilike_matches(self._value_for(row, column), value):
                 return False
             if kind == "is" and value == "null" and self._value_for(row, column) is not None:

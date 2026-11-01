@@ -81,3 +81,35 @@ class AdminMerchantNotificationSettingsResponse(MerchantNotificationSettingsResp
     last_notification_status: str | None = None
     failed_notification_count: int = 0
     recent_deliveries: list[NotificationDeliveryLogResponse] = []
+
+
+class AdminNotificationSettingsListRow(BaseModel):
+    """One row of Super Admin → Notifications → Email.
+
+    Driven from `merchants`, so every merchant appears whether or not
+    anybody has configured them. `configured` is what tells the two apart,
+    and it matters: a merchant with no row is NOT off — the sending path
+    treats a missing row as enabled, falling back to the account address.
+
+    `effective_recipient` is what an email would actually go to today, so
+    an operator does not have to re-derive the fallback rule in their
+    head. It is null when notifications are off, because then there is no
+    recipient rather than a hidden one.
+
+    `secondary_notification_email` is reported because it is stored and a
+    Super Admin may have set it, but the sending path currently uses the
+    PRIMARY address only — see
+    app/services/email.py::send_merchant_collection_notification_email.
+    Showing it without that caveat would imply a second copy goes out.
+    """
+
+    merchant_id: uuid.UUID
+    merchant_name: str
+    merchant_code: str | None = None
+    collection_notifications_enabled: bool
+    primary_notification_email: str | None = None
+    secondary_notification_email: str | None = None
+    effective_recipient: str | None = None
+    uses_account_email_fallback: bool = False
+    configured: bool = False
+    updated_at: datetime | None = None

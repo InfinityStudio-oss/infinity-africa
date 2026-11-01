@@ -51,6 +51,7 @@ from app.schemas.common import APIResponse
 from app.schemas.ip_allowlist import AdminIpAllowlistResponse
 from app.schemas.merchant_notifications import (
     AdminMerchantNotificationSettingsResponse,
+    AdminNotificationSettingsListRow,
     MerchantNotificationSettingsUpdate,
 )
 from app.schemas.pay_by_link import PayByLinkResponse
@@ -71,7 +72,12 @@ from app.services.api_access import (
 )
 from app.services.audit import write_audit_log
 from app.services.checkout_reconciliation import refresh_checkout_collection_status
-from app.services.crud import execute_maybe_single, get_by_id, update_row
+from app.services.crud import (
+    execute_maybe_single,
+    fetch_in_chunks,
+    get_by_id,
+    update_row,
+)
 from app.services.duplicate_signup import mask_email
 from app.services.email import batch_latest_email_deliveries
 from app.services.ledger import get_wallet_balance
@@ -610,6 +616,94 @@ def get_admin_merchant_webhook_config(
             has_secret=bool(merchant.get("webhook_secret_encrypted")),
             last_delivery=last_webhook_delivery(client, merchant_id),
         )
+    )
+
+
+@router.get(
+    "/notification-settings",
+    response_model=APIResponse[list[AdminNotificationSettingsListRow]],
+)
+def list_admin_notification_settings(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    search: str | None = None,
+):
+    """Every merchant and the state of their collection emails.
+
+    Driven from `merchants`, not from `merchant_notification_settings`: a
+    merchant with no settings row still has an effective configuration
+    (enabled, falling back to their account email), and a screen that
+    only listed configured merchants would hide exactly the ones nobody
+    has looked at.
+
+    Paged and searched in the database. The list is platform-wide and
+    grows with the merchant count, so filtering it in the browser would
+    be the same mistake the Businesses page made — see
+    apps/web/src/lib/admin/live-api.ts on why a single page of 100 is not
+    a list.
+
+    Recipient addresses are personal data. They are returned here because
+    this screen exists to manage them, behind require_super_admin and MFA,
+    and they are not written to application logs.
+    """
+    client = get_supabase_admin()
+
+    query = client.table("merchants").select(
+        "id, business_name, merchant_code, contact_email", count="exact"
+    )
+    if search and search.strip():
+        term = search.strip().replace(",", " ")
+        # Business name or merchant code — the two things an operator has
+        # in front of them when someone calls about notifications.
+        query = query.or_(f"business_name.ilike.%{term}%,merchant_code.ilike.%{term}%")
+
+    result = query.order("business_name").range(pagination.start, pagination.end).execute()
+    merchants = result.data or []
+
+    settings_by_merchant: dict[str, dict] = {}
+    if merchants:
+        # Chunked: a plain .in_() with enough ids outgrows the PostgREST
+        # URL, which fails as a non-JSON response rather than an obvious
+        # error. See app/services/crud.py::fetch_in_chunks.
+        rows = fetch_in_chunks(
+            lambda batch: client.table("merchant_notification_settings")
+            .select(
+                "merchant_id, collection_notifications_enabled, primary_notification_email,"
+                " secondary_notification_email, updated_at"
+            )
+            .in_("merchant_id", batch),
+            [m["id"] for m in merchants],
+        )
+        settings_by_merchant = {str(r["merchant_id"]): r for r in rows}
+
+    data = []
+    for merchant in merchants:
+        row = settings_by_merchant.get(str(merchant["id"]))
+        primary = (row or {}).get("primary_notification_email") or None
+        # No row at all means never configured, which the sending path
+        # treats as enabled — so the list has to say so, or an operator
+        # would read a blank as "off".
+        enabled = True if row is None else bool(row.get("collection_notifications_enabled"))
+        data.append(
+            AdminNotificationSettingsListRow(
+                merchant_id=uuid.UUID(str(merchant["id"])),
+                merchant_name=merchant.get("business_name") or "",
+                merchant_code=merchant.get("merchant_code"),
+                collection_notifications_enabled=enabled,
+                primary_notification_email=primary,
+                secondary_notification_email=(row or {}).get("secondary_notification_email") or None,
+                # What an email would actually be sent to today. Falls back
+                # to the account address when enabled with none set — the
+                # state every merchant starts in.
+                effective_recipient=(primary or merchant.get("contact_email") or None) if enabled else None,
+                uses_account_email_fallback=bool(enabled and not primary),
+                configured=row is not None,
+                updated_at=(row or {}).get("updated_at"),
+            )
+        )
+
+    return APIResponse(
+        data=data, meta=build_page_meta(pagination, result.count or 0)
     )
 
 

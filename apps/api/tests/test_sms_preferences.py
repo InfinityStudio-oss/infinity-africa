@@ -89,10 +89,22 @@ def test_a_merchant_cannot_turn_on_their_own_sms(fake_client):
     assert not rows or not rows[0].get("collection_sms_enabled")
 
 
-def test_a_merchant_can_still_change_their_email_preferences(fake_client):
-    """The refusal must be narrow. Everything a merchant does own on that
-    card keeps working."""
-    merchant, user_id = _merchant(fake_client)
+def test_a_merchant_cannot_change_their_email_preferences_either(fake_client):
+    """This used to assert the opposite, and the assertion was right at
+    the time: when SMS became a Super Admin control on 2026-10-17 the
+    refusal was deliberately narrow, and the email fields on the same
+    card kept working.
+
+    The email fields followed on 2026-11-01, so the whole body is now an
+    InfinityPay control and the endpoint refuses outright. Rewritten
+    rather than deleted, because the thing worth pinning is that the
+    refusal is still explicit — a caller that sent these and got a 200
+    would believe they had taken effect.
+
+    What a merchant may still do is READ, which the portal's read-only
+    summary depends on; see tests/test_merchant_notification_settings.py.
+    """
+    _merchant_id, user_id = _merchant(fake_client)
 
     response = client.patch(
         "/v1/merchant/notification-settings",
@@ -104,8 +116,11 @@ def test_a_merchant_can_still_change_their_email_preferences(fake_client):
         headers=auth_headers(user_id),
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["primary_notification_email"] == "finance@example.com"
+    assert response.status_code == 403
+    assert "managed by InfinityPay" in response.json()["error"]["message"]
+
+    # And reading still works.
+    assert client.get("/v1/merchant/notification-settings", headers=auth_headers(user_id)).status_code == 200
 
 
 

@@ -148,8 +148,6 @@ from app.services.ledger import export_wallet_ledger_rows, list_wallet_ledger
 from app.services.merchant_gate import require_approved_merchant
 from app.services.merchant_notifications import (
     get_or_create_notification_settings,
-    upsert_notification_settings,
-    validate_notification_emails,
 )
 from app.services.merchant_overview import get_merchant_overview
 from app.services.payment_links import (
@@ -2343,58 +2341,47 @@ def get_my_notification_settings(
 
 @router.patch("/notification-settings", response_model=APIResponse[MerchantNotificationSettingsResponse])
 def update_my_notification_settings(
-    payload: MerchantNotificationSettingsUpdate,
+    _payload: MerchantNotificationSettingsUpdate,
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
 ):
-    client = get_supabase_admin()
-    emails = validate_notification_emails(
-        [payload.primary_notification_email, payload.secondary_notification_email],
-        enabled=payload.collection_notifications_enabled,
-    )
-    # SMS is a Super Admin control, not a merchant one (policy,
-    # 2026-10-17): every message costs money from a shared provider
-    # account, so who receives one and at which number is decided by
-    # InfinityPay. Refused rather than ignored - a caller who sent a
-    # field and got a 200 would reasonably believe it took effect.
-    #
-    # Checked here rather than only in the UI, because the UI is not a
-    # permission. The same fields on the Super Admin route
-    # (app/routers/admin.py) are unchanged and still work.
-    if (
-        payload.collection_sms_enabled is not None
-        or payload.announcement_sms_enabled is not None
-        or payload.sms_notification_phone is not None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "SMS notification settings are managed by InfinityPay. "
-                "Contact support to change them."
-            ),
-        )
+    """Refused. Every field on this body is now an InfinityPay control.
 
-    row = upsert_notification_settings(
-        client,
+    SMS went this way on 2026-10-17 because each message costs money from
+    a shared provider account. The collection *email* settings followed on
+    2026-11-01, for a different reason: who is told about a merchant's
+    money, and at which address, is a support decision rather than a
+    self-service toggle - a merchant who switches their own notifications
+    off and forgets then reports that payments have stopped arriving.
+
+    **Refused outright rather than silently ignored.** A caller that sent
+    these fields and got a 200 would reasonably believe they took effect,
+    and would have no way to discover otherwise. Nothing is partially
+    applied: this raises before any write, so a body mixing protected
+    fields with anything else changes nothing at all.
+
+    GET is unchanged - a merchant can still see what is configured for
+    them, which is what the read-only summary in the portal shows. The
+    same fields on the Super Admin route (app/routers/admin.py) are
+    untouched and still work.
+
+    The database agrees independently: merchant_notification_settings has
+    SELECT policies for merchant members and Super Admins and **no**
+    insert/update/delete policy at all, so a merchant JWT going straight
+    to PostgREST cannot write these either. This endpoint is the polite
+    refusal; that is the one that actually holds.
+    """
+    logger.info(
+        "merchant_notification_settings_update_refused merchant_id=%s user_id=%s",
         membership.merchant_id,
-        primary_notification_email=emails[0] if len(emails) > 0 else None,
-        secondary_notification_email=emails[1] if len(emails) > 1 else None,
-        collection_notifications_enabled=payload.collection_notifications_enabled,
-        updated_by=membership.user_id,
+        membership.user_id,
     )
-    write_audit_log(
-        client,
-        actor_id=membership.user_id,
-        actor_type="user",
-        merchant_id=membership.merchant_id,
-        action="notification_settings.updated",
-        resource_type="merchant_notification_settings",
-        resource_id=uuid.UUID(row["id"]),
-        metadata={
-            "collection_notifications_enabled": payload.collection_notifications_enabled,
-            "notification_email_count": len(emails),
-        },
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "Notification settings are managed by InfinityPay. "
+            "Contact support to request a change."
+        ),
     )
-    return APIResponse(data=MerchantNotificationSettingsResponse(**row))
 
 
 # --- Team / Users -------------------------------------------------------------

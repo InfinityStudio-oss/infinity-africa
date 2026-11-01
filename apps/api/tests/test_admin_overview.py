@@ -137,19 +137,39 @@ def _credit(fake_client, account, amount, created_at):
     )
 
 
-def test_revenue_today_is_separate_from_the_month(fake_client):
+def _freeze_clock(monkeypatch, moment):
+    """Pin what the overview service thinks "now" is.
+
+    Anything comparing a day window against a month window needs a date
+    where the two differ. On the 1st they do not, and a test that derives
+    its fixtures from the real clock quietly stops testing anything that
+    day — which is how a real failure hid until 2026-11-01.
+    """
+    import app.services.admin_overview as overview_module
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return moment
+
+    monkeypatch.setattr(overview_module, "datetime", _Frozen)
+
+
+def test_revenue_today_is_separate_from_the_month(fake_client, monkeypatch):
     """The daily figure the Super Admin asked for: what the platform has
     earned since midnight, beside the month-to-date one."""
     admin_id = uuid.uuid4()
     make_super_admin(fake_client, admin_id)
     account = _seed_revenue_account(fake_client)
 
-    now = datetime.now(timezone.utc)
-    eat_now = now.astimezone(timezone(timedelta(hours=3)))
-    # Earlier in the same Tanzanian month, but not today.
-    earlier_this_month = (eat_now.replace(day=1, hour=12) ).astimezone(timezone.utc)
-    if earlier_this_month >= now:
-        earlier_this_month = now - timedelta(days=1)
+    # The clock is frozen mid-month, because "earlier this month but not
+    # today" does not exist on the 1st — and this test used to pick day 1
+    # at noon for it, so on the 1st of any month both credits landed in
+    # today and the figures merged. It passed every day except the one
+    # that mattered. Found on 2026-11-01.
+    _freeze_clock(monkeypatch, datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc))
+    now = datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc)
+    earlier_this_month = datetime(2026, 11, 5, 9, 0, tzinfo=timezone.utc)
     _credit(fake_client, account, "700", earlier_this_month.isoformat())
     _credit(fake_client, account, "250", now.isoformat())
 

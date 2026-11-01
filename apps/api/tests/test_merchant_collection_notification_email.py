@@ -95,18 +95,35 @@ def _merchant_and_admin(fake_client, **overrides) -> tuple[uuid.UUID, uuid.UUID]
 
 
 def _configure_notifications(
-    admin_id: uuid.UUID, *, primary: str | None, secondary: str | None = None, enabled: bool = True
+    fake_client,
+    merchant_id: uuid.UUID,
+    *,
+    primary: str | None,
+    secondary: str | None = None,
+    enabled: bool = True,
 ) -> None:
-    response = client.patch(
-        "/v1/merchant/notification-settings",
-        headers=auth_headers(admin_id),
-        json={
+    """Write the settings row directly.
+
+    These used to go through PATCH /v1/merchant/notification-settings,
+    which a merchant may no longer use — collection notification settings
+    became a Super Admin control on 2026-11-01. What this file tests is
+    the SENDING path: whether a configured preference is honoured when a
+    collection succeeds. Who is allowed to configure it is a different
+    question, answered in tests/test_merchant_notification_settings.py.
+
+    Seeding rather than calling the Super Admin route keeps this setup
+    independent of that endpoint's own authorization, so a change there
+    cannot quietly turn these into tests of something else.
+    """
+    fake_client.seed(
+        "merchant_notification_settings",
+        {
+            "merchant_id": str(merchant_id),
             "primary_notification_email": primary,
             "secondary_notification_email": secondary,
             "collection_notifications_enabled": enabled,
         },
     )
-    assert response.status_code == 200, response.text
 
 
 def _post_selcom_webhook(*, event_type: str, provider_reference: str, failure_reason: str | None = None):
@@ -166,7 +183,7 @@ def _collect(slug: str, **body) -> dict:
 
 def test_notification_sent_to_primary_configured_email_for_request_collection(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client, business_name="Masanja Traders")
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -180,7 +197,7 @@ def test_only_the_primary_address_is_notified(fake_client, fake_resend):
     the portal. A value left in that column must not keep receiving mail
     the merchant can no longer see or delete."""
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com", secondary="finance@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -190,7 +207,7 @@ def test_only_the_primary_address_is_notified(fake_client, fake_resend):
 
 def test_exactly_one_notification_email_is_sent(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com", secondary="finance@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -215,7 +232,7 @@ def test_an_unconfigured_merchant_is_notified_at_their_account_email(fake_client
 def test_a_configured_address_is_used_instead_of_the_account_email(fake_client, fake_resend):
     """The fallback must not also fire once a real address exists."""
     merchant_id, admin_id = _merchant_and_admin(fake_client, contact_email="owner@shop.co.tz")
-    _configure_notifications(admin_id, primary="finance@shop.co.tz")
+    _configure_notifications(fake_client, merchant_id, primary="finance@shop.co.tz")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -236,7 +253,7 @@ def test_no_notification_when_there_is_no_address_to_fall_back_to(fake_client, f
 
 def test_no_notification_email_sent_when_notifications_disabled(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com", enabled=False)
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com", enabled=False)
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -245,7 +262,7 @@ def test_no_notification_email_sent_when_notifications_disabled(fake_client, fak
 
 def test_no_notification_email_for_a_failed_collection(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
 
     initiate = client.post(
         "/v1/collections/stk-push",
@@ -264,7 +281,7 @@ def test_no_notification_email_for_a_failed_collection(fake_client, fake_resend)
 
 def test_delivery_log_created_for_the_recipient(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com", secondary="finance@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com", secondary="finance@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -280,7 +297,7 @@ def test_delivery_log_created_for_the_recipient(fake_client, fake_resend):
 
 def test_notification_email_failure_does_not_block_wallet_credit(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
     fake_resend.should_fail = True
 
     _stk_push_and_resolve(admin_id, merchant_id)
@@ -396,7 +413,7 @@ def test_notification_email_includes_amounts_method_and_reference(fake_client, f
 
 def test_notification_email_uses_required_sender_and_reply_to(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
 
     _stk_push_and_resolve(admin_id, merchant_id)
 
@@ -410,7 +427,7 @@ def test_notification_email_uses_required_sender_and_reply_to(fake_client, fake_
 
 def test_notification_email_sends_for_payment_link(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
     link = _create_link(merchant_id, admin_id)
 
     _collect(link["public_slug"])
@@ -423,7 +440,7 @@ def test_notification_email_sends_for_payment_link(fake_client, fake_resend):
 
 def test_notification_email_sends_for_invoice_collection(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
 
     invoice_response = client.post(
         "/v1/invoices",
@@ -456,8 +473,8 @@ def test_notification_email_sends_for_invoice_collection(fake_client, fake_resen
 
 
 def test_notification_email_sends_for_pay_by_link(fake_client, fake_resend):
-    _merchant_id, admin_id = _merchant_and_admin(fake_client, business_name="Paul Masanja")
-    _configure_notifications(admin_id, primary="owner@example.com")
+    merchant_id, admin_id = _merchant_and_admin(fake_client, business_name="Paul Masanja")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
 
     create_response = client.post("/v1/merchant/pay-by-link", headers=auth_headers(admin_id), json={})
     assert create_response.status_code == 201, create_response.text
@@ -488,7 +505,7 @@ def test_notification_email_sends_for_pay_by_link(fake_client, fake_resend):
 
 def test_notification_email_sends_for_api_collection(fake_client, fake_resend):
     merchant_id, admin_id = _merchant_and_admin(fake_client)
-    _configure_notifications(admin_id, primary="owner@example.com")
+    _configure_notifications(fake_client, merchant_id, primary="owner@example.com")
     raw_key, _ = make_api_key(fake_client, merchant_id)
 
     _stk_push_and_resolve(admin_id, merchant_id, headers={"X-API-Key": raw_key})

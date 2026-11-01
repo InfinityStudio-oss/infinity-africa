@@ -1,54 +1,16 @@
-import { Card } from "@/components/portal/card";
-import { PageHeader } from "@/components/portal/page-header";
-import { SmsWorkspace } from "@/components/super-admin/sms-workspace";
-import {
-  getAdminSmsOverview,
-  getAdminSmsSettings,
-  listAdminMerchants,
-  listAdminSmsCampaigns,
-  listAdminSmsMessages,
-} from "@/lib/admin/live-api";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata = {
-  title: "SMS | InfinityPay Super Admin",
-};
-
-export default async function SuperAdminSmsPage() {
-  const [overview, settings, campaigns, messages, merchants] = await Promise.all([
-    getAdminSmsOverview(),
-    getAdminSmsSettings(),
-    listAdminSmsCampaigns(),
-    listAdminSmsMessages(),
-    listAdminMerchants(),
-  ]);
-
-  return (
-    <div className="space-y-8">
-      <PageHeader
-        title="SMS"
-        description="Transactional payment alerts to merchants, and announcements. Recipients are merchants only — a paying customer is never sent an SMS from here."
-      />
-
-      {overview === null ? (
-        <Card>
-          <p className="text-sm text-on-surface-variant">
-            The SMS service could not be reached. Nothing has been sent and nothing is lost — queued
-            messages stay queued.
-          </p>
-        </Card>
-      ) : (
-        <SmsWorkspace
-          overview={overview}
-          settings={settings}
-          campaigns={campaigns}
-          messages={messages}
-          merchants={merchants.map((m) => ({
-            merchant_id: m.merchant_id,
-            business_name: m.business_name,
-            merchant_code: m.merchant_code,
-          }))}
-        />
-      )}
-    </div>
-  );
+/**
+ * The SMS workspace moved under Notifications on 2026-11-01, when email
+ * notification settings became a Super Admin control and two sibling
+ * top-level entries for the same job stopped making sense.
+ *
+ * This route stays because the old one is in browser histories, in
+ * bookmarks and in links people have sent each other, and breaking those
+ * buys nothing. A permanent redirect rather than a page, so the address
+ * bar ends up on the real URL instead of leaving two live paths for the
+ * same screen.
+ */
+export default function SuperAdminSmsRedirect() {
+  permanentRedirect("/super-admin/notifications/sms");
 }

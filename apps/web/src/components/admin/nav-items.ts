@@ -2,6 +2,11 @@ export interface AdminNavItem {
   label: string;
   href: string;
   icon: string;
+  /** Nested entries, rendered indented under the parent. The parent is
+   * still a link — there is no "group header that goes nowhere" here, so
+   * clicking Notifications lands somewhere useful rather than doing
+   * nothing, and the children are shortcuts to the two tabs. */
+  children?: AdminNavItem[];
 }
 
 // The following once linked here but were removed 2026-08-25: Customers,
@@ -56,7 +61,23 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Referrals", href: "/super-admin/referrals", icon: "group_add" },
   { label: "API Keys", href: "/super-admin/api-keys", icon: "api" },
   { label: "Webhooks & Reconciliation", href: "/super-admin/webhooks", icon: "webhook" },
-  { label: "SMS", href: "/super-admin/sms", icon: "sms" },
+  {
+    // Was a standalone "SMS" entry until 2026-11-01. Email notification
+    // settings became a Super Admin control at the same time, and two
+    // sibling top-level entries for the same job read as two unrelated
+    // features — so both now live under one parent, each as a tab.
+    //
+    // /super-admin/sms still works and redirects, because it is in
+    // browser histories and bookmarks and nothing is gained by breaking
+    // them.
+    label: "Notifications",
+    href: "/super-admin/notifications",
+    icon: "notifications",
+    children: [
+      { label: "SMS", href: "/super-admin/notifications/sms", icon: "sms" },
+      { label: "Email", href: "/super-admin/notifications/email", icon: "mail" },
+    ],
+  },
   { label: "Audit Logs", href: "/super-admin/audit-logs", icon: "history" },
   { label: "Settings", href: "/admin/settings", icon: "settings" },
 ];

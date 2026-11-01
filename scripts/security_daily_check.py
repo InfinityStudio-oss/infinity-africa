@@ -290,6 +290,13 @@ SECURITY_TESTS = [
     # and on 2026-10-31 this file was not in the daily selection, so the
     # guard caught a third only when the whole suite was run by hand.
     "tests/test_sms_lifecycle.py",
+    # Who may change a merchant's collection notification settings.
+    # These became an InfinityPay control on 2026-11-01, so the tests
+    # that a merchant JWT, a merchant API key and an unauthenticated
+    # caller are all refused - and that the settings table still has no
+    # write policy for anyone to go around the API with - are
+    # authorization regressions, not feature tests.
+    "tests/test_merchant_notification_settings.py",
 ]
 
 

@@ -301,6 +301,30 @@ export const EMPTY_POLICY_STATE: PolicyActionState = {
   policy: null,
 };
 
+/** One row of Super Admin -> Notifications -> Email.
+ *
+ * `configured` is the field that matters most and the one easiest to
+ * misread: a merchant with no settings row is NOT off. The sending path
+ * treats a missing row as enabled and falls back to the account email,
+ * so a blank here means "nobody has looked at this merchant", not "they
+ * receive nothing".
+ *
+ * `effective_recipient` is what an email would actually go to today, so
+ * nobody has to re-derive the fallback rule by hand. Null when
+ * notifications are off, because then there is no recipient. */
+export interface AdminNotificationSettingsListRow {
+  merchant_id: string;
+  merchant_name: string;
+  merchant_code: string | null;
+  collection_notifications_enabled: boolean;
+  primary_notification_email: string | null;
+  secondary_notification_email: string | null;
+  effective_recipient: string | null;
+  uses_account_email_fallback: boolean;
+  configured: boolean;
+  updated_at: string | null;
+}
+
 export interface PricingRuleRow {
   id: string;
   merchant_id: string | null;

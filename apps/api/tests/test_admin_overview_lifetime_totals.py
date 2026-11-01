@@ -108,15 +108,33 @@ def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+# Mid-month, and fixed. These fixtures need a day window and a month
+# window that actually differ, and on the 1st they do not: the month
+# starts today, so a row seeded "earlier this month" lands inside today
+# and the two figures merge. Deriving them from the real clock meant
+# three of these tests quietly stopped testing anything on the 1st of
+# every month — which is exactly when they failed, on 2026-11-01.
+FROZEN_NOW = datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc)
+
+
 @pytest.fixture
-def seeded(fake_client):
-    """A platform with history: one payment years back, one last month,
-    one today. Every figure below is checkable by hand."""
+def seeded(fake_client, monkeypatch):
+    """A platform with history: one payment years back, one earlier this
+    month, one today. Every figure below is checkable by hand."""
     merchant = create_merchant(fake_client)
     merchant_id = uuid.UUID(merchant["id"])
     account_id = _revenue_account(fake_client)
 
-    now = datetime.now(timezone.utc)
+    import app.services.admin_overview as overview_module
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN_NOW
+
+    monkeypatch.setattr(overview_module, "datetime", _Frozen)
+
+    now = FROZEN_NOW
     today = _iso(datetime.fromisoformat(dar_es_salaam_day_start_utc(now).replace("Z", "+00:00")) + timedelta(hours=1))
     this_month = _iso(
         datetime.fromisoformat(dar_es_salaam_month_start_utc(now).replace("Z", "+00:00")) + timedelta(hours=1)
