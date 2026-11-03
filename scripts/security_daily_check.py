@@ -301,6 +301,12 @@ SECURITY_TESTS = [
     # replicas cannot email the same merchant the same figures twice.
     # That is a correctness property worth watching daily.
     "tests/test_daily_collection_summary.py",
+    # Holds the line that the two money-moving Selcom calls are never
+    # retried. A retry added to process_wallet_payment would charge a
+    # customer twice on an ambiguous gateway error, and nothing about
+    # the call site would look wrong - the guard counting the opt-ins is
+    # what makes that a failing test rather than a support ticket.
+    "tests/test_selcom_checkout_gateway_retry.py",
 ]
 
 

@@ -40,6 +40,7 @@ shown) — confirm these with Selcom support before assuming they exist
 under these or similar paths.
 """
 
+import asyncio
 import logging
 import time
 
@@ -69,6 +70,27 @@ from app.services.selcom_checkout.schemas import (
 from app.services.selcom_checkout.signer import build_auth_headers
 
 logger = logging.getLogger("infinity.selcom_checkout")
+
+# Gateway statuses worth one more try. These say the request died at
+# Selcom's edge rather than being processed and refused: 502/503/504 are
+# produced by the proxy in front of their application, so a retry a
+# moment later usually lands on a healthy instance.
+#
+# 500 is deliberately NOT here. A 500 means Selcom's application was
+# reached and threw, so the work may well have been done; retrying that
+# is a guess about someone else's internals. A 4xx is not here either —
+# resending a request Selcom has already rejected on its merits just
+# fails twice.
+_RETRYABLE_GATEWAY_STATUSES = frozenset({502, 503, 504})
+
+# One extra attempt, after a short pause. A customer is waiting on the
+# other end of this call, so the pause is tuned to be shorter than they
+# would notice while still giving the far side time to shed a failing
+# instance. Two attempts, not five: observed 502s come in bursts of
+# seconds, and piling on retries while a provider is struggling is how a
+# wobble becomes an outage.
+_GATEWAY_RETRY_ATTEMPTS = 2
+_GATEWAY_RETRY_BACKOFF_SECONDS = 0.5
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -127,6 +149,7 @@ class SelcomCheckoutHTTPClient:
         *,
         signed_fields: dict[str, str] | None = None,
         timestamp: str | None = None,
+        retry_on_gateway_error: bool = False,
     ) -> dict:
         """`fields` is the JSON body, sent verbatim (POST-shaped calls
         only; a GET/query-parameter endpoint needs its own handling once
@@ -149,7 +172,16 @@ class SelcomCheckoutHTTPClient:
         scripts/test_selcom_checkout_create_order_minimal.py can test the
         docs' alternative "yyyy-dd-mm H:i:s" format against a real
         sandbox without touching this production default. Never set this
-        from application code."""
+        from application code.
+
+        `retry_on_gateway_error` re-sends the request once if Selcom's
+        edge answers 502/503/504. **It defaults to False and must stay
+        that way**: this method is the single choke point for every
+        endpoint, including process_wallet_payment, which pulls money
+        from a customer's wallet. Retrying that on an ambiguous failure
+        is how a customer gets charged twice. Only a caller that can
+        prove its request is safe to repeat may pass True, and each one
+        says why at its call site."""
         credentials = self._credentials
         headers = build_auth_headers(
             signed_fields if signed_fields is not None else fields,
@@ -163,38 +195,64 @@ class SelcomCheckoutHTTPClient:
             headers["Vendor"] = credentials.vendor
 
         url = _join_url(credentials.base_url, path)
-        started = time.monotonic()
-        try:
-            # The highest-volume path to Selcom: every checkout order and
-            # every reconciliation poll. Throttled so a billing cycle
-            # cannot look like abuse from our IP.
-            async with selcom_outbound(), httpx.AsyncClient(timeout=credentials.timeout_seconds) as http:
-                if method == "GET":
-                    # GET /v1/checkout/order-status?order_id=... — the
-                    # field(s) still get signed exactly like a POST body
-                    # (same Signed-Fields/signing-string convention), they
-                    # just travel as query params instead of a JSON body.
-                    response = await http.request(method, url, params=fields, headers=headers)
-                else:
-                    response = await http.request(method, url, json=fields, headers=headers)
-        except SelcomCircuitOpenError as exc:
-            # Breaker open: no request was made. Raised as the same error
-            # a transport failure produces, so existing handling applies.
-            raise SelcomCheckoutError(str(exc)) from exc
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as exc:
-            latency_ms = int((time.monotonic() - started) * 1000)
-            logger.warning(
-                "selcom_checkout_request_failed path=%s latency_ms=%d error=%s",
-                path,
-                latency_ms,
-                type(exc).__name__,
-            )
-            raise SelcomCheckoutError(f"Could not reach Selcom Checkout ({type(exc).__name__})") from exc
+        attempts = _GATEWAY_RETRY_ATTEMPTS if retry_on_gateway_error else 1
 
-        latency_ms = int((time.monotonic() - started) * 1000)
-        logger.info(
-            "selcom_checkout_request path=%s status=%d latency_ms=%d", path, response.status_code, latency_ms
-        )
+        for attempt in range(1, attempts + 1):
+            started = time.monotonic()
+            try:
+                # The highest-volume path to Selcom: every checkout order and
+                # every reconciliation poll. Throttled so a billing cycle
+                # cannot look like abuse from our IP.
+                #
+                # The guard is entered per attempt, not around the loop, so a
+                # retry waits for its own rate slot instead of jumping the
+                # queue — a provider having a bad minute must not be sent
+                # double traffic.
+                async with selcom_outbound(), httpx.AsyncClient(timeout=credentials.timeout_seconds) as http:
+                    if method == "GET":
+                        # GET /v1/checkout/order-status?order_id=... — the
+                        # field(s) still get signed exactly like a POST body
+                        # (same Signed-Fields/signing-string convention), they
+                        # just travel as query params instead of a JSON body.
+                        response = await http.request(method, url, params=fields, headers=headers)
+                    else:
+                        response = await http.request(method, url, json=fields, headers=headers)
+            except SelcomCircuitOpenError as exc:
+                # Breaker open: no request was made. Raised as the same error
+                # a transport failure produces, so existing handling applies.
+                # Never retried — the breaker is open precisely to stop us
+                # calling, so trying again is the one thing not to do.
+                raise SelcomCheckoutError(str(exc)) from exc
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError) as exc:
+                latency_ms = int((time.monotonic() - started) * 1000)
+                logger.warning(
+                    "selcom_checkout_request_failed path=%s latency_ms=%d error=%s",
+                    path,
+                    latency_ms,
+                    type(exc).__name__,
+                )
+                raise SelcomCheckoutError(f"Could not reach Selcom Checkout ({type(exc).__name__})") from exc
+
+            latency_ms = int((time.monotonic() - started) * 1000)
+            logger.info(
+                "selcom_checkout_request path=%s status=%d latency_ms=%d attempt=%d",
+                path,
+                response.status_code,
+                latency_ms,
+                attempt,
+            )
+
+            if response.status_code in _RETRYABLE_GATEWAY_STATUSES and attempt < attempts:
+                logger.warning(
+                    "selcom_checkout_gateway_retry path=%s status=%d attempt=%d",
+                    path,
+                    response.status_code,
+                    attempt,
+                )
+                await asyncio.sleep(_GATEWAY_RETRY_BACKOFF_SECONDS)
+                continue
+            break
+
         return decode_json_response(status_code=response.status_code, body=response.content, path=path)
 
     async def create_order_minimal(
@@ -352,6 +410,15 @@ class SelcomCheckoutHTTPClient:
             fields,
             signed_fields=signed_fields,
             timestamp=timestamp,
+            # Safe to repeat: this creates an order shell and moves no
+            # money (the pull is process_wallet_payment, Step 2). The
+            # retry reuses the same order_id, so the worst case is that
+            # the first attempt did reach Selcom and the second is
+            # refused as a duplicate — an error, never a second order and
+            # never a second charge. Against that: a 502 here fails the
+            # customer's payment before it has begun, which is what was
+            # happening a few times a day.
+            retry_on_gateway_error=True,
         )
         return parse_create_order_minimal_response(response)
 
@@ -436,5 +503,13 @@ class SelcomCheckoutHTTPClient:
         applies the result, and only when payment_status/result/
         resultcode together satisfy the completion rule."""
         fields: dict[str, str] = {"order_id": order_id}
-        response = await self._signed_request("GET", "/v1/checkout/order-status", fields)
+        response = await self._signed_request(
+            "GET",
+            "/v1/checkout/order-status",
+            fields,
+            # Safe to repeat: a read. It changes nothing on Selcom's side
+            # and nothing here — checkout_reconciliation.py decides what
+            # to do with the answer.
+            retry_on_gateway_error=True,
+        )
         return parse_order_status_response(response)
