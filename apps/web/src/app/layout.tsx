@@ -17,17 +17,19 @@ const SITE_DESCRIPTION =
 const OG_DESCRIPTION =
   "Tanzanian payment gateway for merchants, ecommerce, apps and WiFi/ISP billing. Mobile money collections, payment links, invoices, wallet ledger and developer APIs.";
 
-// Versioned filename (v2 — the v1 image was edited in place when the logo
-// changed from the infinity glyph to the hexagon mark, and link-preview
-// caches are keyed by URL, so reusing the name would have kept serving the
-// old glyph. v1 under the InfinityPay brand superseded the old
-// infinity-africa-og-v2.png, itself the successor to the original
-// infinity-logo-v2.png glossy stock-art mark, never actually used anywhere
-// in the live app; see apps/web/scripts/generate-og-image.mjs) so
-// Discord/WhatsApp/X's own link-preview caches, keyed by URL, pick up the
-// new image on next crawl rather than continuing to serve an old cached
-// copy of the same filename indefinitely.
-const OG_IMAGE_URL = "https://infinitypay.me/og/infinitypay-og-v2.png";
+// NO og:image / twitter:image on purpose. Link previews deliberately
+// carry no card image: WhatsApp, Discord, X and Slack all render the title
+// and description on their own, and the generated card was showing the
+// tagline a second time directly above the copy that already said it.
+// Without an image key Next emits no og:image at all, which is what makes
+// these surfaces fall back to their compact text-only preview.
+//
+// Re-enabling means adding `images` back to BOTH blocks below AND bumping
+// to a filename nothing has served before (v3, not v2 — v2 is still in
+// public/og/). Preview caches are keyed by image URL, so reusing a retired
+// name serves whatever those crawlers cached against it, which for v2 is
+// the card this change removed.
+// The card generator is apps/web/scripts/generate-og-image.mjs.
 
 export const metadata: Metadata = {
   title: {
@@ -52,7 +54,6 @@ export const metadata: Metadata = {
     description: OG_DESCRIPTION,
     url: "https://infinitypay.me/",
     siteName: "InfinityPay",
-    images: [{ url: OG_IMAGE_URL, width: 1200, height: 630, alt: "InfinityPay Tanzania" }],
     locale: "en_US",
     type: "website",
   },
@@ -65,10 +66,11 @@ export const metadata: Metadata = {
     ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
     : undefined,
   twitter: {
-    card: "summary_large_image",
+    // "summary", not "summary_large_image": the large-image card reserves a
+    // 1200x630 frame and renders it empty when no image is supplied.
+    card: "summary",
     title: "InfinityPay Tanzania",
     description: "Tanzanian payment gateway for merchants, ecommerce, apps and WiFi/ISP billing.",
-    images: [OG_IMAGE_URL],
   },
 };
 

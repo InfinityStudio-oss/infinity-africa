@@ -270,8 +270,31 @@ describe("next.config.ts monitoring origins in the CSP", () => {
 describe("root layout.tsx metadata", () => {
   const layoutSource = source("layout.tsx");
 
-  it("uses the versioned v1 Open Graph/Twitter image at the recommended absolute URL", () => {
-    expect(layoutSource).toContain("https://infinitypay.me/og/infinitypay-og-v2.png");
+  it("declares no Open Graph or Twitter card image", () => {
+    // Shared links are meant to render as a compact text-only preview.
+    // Next emits og:image only when an `images` key is present, so the
+    // absence of that key in BOTH blocks is the whole mechanism.
+    expect(layoutSource).not.toMatch(/openGraph\s*:\s*\{[^}]*images\s*:/);
+    expect(layoutSource).not.toMatch(/twitter\s*:\s*\{[^}]*images\s*:/);
+  });
+
+  it("references no social card file at all", () => {
+    // The retired card stays in public/og/ so links already cached against
+    // it keep resolving, but nothing may point at one again: preview caches
+    // are keyed by image URL, so reusing a retired name serves whatever
+    // those crawlers cached against it.
+    for (const line of layoutSource.split("\n")) {
+      if (line.includes("infinitypay-og-")) {
+        expect(line.trim().startsWith("//") || line.trim().startsWith("*")).toBe(true);
+      }
+    }
+  });
+
+  it("uses the summary Twitter card, not the large-image one", () => {
+    // summary_large_image reserves a 1200x630 frame and renders it empty
+    // when no image is supplied.
+    expect(layoutSource).toMatch(/card\s*:\s*"summary"/);
+    expect(layoutSource).not.toMatch(/card\s*:\s*"summary_large_image"/);
   });
 
   it("never references the old logo file in social metadata", () => {
@@ -286,9 +309,10 @@ describe("root layout.tsx metadata", () => {
     }
   });
 
-  it("sets a summary_large_image Twitter card", () => {
-    expect(layoutSource).toMatch(/card:\s*"summary_large_image"/);
-  });
+  // The card type is asserted by "uses the summary Twitter card, not the
+  // large-image one" above. It used to be pinned to summary_large_image
+  // here; that became wrong when the card image was retired, because the
+  // large-image variant renders an empty 1200x630 frame with no image.
 
   it("declares metadataBase as the official domain", () => {
     expect(layoutSource).toMatch(/metadataBase:\s*new URL\("https:\/\/infinitypay\.me"\)/);

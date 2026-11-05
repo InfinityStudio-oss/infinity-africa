@@ -25,7 +25,9 @@ const ORGANIZATION = {
     "@type": "ImageObject",
     url: "https://infinitypay.me/brand/infinity-mark.png",
   },
-  image: "https://infinitypay.me/og/infinitypay-og-v2.png",
+  // No `image` here. It pointed at the social card, which has been retired
+  // — see the comment above `openGraph` in app/layout.tsx. `logo` above is
+  // the brand mark and is the field Google reads for an Organization.
   description:
     "Tanzanian payment gateway platform for merchants, ecommerce websites, apps, and WiFi/ISP billing systems.",
   areaServed: {
