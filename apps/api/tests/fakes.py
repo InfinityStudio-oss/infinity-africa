@@ -399,6 +399,19 @@ class _FakeTable:
         now = datetime.now(timezone.utc).isoformat()
         row.setdefault("created_at", now)
         row.setdefault("updated_at", now)
+        if self.name == "webhook_events":
+            # collection_id is GENERATED ALWAYS AS ((payload->>'collection_id')
+            # ::uuid) STORED. Postgres computes it on write and refuses an
+            # explicit value; without that here, a lookup filtering on the
+            # column would find nothing in tests and everything in
+            # production - or the reverse, which is how this gap bites.
+            if "collection_id" in row:
+                raise Exception(  # noqa: TRY002
+                    "cannot insert a non-DEFAULT value into column "
+                    '"collection_id" - column is a generated column'
+                )
+            raw = (row.get("payload") or {}).get("collection_id")
+            row["collection_id"] = str(raw) if raw else None
         if self.name == "sms_messages":
             # Two real constraints from
             # 20261017090000_merchant_sms_notifications.sql. Without them

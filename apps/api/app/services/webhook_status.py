@@ -15,10 +15,17 @@ be activated by hand after they complained.
 So the delivery outcome is read back alongside the payment, and the
 merchant is told plainly: succeeded, but your endpoint returned 500.
 
-webhook_events has no collection_id column - the link lives inside the
-delivered payload, which carries `collection_id`. PostgREST can filter on
-it directly (`payload->>collection_id`), so this stays one batched query
-for a whole page rather than a lookup per row.
+The link to the payment lives inside the delivered payload. PostgREST can
+filter on that JSON directly, and this originally did - but no index can
+serve `payload->>'collection_id'`, so every lookup scanned the whole of
+webhook_events. At ~69,000 rows growing by ~4,700 a day, a cold run took
+over five seconds and the statement timeout began cancelling it, which
+the Super Admin Collections page rendered as "no collections recorded".
+
+So collection_id is now a stored generated column over that same JSON,
+with its own index. Same one batched query for a whole page rather than a
+lookup per row, but an index lookup instead of a scan - and the payload
+blob no longer has to come back over the wire at all.
 """
 
 from __future__ import annotations
@@ -62,9 +69,9 @@ def batch_collection_webhook_status(
 
     rows = fetch_in_chunks(
         lambda batch: client.table("webhook_events")
-        .select("payload, event_name, status, response_status_code, attempts, created_at")
+        .select("collection_id, event_name, status, response_status_code, attempts, created_at")
         .eq("merchant_id", str(merchant_id))
-        .in_("payload->>collection_id", batch),
+        .in_("collection_id", batch),
         ids,
     )
 
@@ -94,8 +101,8 @@ def admin_batch_collection_webhook_status(
 
     rows = fetch_in_chunks(
         lambda batch: client.table("webhook_events")
-        .select("payload, event_name, status, response_status_code, attempts, created_at")
-        .in_("payload->>collection_id", batch),
+        .select("collection_id, event_name, status, response_status_code, attempts, created_at")
+        .in_("collection_id", batch),
         ids,
     )
     return _latest_by_collection(rows)
@@ -104,8 +111,9 @@ def admin_batch_collection_webhook_status(
 def _latest_by_collection(rows: list[dict]) -> dict[str, dict]:
     latest: dict[str, dict] = {}
     for row in rows:
-        payload = row.get("payload") or {}
-        collection_id = str(payload.get("collection_id") or "")
+        # collection_id is a stored generated column off payload->>'collection_id';
+        # reading it directly keeps the whole payload blob off the wire.
+        collection_id = str(row.get("collection_id") or "")
         if not collection_id or row.get("event_name") not in COLLECTION_EVENTS:
             continue
         seen = latest.get(collection_id)
