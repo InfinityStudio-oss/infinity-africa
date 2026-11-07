@@ -105,6 +105,37 @@ describe("AdminSidebar grouping", () => {
     }
   });
 
+  // Icon sizing is a CSS rule in app/globals.css keyed off these two class
+  // names, because Google's icon stylesheet loads after the app bundle and
+  // overrides any equal-specificity size utility on the span. jsdom here
+  // loads neither stylesheet, so there is no computed size to assert —
+  // what these two guard is the hook the rule hangs on, and that nobody
+  // "simplifies" it back into a Tailwind utility that silently does
+  // nothing.
+  it("hangs the icon sizing off .admin-sidebar-nav", async () => {
+    const { container } = await renderAt("/super-admin");
+    expect(container.querySelector("nav.admin-sidebar-nav")).not.toBeNull();
+  });
+
+  it("marks nested icons so they can be sized apart from the main links", async () => {
+    const { container } = await renderAt("/super-admin/notifications/email");
+
+    const nested = container.querySelectorAll(".admin-nav-icon-nested");
+    expect(nested.length).toBe(2);
+    for (const icon of nested) {
+      // text-[18px] sat here and never applied. If it comes back, so does
+      // the bug.
+      expect(icon.className).not.toMatch(/text-\[/);
+    }
+  });
+
+  it("leaves the mobile close button out of the sized area", async () => {
+    const { container } = await renderAt("/super-admin");
+    const close = container.querySelector('button[aria-label="Close menu"]');
+    expect(close).not.toBeNull();
+    expect(close?.closest("nav.admin-sidebar-nav")).toBeNull();
+  });
+
   it("shows the long labels in full, with no ellipsis class", async () => {
     await renderAt("/super-admin");
 

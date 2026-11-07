@@ -65,7 +65,10 @@ function NavLink({
                     : "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sidebar-text/70 hover:bg-sidebar-hover hover:text-white transition-colors text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 }
               >
-                <Icon name={child.icon} filled={childActive} className="shrink-0 text-[18px]" />
+                {/* text-[18px] used to sit here and never applied —
+                    Google's stylesheet overrode it. admin-nav-icon-nested
+                    is the rule that actually lands. */}
+                <Icon name={child.icon} filled={childActive} className="shrink-0 admin-nav-icon-nested" />
                 <span className="leading-snug">{child.label}</span>
               </Link>
             );
@@ -100,7 +103,10 @@ export function AdminSidebar({ open, onClose }: { open: boolean; onClose: () => 
             where six headings plus eighteen links are taller than the
             viewport. min-h-0 is what actually lets a flex child shrink
             enough to scroll. */}
-        <nav className="flex-1 min-h-0 overflow-y-auto px-4 space-y-5">
+        {/* admin-sidebar-nav carries the icon sizing (app/globals.css) —
+            it cannot be done with a utility class on the span, see the
+            comment there. */}
+        <nav className="admin-sidebar-nav flex-1 min-h-0 overflow-y-auto px-4 space-y-5">
           {ADMIN_NAV_SECTIONS.map((section) => {
             // A heading with nothing under it is noise. Nothing filters
             // these today — the whole area sits behind requireSuperAdmin

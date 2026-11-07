@@ -156,3 +156,49 @@ body {
   font-family: "Times New Roman", Times, serif;
 }
 
+/* Super Admin sidebar navigation icons — 18px for the links, 16px for the
+   Notifications sub-tabs.
+ *
+ * This has to live here, not as a Tailwind size utility on the span.
+ * Google's icon stylesheet declares `.material-symbols-outlined
+ * { font-size: 24px }`, it is unlayered, and its <link> in app/layout.tsx
+ * is emitted *after* the app's own CSS bundle — so at equal specificity it
+ * wins on source order. A `text-[18px]` utility on the span is exactly
+ * equal specificity and therefore does nothing; the sub-tab icons carried
+ * one for weeks and rendered at 24px regardless. Two class selectors beat
+ * one whatever the order, which is what makes this stick.
+ *
+ * The box stays 24px while only the glyph shrinks. Row height is
+ * max(icon, label) inside the link's padding, so letting the box shrink to
+ * 18px would have taken ~5px off all eighteen rows and shifted every label
+ * left. Centring the smaller glyph in the old box keeps row heights, hit
+ * areas and label positions exactly where they were — including where a
+ * label wraps to two lines, which the flex row still centres the icon
+ * against.
+ *
+ * Scoped to the sidebar's own nav, so the mobile close button (outside
+ * <nav>), the admin topbar, and the merchant portal are all untouched.
+ *
+ * font-variation-settings is deliberately left alone. Material Symbols has
+ * an `opsz` axis that ideally tracks font-size, but the active-item icon
+ * sets FILL through an inline style, which replaces the whole shorthand
+ * and drops opsz with it. Setting opsz here would style inactive icons
+ * differently from the active one — worse than one shared value.
+ */
+.admin-sidebar-nav .material-symbols-outlined {
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* px, not rem, and deliberately so: the glyph sizes above are px, and
+     the box being replaced was a px one (24px font-size at line-height 1).
+     In rem, a reader with a larger base font size would get a box that
+     grew while the glyph did not, taking the row heights with it. */
+  width: 24px;
+  height: 24px;
+}
+
+.admin-sidebar-nav .admin-nav-icon-nested.material-symbols-outlined {
+  font-size: 16px;
+}
+
