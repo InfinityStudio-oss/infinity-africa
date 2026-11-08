@@ -202,6 +202,53 @@ def _error_content(code: str, message: str, details=None) -> dict:
     )
 
 
+def _cause_chain(exc: BaseException, depth: int = 0) -> list[str]:
+    """The exception TYPE names behind a failure, outermost first.
+
+    Types only, never messages. A message can carry a phone number, an
+    amount, a provider reference or a chunk of SQL; a class name carries
+    none of that, and this codebase is public anyway, so `KeyError` tells
+    a reader nothing the repository does not already say.
+
+    Unwraps the two things that hide the real fault: ExceptionGroup,
+    which is how everything raised under BaseHTTPMiddleware arrives, and
+    __cause__, which is how a re-raise keeps the original.
+    """
+    if depth > 4:
+        return []
+    names: list[str] = [type(exc).__name__]
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            names.extend(_cause_chain(sub, depth + 1))
+    elif exc.__cause__ is not None:
+        names.extend(_cause_chain(exc.__cause__, depth + 1))
+    # Preserve order, drop repeats - a group of identical sub-exceptions
+    # should read as one name, not five.
+    seen: set[str] = set()
+    return [n for n in names if not (n in seen or seen.add(n))]
+
+
+def _unexpected_message(request: Request, exc: BaseException) -> str:
+    """What a 500 says to the caller.
+
+    Super Admin gets the exception types appended; everyone else gets the
+    plain sentence. The reasoning is narrow and worth stating: /v1/admin
+    is require_super_admin-gated, so the only person who can read this is
+    the platform owner, and withholding it from them has twice turned a
+    one-line answer into days of inference - a statement timeout and
+    then this one, both diagnosed by reproduction rather than by reading
+    what actually happened.
+
+    Types only (see _cause_chain), so nothing about a merchant, a
+    customer or a payment can travel in this field.
+    """
+    base = "An unexpected error occurred"
+    if not request.url.path.startswith("/v1/admin"):
+        return base
+    chain = _cause_chain(exc)
+    return f"{base} ({' <- '.join(chain)})" if chain else base
+
+
 def _is_client_disconnect(exc: BaseException) -> bool:
     """True for a ClientDisconnect, including one nested in the
     ExceptionGroup that BaseHTTPMiddleware's task group wraps it in.
@@ -321,5 +368,5 @@ def register_exception_handlers(app: FastAPI) -> None:
         capture_exception(exc)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=_error_content("internal_error", "An unexpected error occurred"),
+            content=_error_content("internal_error", _unexpected_message(request, exc)),
         )
