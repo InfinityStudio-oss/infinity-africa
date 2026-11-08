@@ -58,7 +58,13 @@ def list_for_merchant(
 _PAGE = 1000
 
 
-def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = None) -> list[dict]:
+def fetch_all(
+    query_factory,
+    *,
+    page_size: int = _PAGE,
+    max_rows: int | None = None,
+    order_by: str | None = "id",
+) -> list[dict]:
     """Every row a query matches, not just its first page.
 
     Takes a factory rather than a built query because a PostgREST query
@@ -73,11 +79,35 @@ def fetch_all(query_factory, *, page_size: int = _PAGE, max_rows: int | None = N
     limit. Note the server caps a single request at 1000 whatever
     `.limit()` asks for — `.limit(5000)` returns 1000 rows and says
     nothing — so a cap only means what it says if it is applied here.
+
+    **`order_by` is what makes the paging correct, not just tidy.**
+    Each page is a separate request, and OFFSET without ORDER BY lets
+    Postgres return rows in whatever order suits it that time — so page
+    two can repeat a row page one already gave and skip one it did not.
+    Nothing errors; the caller just gets a wrong list.
+
+    Measured against production on 2026-11-07, unordered, over one
+    merchant's 26,556 lifetime collections: 4,556 rows came back twice
+    and 4,556 never came back at all, and their lifetime total read
+    TZS 19,242,500 against a true TZS 19,160,650. Two identical reads
+    seconds apart disagreed with each other. Every caller was unordered,
+    including the ones that add up what a merchant has earned.
+
+    The default sorts by `id`, which is unique on every table this is
+    used against and therefore a total order — the only kind that makes
+    OFFSET paging repeatable. A caller that needs its own order passes
+    `order_by=None` and sorts in its own factory, and must include a
+    unique tiebreaker there or it reintroduces exactly this bug. Note
+    that inserts arriving mid-scan can still shift later pages; a stable
+    sort removes the silent duplication, not the race.
     """
     rows: list[dict] = []
     offset = 0
     while True:
-        page = (query_factory().range(offset, offset + page_size - 1).execute()).data or []
+        query = query_factory()
+        if order_by:
+            query = query.order(order_by)
+        page = (query.range(offset, offset + page_size - 1).execute()).data or []
         rows.extend(page)
         if len(page) < page_size:
             return rows

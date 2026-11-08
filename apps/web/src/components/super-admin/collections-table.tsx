@@ -35,7 +35,15 @@ function deliveryCell(row: AdminCollectionRow) {
   return <span className="text-xs text-on-surface-variant">Sending…</span>;
 }
 
-export function CollectionsTable({ collections: initialCollections }: { collections: AdminCollectionRow[] }) {
+export function CollectionsTable({
+  collections: initialCollections,
+  loadFailed = false,
+}: {
+  collections: AdminCollectionRow[];
+  /** The request did not come back, as opposed to coming back empty.
+   * Defaults false so a caller that cannot tell says nothing new. */
+  loadFailed?: boolean;
+}) {
   const [collections, setCollections] = useState(initialCollections);
   // Once a collection has been manually refreshed, keep showing the
   // button + its result message even after the status flips away from
@@ -48,7 +56,15 @@ export function CollectionsTable({ collections: initialCollections }: { collecti
       <div className="p-5 pb-3">
         <h3 className="text-2xl font-semibold text-on-background">All Collections</h3>
       </div>
-      {collections.length === 0 ? (
+      {collections.length === 0 && loadFailed ? (
+        <div className="p-6 space-y-1">
+          <p className="text-sm font-semibold text-error">Collections could not be loaded.</p>
+          <p className="text-sm text-on-surface-variant">
+            The request to the API did not come back. This is not an empty list — the records are
+            still there. Reload in a moment, and if it keeps happening check the API logs.
+          </p>
+        </div>
+      ) : collections.length === 0 ? (
         <p className="p-6 text-sm text-on-surface-variant">No collections have been recorded yet.</p>
       ) : (
         <div className="overflow-x-auto">

@@ -134,6 +134,24 @@ async function apiList<T>(path: string): Promise<T[]> {
   return (await apiGet<T[]>(path)) ?? [];
 }
 
+/** A list read that says whether it failed, rather than looking empty.
+ *
+ * `apiList` cannot tell "there is nothing here" apart from "the request
+ * did not work", and every page that uses it renders both as the same
+ * reassuring empty state. That has now hidden two separate production
+ * faults: a withdrawal 409 in September, and the Super Admin Collections
+ * page twice this week — both times the screen said no records existed
+ * while tens of thousands did, and both times it cost hours to find out
+ * why, because the one place that knew had thrown the answer away.
+ *
+ * Nothing throws, so callers keep degrading gracefully; they just get
+ * told, and can say "could not be loaded" instead of "none yet".
+ */
+async function apiListResult<T>(path: string): Promise<{ rows: T[]; failed: boolean }> {
+  const data = await apiGet<T[]>(path);
+  return data === null ? { rows: [], failed: true } : { rows: data, failed: false };
+}
+
 /** One page, with the paging meta the plain reads throw away. Degrades
  * the same way they do: a failure is an empty page, not an exception. */
 async function apiPage<T>(path: string): Promise<{ rows: T[]; totalPages: number }> {
@@ -506,6 +524,27 @@ export async function listAdminCollections(filters?: {
   if (filters?.paymentLinkId) params.set("payment_link_id", filters.paymentLinkId);
   if (filters?.invoiceId) params.set("invoice_id", filters.invoiceId);
   return apiList<AdminCollectionRow>(`/v1/admin/collections?${params.toString()}`);
+}
+
+/** The same read, but able to say it failed — see apiListResult.
+ *
+ * Kept beside listAdminCollections rather than replacing it, so the
+ * merchant detail page is untouched by this change.
+ */
+export async function listAdminCollectionsResult(filters?: Parameters<typeof listAdminCollections>[0]) {
+  const params = new URLSearchParams(FIRST_PAGE_ONLY);
+  if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
+  if (filters?.source) params.set("source", filters.source);
+  if (filters?.method) params.set("method", filters.method);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters?.dateTo) params.set("date_to", filters.dateTo);
+  if (filters?.customerPhone) params.set("customer_phone", filters.customerPhone);
+  if (filters?.merchantReference) params.set("merchant_reference", filters.merchantReference);
+  if (filters?.apiKeyId) params.set("api_key_id", filters.apiKeyId);
+  if (filters?.paymentLinkId) params.set("payment_link_id", filters.paymentLinkId);
+  if (filters?.invoiceId) params.set("invoice_id", filters.invoiceId);
+  return apiListResult<AdminCollectionRow>(`/v1/admin/collections?${params.toString()}`);
 }
 
 // Manual Selcom Checkout order-status refresh is a client-side

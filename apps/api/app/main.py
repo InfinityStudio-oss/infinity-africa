@@ -161,12 +161,20 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
             # One replica at a time. See app/services/scheduler_lease.py —
             # two replicas sweeping the same queue would ask Selcom about
             # the same collection twice.
-            if not acquire_lease(client, "checkout_reconciliation"):
+            #
+            # to_thread because acquire_lease/release_lease are ordinary
+            # blocking functions: supabase-py is synchronous, so calling
+            # one straight from a coroutine stops the event loop for the
+            # whole round trip and nothing else the API is serving gets a
+            # turn. Four of those per tick, every interval, on the one
+            # loop that also answers merchants. The other sweeps already
+            # do this; these two were the exception.
+            if not await asyncio.to_thread(acquire_lease, client, "checkout_reconciliation"):
                 continue
             try:
                 summary = await reconcile_pending_checkout_collections(client)
             finally:
-                release_lease(client, "checkout_reconciliation")
+                await asyncio.to_thread(release_lease, client, "checkout_reconciliation")
             logger.info("scheduled_checkout_reconciliation %s", summary)
         except Exception as exc:
             logger.exception("scheduled_checkout_reconciliation_failed")
@@ -183,11 +191,11 @@ async def _checkout_reconciliation_loop(interval_seconds: float) -> None:
         # crediting wallets matters more than closing stale ones.
         try:
             expiry_client = get_supabase_admin()
-            if acquire_lease(expiry_client, "collection_expiry"):
+            if await asyncio.to_thread(acquire_lease, expiry_client, "collection_expiry"):
                 try:
                     expiry_summary = await expire_stale_pushes(expiry_client)
                 finally:
-                    release_lease(expiry_client, "collection_expiry")
+                    await asyncio.to_thread(release_lease, expiry_client, "collection_expiry")
                 logger.info("scheduled_collection_expiry %s", expiry_summary)
         except Exception as exc:
             logger.exception("scheduled_collection_expiry_failed")
@@ -226,12 +234,14 @@ async def _disbursement_reconciliation_loop(interval_seconds: float) -> None:
         await asyncio.sleep(interval_seconds)
         try:
             client = get_supabase_admin()
-            if not acquire_lease(client, "disbursement_reconciliation"):
+            # Off the event loop, for the reason spelled out in
+            # _checkout_reconciliation_loop above.
+            if not await asyncio.to_thread(acquire_lease, client, "disbursement_reconciliation"):
                 continue
             try:
                 summary = await reconcile_pending_disbursements(client)
             finally:
-                release_lease(client, "disbursement_reconciliation")
+                await asyncio.to_thread(release_lease, client, "disbursement_reconciliation")
             logger.info("scheduled_disbursement_reconciliation %s", summary)
         except Exception as exc:
             logger.exception("scheduled_disbursement_reconciliation_failed")
