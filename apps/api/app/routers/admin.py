@@ -939,7 +939,25 @@ def list_admin_collections(
     invoice_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("collections").select("*", count=LIST_COUNT)
+    # Named columns, not `*`. collections has 36 of them and this
+    # response reads 19; the ones left behind are the expensive ones -
+    # `raw_response` and `metadata` hold whole provider payloads, and
+    # `*` dragged a hundred of them across the wire to be discarded.
+    #
+    # Measured against production: `*` with the order and count cost
+    # 603ms of server time, the named list 176ms. That mattered because
+    # this endpoint was returning 500 with APIError 57014, a statement
+    # timeout - the page insisted no collections existed while 85,000
+    # sat in the table. Keep this list in step with the response model
+    # below; a column read there and missing here comes back None, which
+    # is quieter and worse than an error.
+    query = client.table("collections").select(
+        "id, merchant_id, source, method, amount, currency, customer_phone, "
+        "merchant_reference, provider_reference, api_key_id, payment_link_id, "
+        "invoice_id, status, created_at, checkout_order_id, provider_transid, "
+        "channel, provider_payment_status, failure_reason",
+        count=LIST_COUNT,
+    )
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if source is not None:
