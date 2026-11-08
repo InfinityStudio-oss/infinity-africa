@@ -147,9 +147,39 @@ async function apiList<T>(path: string): Promise<T[]> {
  * Nothing throws, so callers keep degrading gracefully; they just get
  * told, and can say "could not be loaded" instead of "none yet".
  */
-async function apiListResult<T>(path: string): Promise<{ rows: T[]; failed: boolean }> {
-  const data = await apiGet<T[]>(path);
-  return data === null ? { rows: [], failed: true } : { rows: data, failed: false };
+async function apiListResult<T>(path: string): Promise<{ rows: T[]; failure: string | null }> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { headers: await authHeader(), cache: "no-store" });
+    if (!res.ok) {
+      // The body usually carries the real reason — a timeout, an auth
+      // refusal, a validation complaint. Read it if it is there; a
+      // gateway error (502/504) often has no JSON at all.
+      let detail = "";
+      try {
+        const body = (await res.json()) as ApiEnvelope<T[]>;
+        detail = body.error?.message || body.error?.code || "";
+      } catch {
+        /* not JSON */
+      }
+      const failure = `HTTP ${res.status}${detail ? ` — ${detail}` : res.statusText ? ` ${res.statusText}` : ""}`;
+      console.error(`[admin-api] ${path} failed: ${failure}`);
+      return { rows: [], failure };
+    }
+    const body: ApiEnvelope<T[]> = await res.json();
+    if (!body.success) {
+      const failure = body.error?.message || body.error?.code || "the API reported failure";
+      console.error(`[admin-api] ${path} failed: ${failure}`);
+      return { rows: [], failure };
+    }
+    return { rows: body.data ?? [], failure: null };
+  } catch (err) {
+    // A thrown fetch is the shape a timeout takes: the request never
+    // came back at all, so there is no status to report. Saying which
+    // is which is the whole point of this function.
+    const failure = err instanceof Error ? err.message : String(err);
+    console.error(`[admin-api] ${path} threw: ${failure}`);
+    return { rows: [], failure };
+  }
 }
 
 /** One page, with the paging meta the plain reads throw away. Degrades

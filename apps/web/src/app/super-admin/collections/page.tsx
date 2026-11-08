@@ -35,7 +35,8 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
     getAdminOverview(),
     listAdminMerchantOptions(),
   ]);
-  const { rows: collections, failed: loadFailed } = collectionsResult;
+  const { rows: collections, failure: loadFailure } = collectionsResult;
+  const loadFailed = loadFailure !== null;
   const successful = collections.filter((c) => c.status === "successful").length;
   const pending = collections.filter((c) => c.status === "pending" || c.status === "processing").length;
   const failed = collections.filter((c) => c.status === "failed").length;
@@ -68,7 +69,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
         }}
       />
 
-      <CollectionsTable collections={collections} loadFailed={loadFailed} />
+      <CollectionsTable collections={collections} loadFailure={loadFailure} />
     </div>
   );
 }

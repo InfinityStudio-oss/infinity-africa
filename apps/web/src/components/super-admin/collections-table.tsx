@@ -37,13 +37,16 @@ function deliveryCell(row: AdminCollectionRow) {
 
 export function CollectionsTable({
   collections: initialCollections,
-  loadFailed = false,
+  loadFailure = null,
 }: {
   collections: AdminCollectionRow[];
-  /** The request did not come back, as opposed to coming back empty.
-   * Defaults false so a caller that cannot tell says nothing new. */
-  loadFailed?: boolean;
+  /** Why the request did not come back, as opposed to coming back
+   * empty — an HTTP status, an API error message, or a thrown fetch.
+   * null means it succeeded. Defaults null so a caller that cannot tell
+   * says nothing new. */
+  loadFailure?: string | null;
 }) {
+  const loadFailed = loadFailure !== null;
   const [collections, setCollections] = useState(initialCollections);
   // Once a collection has been manually refreshed, keep showing the
   // button + its result message even after the status flips away from
@@ -60,9 +63,13 @@ export function CollectionsTable({
         <div className="p-6 space-y-1">
           <p className="text-sm font-semibold text-error">Collections could not be loaded.</p>
           <p className="text-sm text-on-surface-variant">
-            The request to the API did not come back. This is not an empty list — the records are
-            still there. Reload in a moment, and if it keeps happening check the API logs.
+            This is not an empty list — the records are still there. Reload in a moment; if it keeps
+            happening, the reason below is what the API said.
           </p>
+          {/* The reason, verbatim. Three times now this page has shown a
+              reassuring empty state over a real fault, and each time the
+              hours went into recovering exactly this one line. */}
+          <p className="pt-1 font-mono text-xs text-on-surface-variant break-all">{loadFailure}</p>
         </div>
       ) : collections.length === 0 ? (
         <p className="p-6 text-sm text-on-surface-variant">No collections have been recorded yet.</p>
