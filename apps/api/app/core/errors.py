@@ -251,6 +251,35 @@ def _cause_chain(exc: BaseException, depth: int = 0) -> list[str]:
     return [n for n in names if not (n in seen or seen.add(n))]
 
 
+def _app_frame(exc: BaseException, depth: int = 0) -> str | None:
+    """The deepest line of our own code in the failure, as file:line.
+
+    Knowing a statement timed out is not the same as knowing which
+    statement. The Collections endpoint issues six, and the traceback
+    already distinguishes them - it is just inside an ExceptionGroup
+    that a log filter hides, which is how two days went by with the
+    answer sitting unread in Railway.
+
+    A file name and a line number from a public repository disclose
+    nothing; they are already on GitHub.
+    """
+    import traceback as _tb
+
+    if depth > 4:
+        return None
+    best: str | None = None
+    for frame in _tb.extract_tb(exc.__traceback__):
+        path = frame.filename.replace("\\", "/")
+        if "/app/" in path and "/site-packages/" not in path:
+            best = f"{path.rsplit('/', 1)[-1]}:{frame.lineno}"
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            best = _app_frame(sub, depth + 1) or best
+    elif exc.__cause__ is not None:
+        best = _app_frame(exc.__cause__, depth + 1) or best
+    return best
+
+
 def _unexpected_message(request: Request, exc: BaseException) -> str:
     """What a 500 says to the caller.
 
@@ -269,7 +298,10 @@ def _unexpected_message(request: Request, exc: BaseException) -> str:
     if not request.url.path.startswith("/v1/admin"):
         return base
     chain = _cause_chain(exc)
-    return f"{base} ({' <- '.join(chain)})" if chain else base
+    where = _app_frame(exc)
+    if not chain:
+        return base
+    return f"{base} ({' <- '.join(chain)}{f' at {where}' if where else ''})"
 
 
 def _is_client_disconnect(exc: BaseException) -> bool:
