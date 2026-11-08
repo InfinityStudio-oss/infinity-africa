@@ -101,6 +101,32 @@ def fetch_all(
     that inserts arriving mid-scan can still shift later pages; a stable
     sort removes the silent duplication, not the race.
     """
+    # The first page is fetched WITHOUT the order, deliberately.
+    #
+    # Ordering exists to make OFFSET paging repeatable. If everything
+    # fits in one page there is no OFFSET and nothing to be repeatable
+    # about - so the sort buys nothing, and it costs something real.
+    #
+    # `ORDER BY id LIMIT 1000` next to a selective filter invites the
+    # planner to walk the primary key in id order and filter as it goes,
+    # expecting to fill the limit quickly. When almost nothing matches -
+    # 75 rows out of 77,000 for a page of webhook lookups - it walks the
+    # whole table instead and the statement is cancelled. That is not
+    # hypothetical: it took the Super Admin Collections page down with
+    # APIError 57014 at this exact line, after the ordering was added
+    # here to fix a different bug.
+    #
+    # Nearly every caller is this case, including every chunked lookup
+    # through fetch_in_chunks, where the batch size keeps a page well
+    # under the limit.
+    first = (query_factory().range(0, page_size - 1).execute()).data or []
+    if len(first) < page_size:
+        return first[:max_rows] if max_rows is not None else first
+
+    # More than one page, so the order starts mattering and is worth
+    # paying for. Starting over rather than keeping the unordered first
+    # page: mixing one unordered page with ordered ones is how rows get
+    # returned twice, which is the bug this is all here to prevent.
     rows: list[dict] = []
     offset = 0
     while True:

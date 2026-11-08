@@ -92,11 +92,30 @@ def test_sums_the_same_thing_twice(table):
     assert first == second == sum(range(2500))
 
 
-def test_every_page_is_ordered(table):
+def test_every_paged_request_is_ordered(table):
+    # One request is deliberately unordered: the probe that asks whether
+    # there is more than one page at all. If the answer is no, nothing
+    # was paged and the sort would buy nothing - while costing a plan.
+    # `ORDER BY id LIMIT n` beside a selective filter can send the
+    # planner down the primary key instead of the filtered index, which
+    # cancelled a statement in production at this very call.
     fetch_all(lambda: table.select("*"))
 
     assert table.calls > 1, "the fixture must span more than one page to be meaningful"
-    assert table.ordered_calls == table.calls, "a page was requested without an order"
+    assert table.ordered_calls == table.calls - 1, (
+        "every request except the first probe must carry the order"
+    )
+
+
+def test_a_single_page_is_never_ordered(table):
+    small = _Table(_rows(10))
+    got = fetch_all(lambda: small.select("*"))
+
+    assert len(got) == 10
+    assert small.calls == 1
+    assert small.ordered_calls == 0, (
+        "a result that fits in one page has no OFFSET, so ordering it is pure cost"
+    )
 
 
 def test_order_by_none_leaves_the_caller_in_charge(table):
@@ -111,7 +130,7 @@ def test_order_by_none_leaves_the_caller_in_charge(table):
 def test_a_caller_can_choose_the_sort_column(table):
     fetch_all(lambda: table.select("*"), order_by="amount")
 
-    assert table.ordered_calls == table.calls
+    assert table.ordered_calls == table.calls - 1  # all but the probe
 
 
 def test_short_first_page_costs_one_request(table):
