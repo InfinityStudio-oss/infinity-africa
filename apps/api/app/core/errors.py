@@ -202,6 +202,29 @@ def _error_content(code: str, message: str, details=None) -> dict:
     )
 
 
+def _named(exc: BaseException) -> str:
+    """The exception's type, plus its error code where it carries one.
+
+    postgrest's APIError is the type that actually reaches here from a
+    database failure, and on its own the name says nothing: a statement
+    timeout, a column that does not exist and a request URL too long for
+    the server all arrive as APIError. The code separates them -
+    `57014`, `42703`, `PGRST116` - and a SQLSTATE is a fixed constant,
+    not data, so it can be shown without carrying anything about a
+    merchant or a payment.
+
+    Length-capped and whitespace-rejected so that an exception whose
+    `code` happens to be a sentence cannot smuggle a message in here.
+    """
+    name = type(exc).__name__
+    code = getattr(exc, "code", None)
+    if isinstance(code, (str, int)):
+        text = str(code).strip()
+        if text and len(text) <= 12 and not any(c.isspace() for c in text):
+            return f"{name}[{text}]"
+    return name
+
+
 def _cause_chain(exc: BaseException, depth: int = 0) -> list[str]:
     """The exception TYPE names behind a failure, outermost first.
 
@@ -216,7 +239,7 @@ def _cause_chain(exc: BaseException, depth: int = 0) -> list[str]:
     """
     if depth > 4:
         return []
-    names: list[str] = [type(exc).__name__]
+    names: list[str] = [_named(exc)]
     if isinstance(exc, BaseExceptionGroup):
         for sub in exc.exceptions:
             names.extend(_cause_chain(sub, depth + 1))
