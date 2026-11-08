@@ -58,6 +58,30 @@ def list_for_merchant(
 _PAGE = 1000
 
 
+def _execute(query):
+    """Run a query, and if it fails say which table it was against.
+
+    `fetch_all` is reached from a dozen call sites over as many tables,
+    so a failure here reports as `crud.py:<line>` and nothing else - the
+    one fact needed to act on it, the table, is the one fact missing.
+    That cost a day on the Super Admin Collections page: the statement
+    timeout was known, the line was known, the table was not.
+
+    The name is read from the request path, which is the table and
+    nothing else. The headers on that object carry the service-role key
+    and are never touched.
+    """
+    try:
+        return query.execute()
+    except BaseException as exc:
+        if not hasattr(exc, "infinity_table"):
+            try:
+                exc.infinity_table = str(query.request.path).rstrip("/").rsplit("/", 1)[-1]
+            except Exception:  # noqa: BLE001 - diagnostics must never mask the real error
+                pass
+        raise
+
+
 def fetch_all(
     query_factory,
     *,
@@ -119,7 +143,7 @@ def fetch_all(
     # Nearly every caller is this case, including every chunked lookup
     # through fetch_in_chunks, where the batch size keeps a page well
     # under the limit.
-    first = (query_factory().range(0, page_size - 1).execute()).data or []
+    first = (_execute(query_factory().range(0, page_size - 1))).data or []
     if len(first) < page_size:
         return first[:max_rows] if max_rows is not None else first
 
@@ -133,7 +157,7 @@ def fetch_all(
         query = query_factory()
         if order_by:
             query = query.order(order_by)
-        page = (query.range(offset, offset + page_size - 1).execute()).data or []
+        page = (_execute(query.range(offset, offset + page_size - 1))).data or []
         rows.extend(page)
         if len(page) < page_size:
             return rows

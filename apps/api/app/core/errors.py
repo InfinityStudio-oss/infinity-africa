@@ -221,7 +221,13 @@ def _named(exc: BaseException) -> str:
     if isinstance(code, (str, int)):
         text = str(code).strip()
         if text and len(text) <= 12 and not any(c.isspace() for c in text):
-            return f"{name}[{text}]"
+            name = f"{name}[{text}]"
+    # Set by services/crud.py::_execute. A table name is schema, already
+    # public in the migrations, and it is the difference between "a
+    # query timed out somewhere" and knowing which one.
+    table = getattr(exc, "infinity_table", None)
+    if isinstance(table, str) and table.replace("_", "").isalnum() and len(table) <= 40:
+        name = f"{name} on {table}"
     return name
 
 

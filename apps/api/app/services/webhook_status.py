@@ -30,11 +30,14 @@ blob no longer has to come back over the wire at all.
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from supabase import Client
 
 from app.services.crud import fetch_in_chunks
+
+logger = logging.getLogger(__name__)
 
 # Only the events that describe a payment's outcome. A merchant does not
 # need to be told their endpoint missed an event that was never about
@@ -99,12 +102,33 @@ def admin_batch_collection_webhook_status(
     if not ids:
         return {}
 
-    rows = fetch_in_chunks(
-        lambda batch: client.table("webhook_events")
-        .select("collection_id, event_name, status, response_status_code, attempts, created_at")
-        .in_("collection_id", batch),
-        ids,
-    )
+    # Supplementary, and treated as such. This answers "did the
+    # merchant's endpoint hear about it" alongside a list of payments;
+    # the payments are the page. A collection with no row here already
+    # renders as "nothing to say" (see the docstring above), so a lookup
+    # that fails can return the same thing instead of taking the whole
+    # Collections page down with it.
+    #
+    # That is not theoretical. This lookup timed out in production and
+    # the page showed "No collections have been recorded yet" over
+    # 85,000 real ones, because a 500 here is a 500 for everything.
+    # Losing one display column is the right failure; losing the page is
+    # not.
+    try:
+        rows = fetch_in_chunks(
+            lambda batch: client.table("webhook_events")
+            .select("collection_id, event_name, status, response_status_code, attempts, created_at")
+            .in_("collection_id", batch),
+            ids,
+        )
+    except Exception:
+        logger.warning(
+            "admin_webhook_status_unavailable collections=%s - "
+            "delivery column omitted, collections still listed",
+            len(ids),
+            exc_info=True,
+        )
+        return {}
     return _latest_by_collection(rows)
 
 
