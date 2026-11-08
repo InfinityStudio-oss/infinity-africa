@@ -297,6 +297,25 @@ def register_exception_handlers(app: FastAPI) -> None:
             return Response(status_code=499)
 
         logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+        # The line above carries the full traceback, sub-exceptions and
+        # all. But what reaches a log search is the *first* line, and for
+        # anything raised under BaseHTTPMiddleware that line says only
+        # "unhandled errors in a TaskGroup" - true, and useless. Finding
+        # the real cause then means clearing the filter and reading
+        # around a timestamp, which cost a day on the Super Admin
+        # Collections page.
+        #
+        # So each sub-exception also gets its own line, with the same
+        # method and path, repr'd so the type and message are both there
+        # and greppable.
+        if isinstance(exc, BaseExceptionGroup):
+            for sub in exc.exceptions:
+                logger.error(
+                    "Unhandled exception on %s %s - cause: %r",
+                    request.method,
+                    request.url.path,
+                    sub,
+                )
         # After the log, never instead of it: Railway's logs stay the
         # source of truth, and this is a no-op when monitoring is off.
         capture_exception(exc)
