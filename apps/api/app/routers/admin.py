@@ -5,8 +5,16 @@ merchants (no merchant_id scoping) — distinct from the existing
 merchant-scoped routers (payment_links.py, invoices.py, collections.py,
 transactions.py, disbursements.py) which stay as they are. List endpoints
 follow routers/merchants.py::list_merchants' exact pattern: inline
-`.select("*", count="exact").order(...).range(...)`, not services/crud.py's
+`.select("*", count=LIST_COUNT).order(...).range(...)`, not services/crud.py's
 merchant-scoped helpers (these queries have no merchant_id to scope by).
+
+`count=LIST_COUNT` rather than `count="exact"`, and the difference is
+load-bearing: these tables are platform-wide, so the count has no
+merchant_id to narrow it and runs over everything - 84,000 collections,
+514,000 request logs. Three of those in flight at once is what tipped the
+statement timeout and turned this page into a 500. See
+app/core/pagination.py for the measurements, and for why an approximate
+total is right for a page count and wrong for a dashboard card.
 
 Onboarding review (GET/POST /v1/admin/onboarding/*) lives in
 routers/admin_onboarding.py, not here — untouched by this router.
@@ -20,7 +28,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import require_super_admin
 from app.core.errors import NotFoundError, ValidationAPIError
-from app.core.pagination import PaginationParams, build_page_meta, pagination_params
+from app.core.pagination import LIST_COUNT, PaginationParams, build_page_meta, pagination_params
 from app.core.rate_limit import rate_limit
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
@@ -110,7 +118,7 @@ def list_admin_merchants(
     client = get_supabase_admin()
     result = (
         client.table("merchants")
-        .select("*", count="exact")
+        .select("*", count=LIST_COUNT)
         .order("created_at", desc=True)
         .range(pagination.start, pagination.end)
         .execute()
@@ -443,7 +451,7 @@ def list_admin_pay_by_links(
     created_via="pay_by_link"). This is the pages themselves: how many
     exist, how many are active, which merchant owns which slug."""
     client = get_supabase_admin()
-    query = client.table("merchant_pay_links").select("*", count="exact")
+    query = client.table("merchant_pay_links").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if is_active is not None:
@@ -482,7 +490,7 @@ def list_admin_api_keys(
     hashed_key column (ApiKeyResponse/AdminApiKeyResponse both omit it),
     same as the merchant-scoped GET .../api-keys above."""
     client = get_supabase_admin()
-    query = client.table("api_keys").select("*", count="exact")
+    query = client.table("api_keys").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if status is not None:
@@ -649,7 +657,7 @@ def list_admin_notification_settings(
     client = get_supabase_admin()
 
     query = client.table("merchants").select(
-        "id, business_name, merchant_code, contact_email", count="exact"
+        "id, business_name, merchant_code, contact_email", count=LIST_COUNT
     )
     if search and search.strip():
         term = search.strip().replace(",", " ")
@@ -810,7 +818,7 @@ def list_admin_merchant_users(
     client = get_supabase_admin()
     result = (
         client.table("merchant_users")
-        .select("*", count="exact")
+        .select("*", count=LIST_COUNT)
         .order("created_at", desc=True)
         .range(pagination.start, pagination.end)
         .execute()
@@ -844,7 +852,7 @@ def list_admin_payment_links(
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("payment_links").select("*", count="exact")
+    query = client.table("payment_links").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
@@ -879,7 +887,7 @@ def list_admin_invoices(
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("invoices").select("*", count="exact")
+    query = client.table("invoices").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
@@ -931,7 +939,7 @@ def list_admin_collections(
     invoice_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("collections").select("*", count="exact")
+    query = client.table("collections").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if source is not None:
@@ -1090,7 +1098,7 @@ def list_admin_withdrawals(
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("disbursements").select("*", count="exact")
+    query = client.table("disbursements").select("*", count=LIST_COUNT)
     if status is not None:
         query = query.eq("status", status)
     if requires_approval is not None:
@@ -1163,7 +1171,7 @@ def list_admin_transactions(
     date_to: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("transactions").select("*", count="exact")
+    query = client.table("transactions").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if merchant_code is not None:
@@ -1226,7 +1234,7 @@ def list_admin_webhooks(
     client = get_supabase_admin()
     result = (
         client.table("selcom_webhook_events")
-        .select("*", count="exact")
+        .select("*", count=LIST_COUNT)
         .order("created_at", desc=True)
         .range(pagination.start, pagination.end)
         .execute()
@@ -1259,7 +1267,7 @@ def list_admin_ip_allowlist(
     status: Annotated[str | None, Query(description="pending | active | rejected")] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("api_ip_allowlist").select("*", count="exact")
+    query = client.table("api_ip_allowlist").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if environment is not None:
@@ -1344,7 +1352,7 @@ def list_admin_api_logs(
     environment: Annotated[str | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("api_request_logs").select("*", count="exact")
+    query = client.table("api_request_logs").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if environment is not None:
@@ -1373,7 +1381,7 @@ def list_admin_audit_logs(
     client = get_supabase_admin()
     result = (
         client.table("audit_logs")
-        .select("*", count="exact")
+        .select("*", count=LIST_COUNT)
         .order("created_at", desc=True)
         .range(pagination.start, pagination.end)
         .execute()
@@ -1414,7 +1422,7 @@ def list_admin_inquiries(
     client = get_supabase_admin()
     result = (
         client.table("inquiries")
-        .select("*", count="exact")
+        .select("*", count=LIST_COUNT)
         .order("created_at", desc=True)
         .range(pagination.start, pagination.end)
         .execute()

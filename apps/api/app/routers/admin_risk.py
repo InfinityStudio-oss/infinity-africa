@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import require_super_admin
 from app.core.errors import NotFoundError
-from app.core.pagination import PaginationParams, build_page_meta, pagination_params
+from app.core.pagination import LIST_COUNT, PaginationParams, build_page_meta, pagination_params
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
@@ -42,7 +42,7 @@ def list_risk_alerts(
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
 ):
     client = get_supabase_admin()
-    query = client.table("fraud_alerts").select("*", count="exact")
+    query = client.table("fraud_alerts").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
