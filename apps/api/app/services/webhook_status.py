@@ -74,7 +74,8 @@ def batch_collection_webhook_status(
         lambda batch: client.table("webhook_events")
         .select("collection_id, event_name, status, response_status_code, attempts, created_at")
         .eq("merchant_id", str(merchant_id))
-        .in_("collection_id", batch),
+        .in_("collection_id", batch)
+        .in_("event_name", list(COLLECTION_EVENTS)),
         ids,
     )
 
@@ -114,22 +115,60 @@ def admin_batch_collection_webhook_status(
     # 85,000 real ones, because a 500 here is a 500 for everything.
     # Losing one display column is the right failure; losing the page is
     # not.
-    try:
-        rows = fetch_in_chunks(
-            lambda batch: client.table("webhook_events")
-            .select("collection_id, event_name, status, response_status_code, attempts, created_at")
-            .in_("collection_id", batch),
-            ids,
-        )
-    except Exception:
-        logger.warning(
-            "admin_webhook_status_unavailable collections=%s - "
-            "delivery column omitted, collections still listed",
-            len(ids),
-            exc_info=True,
-        )
-        return {}
-    return _latest_by_collection(rows)
+    return _latest_by_collection(_rows_in_batches(client, ids))
+
+
+# Small enough that one statement stays short, and that losing a batch
+# loses a slice of a page rather than the page. The URL limit allows far
+# more (see crud._IN_CHUNK), but length was never what hurt here: this
+# table is rewritten on every delivery attempt, so it carries a lot of
+# dead rows and occasionally stalls for seconds. A 100-id statement that
+# normally runs in 50ms has room to be ten times slower and still finish
+# inside the 8s the database allows it.
+_BATCH = 100
+
+
+def _rows_in_batches(client: Client, ids: list[str]) -> list[dict]:
+    """Every delivery row for these collections, batch by batch, where a
+    failed batch costs only itself.
+
+    `fetch_in_chunks` is all-or-nothing: one statement timing out loses
+    every row, so the Super Admin Collections page showed an empty
+    "Merchant notified" column for all hundred rows because of a stall
+    affecting some of them. Partial truth is worth more than none here -
+    this answers a display column, and a collection with no row already
+    renders as nothing-to-say.
+    """
+    rows: list[dict] = []
+    for index in range(0, len(ids), _BATCH):
+        batch = ids[index : index + _BATCH]
+        try:
+            rows.extend(
+                (
+                    client.table("webhook_events")
+                    .select(
+                        "collection_id, event_name, status, "
+                        "response_status_code, attempts, created_at"
+                    )
+                    .in_("collection_id", batch)
+                    # Filtered here rather than in _latest_by_collection:
+                    # the rows that are not about a payment outcome are
+                    # discarded anyway, and discarding them in Postgres
+                    # keeps them off the wire.
+                    .in_("event_name", list(COLLECTION_EVENTS))
+                    .execute()
+                ).data
+                or []
+            )
+        except Exception:
+            logger.warning(
+                "webhook_status_batch_unavailable collections=%s offset=%s - "
+                "delivery status omitted for these, the rest still shown",
+                len(batch),
+                index,
+                exc_info=True,
+            )
+    return rows
 
 
 def _latest_by_collection(rows: list[dict]) -> dict[str, dict]:
