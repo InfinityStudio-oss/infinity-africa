@@ -30,7 +30,7 @@ from app.schemas.onboarding import (
     OnboardingSignupCreate,
 )
 from app.schemas.withdrawals import PricingRuleCreate
-from app.services.admin_directory import best_effort_user_profile
+from app.services.admin_directory import batch_merchants, best_effort_user_profile
 from app.services.audit import write_audit_log
 from app.services.crud import get_by_id, insert_row, update_row
 from app.services.duplicate_signup import (
@@ -606,9 +606,18 @@ def list_onboarding_submissions(client: Client) -> list[dict]:
 
     siblings = identity_siblings(client)
 
+    # One query for every merchant on the page, not one per submission.
+    #
+    # This loop used to call get_by_id inside itself. At 127 submissions
+    # that is 127 round trips, each waiting for the last, and the
+    # Onboarding & Compliance page took over thirty seconds to open -
+    # the slowest screen in the Super Admin console by a factor of eight.
+    # The work was never heavy; it was just done one merchant at a time.
+    merchants = batch_merchants(client, {s["merchant_id"] for s in submissions})
+
     rows = []
     for submission in submissions:
-        merchant = get_by_id(client, "merchants", uuid.UUID(submission["merchant_id"])) or {}
+        merchant = merchants.get(submission["merchant_id"]) or {}
         rows.append(
             _to_submission_row(
                 submission,

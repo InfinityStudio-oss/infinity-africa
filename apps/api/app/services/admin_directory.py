@@ -27,6 +27,30 @@ def batch_merchant_names(client: Client, merchant_ids: set[str]) -> dict[str, st
     return {row["id"]: row["business_name"] for row in rows}
 
 
+def batch_merchants(client: Client, merchant_ids: set[str]) -> dict[str, dict]:
+    """id -> the whole merchant row, for a list that needs more than a
+    name.
+
+    The name/code helpers above cover the usual case of labelling a row.
+    This is for a page that renders several merchant fields at once and
+    would otherwise fetch each merchant on its own - which is exactly
+    what the onboarding list did: one round trip per submission, 127 of
+    them in sequence, and a page that took over thirty seconds to open.
+
+    Chunked, because `.in_()` goes into the URL and the server rejects a
+    long one for its length rather than answering it (see
+    crud.fetch_in_chunks). 127 ids are nowhere near that, but a list of
+    merchants only grows.
+    """
+    if not merchant_ids:
+        return {}
+    rows = fetch_in_chunks(
+        lambda batch: client.table("merchants").select("*").in_("id", batch),
+        list(merchant_ids),
+    )
+    return {row["id"]: row for row in rows}
+
+
 def batch_merchant_codes(client: Client, merchant_ids: set[str]) -> dict[str, str]:
     """id -> merchant_code (the human-friendly 27****** Merchant ID), for
     join-on-display on every Super Admin page that lists merchant-owned
