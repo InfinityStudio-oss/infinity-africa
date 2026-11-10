@@ -355,6 +355,103 @@ describe("ApiKeysView", () => {
     await waitFor(() => expect(deleteIpAllowlistEntry).toHaveBeenCalledWith("entry-1"));
   });
 
+  // On 2026-11-10 a merchant clicked Remove three times inside one
+  // second. All three deletes raced through — the audit log holds three
+  // identical ip_allowlist.deleted rows for one entry — and a fourth
+  // click found the row already gone, so the API answered "IP allowlist
+  // entry not found" and the rejection went unhandled into Sentry.
+  it("sends only one delete however many times Remove is clicked", async () => {
+    const entry = {
+      id: "entry-1",
+      merchant_id: "merchant-1",
+      api_key_id: "key-1",
+      environment: "sandbox" as const,
+      label: "Office",
+      ip_address_or_cidr: "41.59.10.20",
+      status: "active" as const,
+      notes: null,
+      created_at: "2026-08-01T10:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+    };
+    listIpAllowlist.mockResolvedValue([entry]);
+    let release: () => void = () => {};
+    deleteIpAllowlistEntry.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    const { ApiKeysView } = await import("./api-keys-view");
+    render(<ApiKeysView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Manage IPs" }));
+    await screen.findByText("41.59.10.20");
+
+    const remove = screen.getByRole("button", { name: "Remove" });
+    fireEvent.click(remove);
+    await screen.findByRole("button", { name: "Removing…" });
+    fireEvent.click(screen.getByRole("button", { name: "Removing…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Removing…" }));
+
+    expect(deleteIpAllowlistEntry).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it("stays quiet when the entry was already gone", async () => {
+    const entry = {
+      id: "entry-1",
+      merchant_id: "merchant-1",
+      api_key_id: "key-1",
+      environment: "sandbox" as const,
+      label: "Office",
+      ip_address_or_cidr: "41.59.10.20",
+      status: "active" as const,
+      notes: null,
+      created_at: "2026-08-01T10:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+    };
+    listIpAllowlist.mockResolvedValue([entry]);
+    deleteIpAllowlistEntry.mockRejectedValue(new Error("IP allowlist entry not found"));
+
+    const { ApiKeysView } = await import("./api-keys-view");
+    render(<ApiKeysView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Manage IPs" }));
+    await screen.findByText("41.59.10.20");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(deleteIpAllowlistEntry).toHaveBeenCalled());
+
+    // The outcome the merchant asked for already happened, so there is
+    // nothing to tell them — and nothing may escape to Sentry.
+    await waitFor(() =>
+      expect(screen.queryByText(/not found/i)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does report a removal that genuinely failed", async () => {
+    const entry = {
+      id: "entry-1",
+      merchant_id: "merchant-1",
+      api_key_id: "key-1",
+      environment: "sandbox" as const,
+      label: "Office",
+      ip_address_or_cidr: "41.59.10.20",
+      status: "active" as const,
+      notes: null,
+      created_at: "2026-08-01T10:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+    };
+    listIpAllowlist.mockResolvedValue([entry]);
+    deleteIpAllowlistEntry.mockRejectedValue(new Error("Service unavailable"));
+
+    const { ApiKeysView } = await import("./api-keys-view");
+    render(<ApiKeysView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Manage IPs" }));
+    await screen.findByText("41.59.10.20");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Service unavailable")).toBeInTheDocument();
+  });
+
   it("blocks switching a key to Enable IP whitelisting from the detail panel when it has no linked IPs", async () => {
     listIpAllowlist.mockResolvedValue([]);
     const { ApiKeysView } = await import("./api-keys-view");

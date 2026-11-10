@@ -87,6 +87,9 @@ export function ApiKeysView() {
   const [expandedLabelInput, setExpandedLabelInput] = useState("");
   const [expandedError, setExpandedError] = useState<string | null>(null);
   const [expandedToggling, setExpandedToggling] = useState(false);
+  /** Allowlist entries whose removal is in flight, so a row cannot be
+   * clicked twice while the first request is still out. */
+  const [removingIps, setRemovingIps] = useState<Set<string>>(new Set());
 
   const visibleKeys = keys.filter((key) => key.environment === environment);
   // Self-service production: a merchant creates their own Live key the
@@ -208,7 +211,28 @@ export function ApiKeysView() {
   }
 
   async function handleRemoveExpandedIp(key: ApiKey, entryId: string) {
-    await deleteIpAllowlistEntry(entryId);
+    if (removingIps.has(entryId)) return;
+    setRemovingIps((prev) => new Set(prev).add(entryId));
+    setExpandedError(null);
+    try {
+      await deleteIpAllowlistEntry(entryId);
+    } catch (err) {
+      // Already gone is the outcome that was wanted, so it is not an
+      // error to report; the reload below will simply not show it.
+      // Production reached here by a merchant clicking Remove three
+      // times in one second on 2026-11-10 - the first three deletes
+      // raced through and the fourth threw, unhandled, into Sentry.
+      const message = err instanceof Error ? err.message : "";
+      if (!/not found/i.test(message)) {
+        setExpandedError(message || "Couldn't remove this IP address.");
+      }
+    } finally {
+      setRemovingIps((prev) => {
+        const next = new Set(prev);
+        next.delete(entryId);
+        return next;
+      });
+    }
     await loadExpandedIps(key.id);
   }
 
@@ -824,9 +848,10 @@ export function ApiKeysView() {
                                             <button
                                               type="button"
                                               onClick={() => handleRemoveExpandedIp(key, entry.id)}
-                                              className="text-error text-xs font-semibold hover:underline"
+                                              disabled={removingIps.has(entry.id)}
+                                              className="text-error text-xs font-semibold hover:underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
                                             >
-                                              Remove
+                                              {removingIps.has(entry.id) ? "Removing…" : "Remove"}
                                             </button>
                                           </td>
                                         </tr>

@@ -24,6 +24,11 @@ export function IpAllowlistView() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Entries whose delete is in flight, so the row cannot be clicked
+   * twice. Production showed the same entry deleted three times inside
+   * one second, then a fourth click erroring on the row it had just
+   * removed. */
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     listIpAllowlist().then(setEntries);
@@ -52,8 +57,31 @@ export function IpAllowlistView() {
   }
 
   async function handleDelete(id: string) {
-    await deleteIpAllowlistEntry(id);
-    setEntries((prev) => prev.filter((entry) => entry.id !== id));
+    if (deleting.has(id)) return;
+    setDeleting((prev) => new Set(prev).add(id));
+    setError(null);
+    try {
+      await deleteIpAllowlistEntry(id);
+      setEntries((prev) => prev.filter((entry) => entry.id !== id));
+    } catch (err) {
+      // "not found" means the entry is already gone, which is what was
+      // asked for — so the row goes, quietly. Reporting it would be
+      // telling someone their delete failed while showing them that it
+      // worked. Anything else is a real failure and is said out loud,
+      // the same way adding an entry already does.
+      const message = err instanceof Error ? err.message : "";
+      if (/not found/i.test(message)) {
+        setEntries((prev) => prev.filter((entry) => entry.id !== id));
+      } else {
+        setError(message || "Couldn't remove this IP address.");
+      }
+    } finally {
+      setDeleting((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
   return (
@@ -165,7 +193,8 @@ export function IpAllowlistView() {
                       <button
                         type="button"
                         onClick={() => handleDelete(entry.id)}
-                        className="p-1.5 text-on-surface-variant hover:text-error"
+                        disabled={deleting.has(entry.id)}
+                        className="p-1.5 text-on-surface-variant hover:text-error disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Remove"
                       >
                         <Icon name="delete" className="text-[18px]" />
