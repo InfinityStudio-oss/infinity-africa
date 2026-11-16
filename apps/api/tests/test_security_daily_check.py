@@ -113,7 +113,7 @@ def test_every_created_table_has_rls_enabled(check):
     )
 
 
-def test_the_deny_all_tables_are_the_expected_sixteen(check):
+def test_the_deny_all_tables_are_the_expected_eighteen(check):
     """RLS on with no policy denies every anon and authenticated request.
     That is the intended, stronger state for these - they are reached only
     by the service-role backend, which enforces merchant ownership in
@@ -147,6 +147,15 @@ def test_the_deny_all_tables_are_the_expected_sixteen(check):
         "merchant_payout_settings",
         "merchant_referrals",
         "merchant_withdrawal_otp_challenges",
+        # Added 2026-11-16 with the Disbursement API. Both deny-all, both
+        # for the same reason: a merchant reaching these with the anon key
+        # could approve their own destinations or read every payout they
+        # have ever sent. Beneficiaries in particular are the cap on a
+        # leaked payout key - a key can only pay someone already on this
+        # list, which is worth nothing if the list is writable from a
+        # browser.
+        "payout_beneficiaries",
+        "payouts",
         "referral_commissions",
         "scheduler_leases",
         "selcom_webhook_events",
