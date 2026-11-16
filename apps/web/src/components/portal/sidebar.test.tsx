@@ -94,4 +94,34 @@ describe("Sidebar", () => {
 
     expect(screen.getByRole("link", { name: /Withdrawals/i })).toBeInTheDocument();
   });
+
+  // --- icon sizing ---------------------------------------------------------
+
+  it("puts the icon-sizing hook on the nav, not a utility on each span", async () => {
+    // The sizing lives in globals.css as `.portal-sidebar-nav
+    // .material-symbols-outlined`, and it has to: Google's icon
+    // stylesheet sets font-size: 24px on that one class, is unlayered,
+    // and loads after the app bundle - so a `text-[18px]` utility on the
+    // span is equal specificity and silently does nothing. Two classes
+    // beat one whatever the source order.
+    //
+    // That failure is invisible (the icons just stay 24px), so this pins
+    // the hook rather than trusting anyone to remember.
+    const { Sidebar } = await import("./sidebar");
+    const { container } = render(<Sidebar open onClose={() => {}} />);
+
+    const nav = container.querySelector("nav");
+    expect(nav).toHaveClass("portal-sidebar-nav");
+  });
+
+  it("does not try to size nav icons with a Tailwind utility", async () => {
+    const { Sidebar } = await import("./sidebar");
+    const { container } = render(<Sidebar open onClose={() => {}} verified={false} />);
+
+    const icons = container.querySelectorAll("nav .material-symbols-outlined");
+    expect(icons.length).toBeGreaterThan(0);
+    for (const icon of icons) {
+      expect(icon.className).not.toMatch(/text-\[\d+px\]/);
+    }
+  });
 });

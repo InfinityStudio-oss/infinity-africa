@@ -156,8 +156,8 @@ body {
   font-family: "Times New Roman", Times, serif;
 }
 
-/* Super Admin sidebar navigation icons — 18px for the links, 16px for the
-   Notifications sub-tabs.
+/* Sidebar navigation icons — 18px for the links, 16px for the Super
+   Admin Notifications sub-tabs.
  *
  * This has to live here, not as a Tailwind size utility on the span.
  * Google's icon stylesheet declares `.material-symbols-outlined
@@ -176,8 +176,11 @@ body {
  * label wraps to two lines, which the flex row still centres the icon
  * against.
  *
- * Scoped to the sidebar's own nav, so the mobile close button (outside
- * <nav>), the admin topbar, and the merchant portal are all untouched.
+ * Scoped to each sidebar's own nav, so the mobile close button (outside
+ * <nav>) and the admin topbar are untouched. Both sidebars are listed:
+ * the merchant portal's icons rendered at Google's default 24px for as
+ * long as the Super Admin's did, and looked oversized beside the labels
+ * for the same reason.
  *
  * font-variation-settings is deliberately left alone. Material Symbols has
  * an `opsz` axis that ideally tracks font-size, but the active-item icon
@@ -185,7 +188,8 @@ body {
  * and drops opsz with it. Setting opsz here would style inactive icons
  * differently from the active one — worse than one shared value.
  */
-.admin-sidebar-nav .material-symbols-outlined {
+.admin-sidebar-nav .material-symbols-outlined,
+.portal-sidebar-nav .material-symbols-outlined {
   font-size: 18px;
   display: inline-flex;
   align-items: center;
@@ -196,6 +200,20 @@ body {
      grew while the glyph did not, taking the row heights with it. */
   width: 24px;
   height: 24px;
+}
+
+/* The padlock on a nav item an unverified merchant cannot open. A step
+   smaller than the item's own icon, because it is a note about the row
+   rather than the thing the row is - at the same size it competes with
+   the icon that identifies the page.
+
+   Three classes, for the same reason the rule above needs two: it has to
+   outrank that rule as well as Google's. The `text-[16px]` utility it
+   replaces lost to both and had been rendering at 24px. */
+.portal-sidebar-nav .material-symbols-outlined.portal-nav-lock {
+  font-size: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .admin-sidebar-nav .admin-nav-icon-nested.material-symbols-outlined {

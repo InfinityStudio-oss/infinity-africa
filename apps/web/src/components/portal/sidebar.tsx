@@ -49,7 +49,10 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex-1">
+        {/* portal-sidebar-nav carries the icon sizing (app/globals.css) —
+            it cannot be a Tailwind utility on the span, see the comment
+            on the rule for why. */}
+        <nav className="portal-sidebar-nav flex-1">
           {visibleGroups.map((group, groupIndex) => (
             <div key={group.label ?? "primary"} className={groupIndex === 0 ? "" : "mt-5"}>
               {group.label && (
@@ -79,7 +82,7 @@ export function Sidebar({
                       >
                         <Icon name={item.icon} className="shrink-0" />
                         <span className="truncate flex-1">{item.label}</span>
-                        <Icon name="lock" className="shrink-0 text-[16px]" />
+                        <Icon name="lock" className="portal-nav-lock shrink-0" />
                       </div>
                     );
                   }
