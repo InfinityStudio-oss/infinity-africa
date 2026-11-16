@@ -171,6 +171,7 @@ def make_api_key(
     environment: str = "live",
     scopes: list[str] | None = None,
     ip_whitelist_enabled: bool = False,
+    key_type: str = "standard",
 ) -> tuple[str, dict]:
     """Seeds an active api_keys row and returns (raw_key, row) — the raw key
     is what a test sends as X-API-Key; only its hash is ever stored, exactly
@@ -184,7 +185,12 @@ def make_api_key(
     IP whitelisting" default) — pass True for tests exercising allowlist
     enforcement (app.services.ip_allowlist.is_ip_allowed)."""
     from app.auth import hash_api_key
-    from app.schemas.api_keys import API_KEY_SCOPES
+    from app.schemas.api_keys import scopes_for_key_type
+
+    # Defaults follow the TYPE: a payout key defaulting to the standard
+    # scope list would be a key that cannot do the one thing it exists
+    # for, and every payout test would then have to pass scopes by hand.
+    API_KEY_SCOPES = scopes_for_key_type(key_type)
 
     raw_key = f"inf_{environment}_{uuid.uuid4().hex}"
     row = fake_client.seed(
@@ -193,6 +199,7 @@ def make_api_key(
             "merchant_id": str(merchant_id),
             "name": "Test key",
             "environment": environment,
+            "key_type": key_type,
             "key_prefix": raw_key[:16],
             "key_last4": raw_key[-4:],
             "hashed_key": hash_api_key(raw_key),

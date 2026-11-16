@@ -408,6 +408,11 @@ class _FakeTable:
         now = datetime.now(timezone.utc).isoformat()
         row.setdefault("created_at", now)
         row.setdefault("updated_at", now)
+        if self.name == "api_keys":
+            # `key_type text not null default 'standard'`
+            # (20261116093000_payout_keys_and_merchant_payout_settings.sql).
+            # Every key that existed before payout keys is a standard key.
+            row.setdefault("key_type", "standard")
         if self.name == "ledger_accounts":
             # `environment text not null default 'live'`
             # (20261116090000_payout_wallet_ledger_accounts.sql). The

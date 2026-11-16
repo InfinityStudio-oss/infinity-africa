@@ -113,7 +113,7 @@ def test_every_created_table_has_rls_enabled(check):
     )
 
 
-def test_the_deny_all_tables_are_the_expected_fifteen(check):
+def test_the_deny_all_tables_are_the_expected_sixteen(check):
     """RLS on with no policy denies every anon and authenticated request.
     That is the intended, stronger state for these - they are reached only
     by the service-role backend, which enforces merchant ownership in
@@ -137,6 +137,14 @@ def test_the_deny_all_tables_are_the_expected_fifteen(check):
         # were emailed what totals.
         "merchant_daily_notification_summaries",
         "merchant_pay_links",
+        # Added 2026-11-16 with the prefunded Payout Wallet. Deny-all is
+        # the correct state for the same reason withdrawal_automation_policy
+        # below is: this row decides whether a merchant's machine may send
+        # money without a human, and carries the limits and fees it may do
+        # it within. It is written only by require_super_admin endpoints,
+        # and a merchant must never be able to read - let alone raise -
+        # their own payout ceiling.
+        "merchant_payout_settings",
         "merchant_referrals",
         "merchant_withdrawal_otp_challenges",
         "referral_commissions",

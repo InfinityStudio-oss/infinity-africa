@@ -226,3 +226,191 @@ def test_cross_merchant_denial_still_wins_over_the_scope_message(fake_client):
 
     assert response.status_code == 403
     assert "does not belong to this merchant" in response.json()["error"]["message"]
+
+
+# --- payout keys must not reach the legacy, Collections-funded route ------
+#
+# The Payout Wallet API gives merchants a second kind of key. Its read
+# scope must not double as the legacy route's read scope, or a payout key
+# would be able to list and fetch withdrawals paid out of the Collections
+# balance - money it is specifically not allowed to touch.
+#
+# Resolved by giving payout keys payouts:create / payouts:read, which do
+# not satisfy disbursements:write / disbursements:read. These tests are the
+# proof, and they cover all five legacy routes for both kinds of key.
+
+
+def _payout_key(fake_client, merchant_id):
+    return make_api_key(fake_client, merchant_id, key_type="payout")[0]
+
+
+@pytest.mark.parametrize("route", CREATE_ROUTES)
+def test_payout_key_cannot_create_a_legacy_withdrawal(fake_client, route):
+    merchant_id, _admin_id = _merchant(fake_client)
+    raw_key = _payout_key(fake_client, merchant_id)
+
+    response = client.post(
+        f"/v1/disbursements/{route}",
+        headers={"X-API-Key": raw_key, "Idempotency-Key": str(uuid.uuid4())},
+        json=_payout_body(merchant_id, bank=route == "bank-account"),
+    )
+
+    assert response.status_code == 403
+    assert "disbursements:write" in response.json()["error"]["message"]
+
+
+def test_payout_key_cannot_list_legacy_withdrawals(fake_client):
+    merchant_id, _admin_id = _merchant(fake_client)
+    raw_key = _payout_key(fake_client, merchant_id)
+
+    response = client.get(
+        "/v1/disbursements",
+        params={"merchant_id": str(merchant_id)},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+    assert "disbursements:read" in response.json()["error"]["message"]
+
+
+def test_payout_key_cannot_fetch_a_legacy_withdrawal(fake_client):
+    """Fetched by id, on a row that really exists and really belongs to
+    this merchant - so the refusal is the scope and nothing else."""
+    merchant_id, admin_id = _merchant(fake_client)
+    created = client.post(
+        "/v1/disbursements/mobile-money",
+        headers={**auth_headers(admin_id), "Idempotency-Key": str(uuid.uuid4())},
+        json=_payout_body(merchant_id),
+    )
+    assert created.status_code in (200, 202), created.text
+    disbursement_id = created.json()["data"]["id"]
+
+    raw_key = _payout_key(fake_client, merchant_id)
+    response = client.get(
+        f"/v1/disbursements/{disbursement_id}", headers={"X-API-Key": raw_key}
+    )
+
+    assert response.status_code == 403
+    assert "disbursements:read" in response.json()["error"]["message"]
+
+
+def test_full_scope_standard_key_cannot_fetch_a_legacy_withdrawal(fake_client):
+    """The same row, via a standard key holding every grantable scope."""
+    merchant_id, admin_id = _merchant(fake_client)
+    created = client.post(
+        "/v1/disbursements/mobile-money",
+        headers={**auth_headers(admin_id), "Idempotency-Key": str(uuid.uuid4())},
+        json=_payout_body(merchant_id),
+    )
+    assert created.status_code in (200, 202), created.text
+    disbursement_id = created.json()["data"]["id"]
+
+    raw_key, _ = make_api_key(fake_client, merchant_id)
+    response = client.get(
+        f"/v1/disbursements/{disbursement_id}", headers={"X-API-Key": raw_key}
+    )
+
+    assert response.status_code == 403
+
+
+def test_full_scope_standard_key_cannot_list_legacy_withdrawals(fake_client):
+    merchant_id, _admin_id = _merchant(fake_client)
+    raw_key, _ = make_api_key(fake_client, merchant_id)
+
+    response = client.get(
+        "/v1/disbursements",
+        params={"merchant_id": str(merchant_id)},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 403
+
+
+def test_no_grantable_scope_set_can_reach_the_legacy_route(fake_client):
+    """The exhaustive version: every scope a merchant can be granted, on
+    either kind of key, all at once. If some future scope is added to a
+    grantable list and happens to satisfy the legacy route, this fails."""
+    from app.schemas.api_keys import API_KEY_SCOPES as STANDARD
+    from app.schemas.api_keys import PAYOUT_KEY_SCOPES
+
+    merchant_id, _admin_id = _merchant(fake_client)
+    everything = [*STANDARD, *PAYOUT_KEY_SCOPES]
+    raw_key, _ = make_api_key(fake_client, merchant_id, scopes=everything)
+
+    create = client.post(
+        "/v1/disbursements/mobile-money",
+        headers={"X-API-Key": raw_key, "Idempotency-Key": str(uuid.uuid4())},
+        json=_payout_body(merchant_id),
+    )
+    listing = client.get(
+        "/v1/disbursements",
+        params={"merchant_id": str(merchant_id)},
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert create.status_code == 403
+    assert listing.status_code == 403
+
+
+# --- the scope model itself ----------------------------------------------
+
+
+def test_a_standard_key_cannot_be_granted_payout_scopes():
+    from pydantic import ValidationError
+
+    from app.schemas.api_keys import ApiKeyCreate
+
+    with pytest.raises(ValidationError) as exc:
+        ApiKeyCreate(name="k", key_type="standard", scopes=["collections:write", "payouts:create"])
+
+    assert "payouts:create" in str(exc.value)
+
+
+def test_a_payout_key_cannot_be_granted_collection_scopes():
+    """The invariant that matters: no single credential both takes money
+    in and sends it out."""
+    from pydantic import ValidationError
+
+    from app.schemas.api_keys import ApiKeyCreate
+
+    with pytest.raises(ValidationError) as exc:
+        ApiKeyCreate(name="k", key_type="payout", scopes=["payouts:create", "collections:write"])
+
+    assert "collections:write" in str(exc.value)
+
+
+def test_a_payout_key_needs_a_payout_scope():
+    from pydantic import ValidationError
+
+    from app.schemas.api_keys import ApiKeyCreate
+
+    with pytest.raises(ValidationError):
+        ApiKeyCreate(name="k", key_type="payout", scopes=[])
+
+
+def test_a_valid_payout_key_request_is_accepted():
+    from app.schemas.api_keys import ApiKeyCreate
+
+    created = ApiKeyCreate(name="k", key_type="payout", scopes=["payouts:create", "payouts:read"])
+
+    assert created.key_type == "payout"
+    assert set(created.scopes) == {"payouts:create", "payouts:read"}
+
+
+def test_legacy_scopes_are_grantable_on_neither_key_type():
+    from pydantic import ValidationError
+
+    from app.schemas.api_keys import LEGACY_DISBURSEMENT_SCOPES, ApiKeyCreate
+
+    for key_type in ("standard", "payout"):
+        for scope in LEGACY_DISBURSEMENT_SCOPES:
+            with pytest.raises(ValidationError):
+                ApiKeyCreate(name="k", key_type=key_type, scopes=[scope])
+
+
+def test_an_unspecified_key_type_is_standard():
+    """Every existing caller and every stored request body keeps meaning
+    what it meant before payout keys existed."""
+    from app.schemas.api_keys import ApiKeyCreate
+
+    assert ApiKeyCreate(name="k", scopes=["collections:write"]).key_type == "standard"
