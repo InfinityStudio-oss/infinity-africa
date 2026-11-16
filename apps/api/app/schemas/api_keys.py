@@ -205,6 +205,11 @@ class ApiKeyCreateResponse(BaseModel):
     key_prefix: str
     key_last4: str | None = None
     scopes: list[str]
+    # Not a secret, and the portal needs it: a payout key and a
+    # collections key are different products with different blast
+    # radii, and a list that renders them identically invites a merchant
+    # to treat them the same.
+    key_type: str = "standard"
     ip_whitelist_enabled: bool = False
     continue_without_ip_whitelist: bool = True
     plaintext_key: str
@@ -224,6 +229,7 @@ class ApiKeyResponse(BaseModel):
     key_prefix: str
     key_last4: str | None = None
     scopes: list[str]
+    key_type: str = "standard"
     status: str
     ip_whitelist_enabled: bool = False
     continue_without_ip_whitelist: bool = True

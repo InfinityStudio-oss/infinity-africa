@@ -11,13 +11,25 @@ import { ApiKeysView } from "./api-keys-view";
 import { ApiLogsView } from "./api-logs-view";
 import { DeveloperDocsView } from "./developer-docs-view";
 import { IpAllowlistView } from "./ip-allowlist-view";
+import { PayoutKeysView } from "./payout-keys-view";
 import { WebhooksView } from "./webhooks-view";
 
-export type ApiCredentialsTab = "overview" | "keys" | "webhooks" | "ip-allowlist" | "logs" | "docs";
+export type ApiCredentialsTab =
+  | "overview"
+  | "keys"
+  | "payout-keys"
+  | "webhooks"
+  | "ip-allowlist"
+  | "logs"
+  | "docs";
 
 const TABS: { value: ApiCredentialsTab; label: string; icon: string }[] = [
   { value: "overview", label: "Overview", icon: "space_dashboard" },
   { value: "keys", label: "API Keys", icon: "vpn_key" },
+  // Its own tab, not a row in the API Keys table. A payout key sends
+  // money out with no person in the loop; a table that renders it
+  // identically to a collections key invites the same casual handling.
+  { value: "payout-keys", label: "Payout Keys", icon: "send_money" },
   { value: "webhooks", label: "Webhooks", icon: "webhook" },
   { value: "ip-allowlist", label: "IP Allowlist", icon: "shield_lock" },
   { value: "logs", label: "API Logs", icon: "history_toggle_off" },
@@ -79,6 +91,7 @@ export function ApiCredentialsTabs({ initialTab }: { initialTab?: string }) {
         <div role="tabpanel" className="min-w-0">
           {activeTab === "overview" && <ApiCredentialsOverview onSelectTab={selectTab} />}
           {activeTab === "keys" && <ApiKeysView />}
+          {activeTab === "payout-keys" && <PayoutKeysView />}
           {activeTab === "webhooks" && <WebhooksView />}
           {activeTab === "ip-allowlist" && <IpAllowlistView />}
           {activeTab === "logs" && <ApiLogsView />}

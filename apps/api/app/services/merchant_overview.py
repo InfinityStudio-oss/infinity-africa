@@ -14,7 +14,7 @@ app/services/ledger.py's post_collection_entries), not per-merchant.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from supabase import Client
@@ -24,6 +24,10 @@ from app.core.errors import NotFoundError
 from app.core.time import dar_es_salaam_day_start_utc, is_dar_es_salaam_today
 from app.services.crud import fetch_all, get_by_id
 from app.services.ledger import get_wallet_balance
+
+# A trend, not a figure anyone pays against, so a minute of staleness is
+# free. Deliberately longer than the overview's own TTL.
+_SERIES_TTL_SECONDS = 120
 
 
 def _is_today(value: str | None, now: datetime) -> bool:
@@ -211,3 +215,98 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
         "unpaid_invoices": unpaid_invoices,
         "total_fees_charged": total_fees_charged,
     }
+
+
+def get_merchant_activity_series(
+    client: Client, *, merchant_id: uuid.UUID, days: int = 14
+) -> list[dict]:
+    """Daily money in and money out, for the Overview charts.
+
+    Returned as a dense series: every day in the window gets a row, zeros
+    included. A sparse series makes a chart lie - the gaps close up and a
+    quiet Sunday renders as if it never happened, which flattens exactly
+    the dips an operator is looking for. This product has already had one
+    false alarm from a window that clipped a day.
+
+    Days are Africa/Dar_es_Salaam calendar days, matching the "today"
+    figures beside the chart. Using UTC here would put the chart and the
+    KPI cards a few hours out of step with each other, which reads as one
+    of them being broken.
+
+    Cached with the other aggregates, never with a balance: these are
+    historical totals, so a minute of staleness costs nothing. The chart
+    is a trend, not a number anyone pays against.
+    """
+    cache_key = merchant_key(merchant_id, "activity-series", str(days))
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached["series"]
+
+    now = datetime.now(timezone.utc)
+    window_start = dar_es_salaam_day_start_utc(now) - timedelta(days=days - 1)
+
+    buckets: dict[str, dict] = {}
+    for offset in range(days):
+        day = (window_start + timedelta(days=offset)).date().isoformat()
+        buckets[day] = {"date": day, "collected": Decimal(0), "paid_out": Decimal(0), "count": 0}
+
+    def _bucket_for(value: str | None) -> dict | None:
+        if not value:
+            return None
+        try:
+            when = _parse_dt(value)
+        except ValueError:
+            return None
+        # Shift into Dar es Salaam before taking the calendar date, so a
+        # 01:00 local payment lands on the right day rather than the
+        # previous one.
+        key = (when + timedelta(hours=3)).date().isoformat()
+        return buckets.get(key)
+
+    collections = fetch_all(
+        client,
+        "collections",
+        select="amount, status, created_at",
+        filters={"merchant_id": str(merchant_id)},
+    )
+    for row in collections:
+        if row.get("status") != "successful":
+            continue
+        bucket = _bucket_for(row.get("created_at"))
+        if bucket is None:
+            continue
+        bucket["collected"] += Decimal(str(row.get("amount") or 0))
+        bucket["count"] += 1
+
+    # Money out is both products: a withdrawal a person approved, and a
+    # payout an API key sent. Charting only one would show a merchant
+    # half of what left their account.
+    for table, amount_field, settled in (
+        ("disbursements", "amount", ("COMPLETED", "PROCESSED", "SUCCESSFUL")),
+        ("payouts", "total_debit", ("successful",)),
+    ):
+        rows = fetch_all(
+            client,
+            table,
+            select=f"{amount_field}, status, created_at",
+            filters={"merchant_id": str(merchant_id)},
+        )
+        for row in rows:
+            if str(row.get("status") or "").upper() not in {s.upper() for s in settled}:
+                continue
+            bucket = _bucket_for(row.get("created_at"))
+            if bucket is None:
+                continue
+            bucket["paid_out"] += Decimal(str(row.get(amount_field) or 0))
+
+    series = [
+        {
+            "date": bucket["date"],
+            "collected": str(bucket["collected"]),
+            "paid_out": str(bucket["paid_out"]),
+            "count": bucket["count"],
+        }
+        for bucket in buckets.values()
+    ]
+    cache_set(cache_key, {"series": series}, _SERIES_TTL_SECONDS)
+    return series

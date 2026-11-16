@@ -23,6 +23,7 @@ from app.routers import (
     admin_diagnostics,
     admin_disputes,
     admin_onboarding,
+    admin_payout_access,
     admin_pricing,
     admin_referrals,
     admin_risk,
@@ -540,6 +541,7 @@ app.include_router(admin_risk.router, prefix="/v1")
 app.include_router(admin_disputes.router, prefix="/v1")
 app.include_router(admin_withdrawals.router, prefix="/v1")
 app.include_router(admin_withdrawal_policy.router, prefix="/v1")
+app.include_router(admin_payout_access.router, prefix="/v1")
 app.include_router(admin_pricing.router, prefix="/v1")
 app.include_router(admin_collection_pricing.router, prefix="/v1")
 app.include_router(admin_diagnostics.router, prefix="/v1")
@@ -553,11 +555,11 @@ app.include_router(collections.router, prefix="/v1")
 app.include_router(collections.initiate_router, prefix="/v1")
 app.include_router(collections_api.router, prefix="/v1")
 app.include_router(disbursements.router, prefix="/v1")  # /v1/disbursements — fully flat
-# /v1/payouts (payout API keys) and /v1/payout-wallet (dashboard only).
-# Separate routers because they take different credentials on purpose:
-# a key that could fund the wallet it spends from would be unbounded.
+# /v1/payouts is the partner API and takes a payout key only. Every
+# dashboard-facing payout route lives on /v1/merchant/* with the rest
+# of that surface, so the prefix tells you which credential applies -
+# and nothing that funds the wallet sits next to what spends it.
 app.include_router(payouts.router, prefix="/v1")
-app.include_router(payouts.wallet_router, prefix="/v1")
 app.include_router(transactions.router, prefix="/v1")
 app.include_router(transactions.by_reference_router, prefix="/v1")
 app.include_router(webhooks.router, prefix="/v1")

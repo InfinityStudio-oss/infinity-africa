@@ -28,6 +28,7 @@ const key: ApiKey = {
   public_key: "pk_test_examplepublickey",
   key_last4: "9zk1",
   scopes: ["collections:write"],
+  key_type: "standard" as const,
   status: "active",
   ip_whitelist_enabled: false,
   continue_without_ip_whitelist: true,

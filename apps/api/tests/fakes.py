@@ -457,6 +457,16 @@ class _FakeTable:
             # (20261116093000_payout_keys_and_merchant_payout_settings.sql).
             # Every key that existed before payout keys is a standard key.
             row.setdefault("key_type", "standard")
+        if self.name == "payouts":
+            # `dispatch_attempts integer not null default 0`
+            # (20261116100000_payouts_and_beneficiaries.sql). Not
+            # cosmetic: the worker claims a payout with a conditional
+            # update on the attempt count it read, so a row where the
+            # column was absent matched nothing and the worker reported
+            # "already claimed" for a payout nobody had touched - the
+            # dispatch silently never happened.
+            row.setdefault("dispatch_attempts", 0)
+            row.setdefault("environment", "live")
         if self.name == "ledger_accounts":
             # `environment text not null default 'live'`
             # (20261116090000_payout_wallet_ledger_accounts.sql). The

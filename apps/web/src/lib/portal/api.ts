@@ -24,6 +24,9 @@ import type {
   Collection,
   Customer,
   Disbursement,
+  MerchantActivityPoint,
+  Payout,
+  PayoutWallet,
   Dispute,
   DisputeWithMessages,
   DocumentRequest,
@@ -483,6 +486,9 @@ export async function createApiKey(input: {
   name: string;
   environment: ApiKey["environment"];
   scopes: string[];
+  /** Omitted means "standard", so every existing caller is unchanged.
+   * A payout key's scopes are validated against the type server-side. */
+  key_type?: ApiKey["key_type"];
   // Part 6's per-key choice: enable IP whitelisting (with the allowed IPs
   // added inline, right here), or explicitly continue without it. Exactly
   // one is true — the backend reconciles this if both/neither are sent.
@@ -952,4 +958,87 @@ export async function resolveWithdrawalRecipient(input: {
   } catch {
     return null;
   }
+}
+
+// --- Payouts (LIVE) ---------------------------------------------------------
+//
+// These use apiRead rather than apiGet. apiGet turns every failure into
+// null, which on a money page cannot be told apart from "you have no
+// payouts" - and this product's own history has an empty Collections page
+// that was diagnosed four different wrong ways before someone read the
+// actual error. A merchant who has not been granted payout access, and a
+// merchant whose request failed, must see different screens.
+
+export interface ApiReadResult<T> {
+  data: T | null;
+  /** Set when the backend answered with an error, carrying its message. */
+  error: string | null;
+  /** True when the account has no payout access at all, as opposed to
+   * having access and no payouts. */
+  noAccess: boolean;
+}
+
+async function apiRead<T>(path: string): Promise<ApiReadResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { headers: await getAuthHeader(), cache: "no-store" });
+  } catch {
+    return {
+      data: null,
+      error: "Couldn't reach InfinityPay. Check your connection and try again.",
+      noAccess: false,
+    };
+  }
+
+  let body: ApiEnvelope<T> | null = null;
+  try {
+    body = (await res.json()) as ApiEnvelope<T>;
+  } catch {
+    body = null;
+  }
+
+  if (res.status === 404) {
+    return { data: null, error: body?.error?.message ?? null, noAccess: true };
+  }
+  if (!res.ok || !body?.success) {
+    return { data: null, error: body?.error?.message ?? "Request failed", noAccess: false };
+  }
+  return { data: body.data ?? null, error: null, noAccess: false };
+}
+
+export async function getPayoutWallet(environment?: string): Promise<ApiReadResult<PayoutWallet>> {
+  const query = environment ? `?environment=${encodeURIComponent(environment)}` : "";
+  return apiRead<PayoutWallet>(`/v1/merchant/payout-wallet${query}`);
+}
+
+export async function listPayouts(environment?: string): Promise<ApiReadResult<Payout[]>> {
+  const query = environment ? `?environment=${encodeURIComponent(environment)}` : "";
+  return apiRead<Payout[]>(`/v1/merchant/payouts${query}`);
+}
+
+export async function getPayout(id: string): Promise<ApiReadResult<Payout>> {
+  return apiRead<Payout>(`/v1/merchant/payouts/${id}`);
+}
+
+export interface FundPayoutWalletInput {
+  amount: string;
+  currency?: string;
+  environment?: string;
+}
+
+/** POST /v1/merchant/payout-wallet/fund.
+ *
+ * Idempotent, because this moves money and a retry after a timeout must
+ * not fund twice. Throws on refusal so the page can show the reason -
+ * step-up MFA, a paused account, or not enough in Collections - rather
+ * than a generic failure.
+ */
+export async function fundPayoutWallet(input: FundPayoutWalletInput): Promise<PayoutWallet> {
+  return apiWrite<PayoutWallet>("/v1/merchant/payout-wallet/fund", "POST", input, {
+    idempotent: true,
+  });
+}
+
+export async function getActivitySeries(days = 14): Promise<MerchantActivityPoint[]> {
+  return (await apiGet<MerchantActivityPoint[]>(`/v1/merchant/activity-series?days=${days}`)) ?? [];
 }

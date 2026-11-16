@@ -123,3 +123,24 @@ class PayoutWalletResponse(BaseModel):
     reserved: Decimal
     currency: str
     environment: str
+
+
+class MerchantPayoutWalletResponse(BaseModel):
+    """The wallet as the portal needs it.
+
+    Carries the pause state and the limits alongside the balances so the
+    page can render a Fund button that matches what the server will
+    actually allow. `can_fund` is the role answer: staff and developers
+    may read this surface, but only an admin may move money onto it, and
+    the button should say so rather than discovering it on submit.
+    """
+
+    available: Decimal
+    reserved: Decimal
+    currency: str
+    environment: str
+    paused: bool = False
+    paused_reason: str | None = None
+    per_payout_limit_tzs: Decimal | None = None
+    daily_limit_tzs: Decimal | None = None
+    can_fund: bool = False

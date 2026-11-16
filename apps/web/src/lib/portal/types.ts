@@ -293,6 +293,9 @@ export interface ApiKey {
   public_key: string | null;
   key_last4: string | null;
   scopes: string[];
+  /** "standard" takes money in; "payout" sends it out. Different
+   * blast radii, so the portal lists them separately. */
+  key_type: "standard" | "payout";
   status: "active" | "revoked";
   ip_whitelist_enabled: boolean;
   continue_without_ip_whitelist: boolean;
@@ -642,4 +645,69 @@ export interface MerchantReferralSummary {
   approved_commission: string;
   paid_commission: string;
   currency: string;
+}
+
+// --- Payouts (Disbursement API) --------------------------------------------
+
+export type PayoutStatus =
+  | "queued"
+  | "processing"
+  | "needs_reconciliation"
+  | "successful"
+  | "failed"
+  | "cancelled"
+  | "reversed";
+
+/** GET /v1/merchant/payouts.
+ *
+ * Mirrors the backend's PayoutResponse, which deliberately omits the
+ * provider payload and the api_key_id: the first is ours to debug with,
+ * the second is a credential reference.
+ */
+export interface Payout {
+  id: string;
+  status: PayoutStatus;
+  amount: string;
+  fee_amount: string;
+  total_debit: string;
+  currency: string;
+  environment: string;
+  beneficiary_id: string;
+  reference: string;
+  failure_code: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+/** GET /v1/merchant/payout-wallet.
+ *
+ * `reserved` is money committed to payouts that have not resolved yet -
+ * it is still the merchant's, but it is not theirs to spend. `paused` and
+ * `can_fund` come back with the balances so the page can render a Fund
+ * button that matches what the server will actually allow.
+ */
+export interface PayoutWallet {
+  available: string;
+  reserved: string;
+  currency: string;
+  environment: string;
+  paused: boolean;
+  paused_reason: string | null;
+  per_payout_limit_tzs: string | null;
+  daily_limit_tzs: string | null;
+  can_fund: boolean;
+}
+
+/** GET /v1/merchant/activity-series.
+ *
+ * Dense: every day in the window is present, zeros included. A sparse
+ * series lets a chart close its own gaps, which hides exactly the quiet
+ * days worth seeing.
+ */
+export interface MerchantActivityPoint {
+  date: string;
+  collected: string;
+  paid_out: string;
+  count: number;
 }

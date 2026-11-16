@@ -24,7 +24,6 @@ router means the money is held, not that it has been sent.
 """
 
 import uuid
-from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, status
@@ -32,27 +31,20 @@ from fastapi import APIRouter, Depends, Header, status
 from app.auth import (
     authorize_merchant_action,
     get_authenticated_caller,
-    reject_api_keys,
     require_api_key_scope,
 )
-from app.auth.dependencies import get_current_user, require_own_merchant_role
-from app.core.errors import MfaRequiredError, NotFoundError, ValidationAPIError
+from app.core.errors import NotFoundError, ValidationAPIError
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
-from app.core.references import generate_reference
 from app.database.session import get_supabase_admin
-from app.schemas.auth import AuthenticatedCaller, AuthenticatedUser, MerchantMembership
+from app.schemas.auth import AuthenticatedCaller
 from app.schemas.common import APIResponse
 from app.schemas.enums import UserRole
 from app.schemas.payouts import (
     PayoutCreateRequest,
     PayoutResponse,
-    PayoutWalletFundRequest,
-    PayoutWalletResponse,
 )
-from app.services.audit import write_audit_log
-from app.services.crud import get_by_id, insert_row, list_for_merchant
+from app.services.crud import get_by_id, list_for_merchant
 from app.services.idempotency import run_idempotent
-from app.services.ledger import get_payout_wallet_balances, post_payout_wallet_funding
 from app.services.payouts import (
     assert_payout_allowed,
     create_payout,
@@ -60,10 +52,7 @@ from app.services.payouts import (
 )
 
 router = APIRouter(prefix="/payouts", tags=["payouts"])
-wallet_router = APIRouter(prefix="/payout-wallet", tags=["payouts"])
 
-# Funding moves settled money. Staff cannot; only an owner/admin can.
-_FUNDING_ROLES = (UserRole.MERCHANT_ADMIN,)
 # Reading a payout is not moving one.
 _READ_ROLES = (UserRole.MERCHANT_ADMIN, UserRole.MERCHANT_STAFF)
 
@@ -202,137 +191,3 @@ def get_payout(
         raise NotFoundError("Payout not found")
     return APIResponse(data=PayoutResponse.from_row(row))
 
-
-# --- the dashboard-only wallet -----------------------------------------------
-
-
-@wallet_router.get("", response_model=APIResponse[PayoutWalletResponse])
-def read_payout_wallet(
-    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_READ_ROLES))],
-    currency: str = "TZS",
-    environment: str = "live",
-):
-    client = get_supabase_admin()
-    available, reserved = get_payout_wallet_balances(
-        client, merchant_id=membership.merchant_id, currency=currency, environment=environment
-    )
-    return APIResponse(
-        data=PayoutWalletResponse(
-            available=available, reserved=reserved, currency=currency, environment=environment
-        )
-    )
-
-
-@wallet_router.post("/fund", response_model=APIResponse[PayoutWalletResponse])
-async def fund_payout_wallet(
-    payload: PayoutWalletFundRequest,
-    # Declared first so it answers first. Without it an API-key caller
-    # would be told "Missing bearer token" by the membership dependency
-    # below, which sends a partner looking for the wrong thing.
-    _no_api_keys: Annotated[None, Depends(reject_api_keys("Funding the payout wallet"))],
-    membership: Annotated[
-        MerchantMembership, Depends(require_own_merchant_role(*_FUNDING_ROLES))
-    ],
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-):
-    """Move settled funds from Collections into the Payout Wallet.
-
-    Closed to API keys, and the refusal is explicit rather than a
-    consequence of the scope list: a payout key that could fund the
-    wallet it draws on would make a leak unbounded.
-
-    Step-up MFA on top of the session, because this is the act that
-    decides how much a payout key can spend. Everything downstream -
-    the balance check, the rolling limit, the reservation - is a
-    constraint on money that passed through here.
-    """
-    merchant_id = membership.merchant_id
-
-    if user.assurance_level != "aal2":
-        raise MfaRequiredError(
-            "Funding the payout wallet requires two-factor authentication. "
-            "Complete the MFA challenge and try again."
-        )
-
-    client = get_supabase_admin()
-    settings = load_payout_settings(
-        client, merchant_id=merchant_id, environment=payload.environment
-    )
-    assert_payout_allowed(settings, environment=payload.environment)
-
-    async def _handler() -> tuple[int, dict]:
-        transaction = _funding_transaction(
-            client,
-            merchant_id=merchant_id,
-            amount=payload.amount,
-            currency=payload.currency,
-        )
-        post_payout_wallet_funding(
-            client,
-            transaction_id=uuid.UUID(transaction["id"]),
-            merchant_id=merchant_id,
-            amount=payload.amount,
-            currency=payload.currency,
-            environment=payload.environment,
-        )
-        write_audit_log(
-            client,
-            actor_id=membership.user_id,
-            actor_type="user",
-            merchant_id=merchant_id,
-            action="payout_wallet.funded",
-            resource_type="ledger_account",
-            resource_id=None,
-            metadata={
-                "amount": str(payload.amount),
-                "currency": payload.currency,
-                "environment": payload.environment,
-            },
-        )
-        available, reserved = get_payout_wallet_balances(
-            client,
-            merchant_id=merchant_id,
-            currency=payload.currency,
-            environment=payload.environment,
-        )
-        return status.HTTP_200_OK, PayoutWalletResponse(
-            available=available,
-            reserved=reserved,
-            currency=payload.currency,
-            environment=payload.environment,
-        ).model_dump(mode="json")
-
-    _status_code, body = await run_idempotent(
-        client,
-        merchant_id=merchant_id,
-        endpoint="POST /v1/payout-wallet/fund",
-        idempotency_key=idempotency_key,
-        request_payload=payload.model_dump(mode="json"),
-        handler=_handler,
-    )
-    return APIResponse(data=PayoutWalletResponse(**body))
-
-
-def _funding_transaction(client, *, merchant_id: uuid.UUID, amount: Decimal, currency: str) -> dict:
-    """The parent row a funding's ledger entries hang off.
-
-    ledger_entries.transaction_id is a foreign key, so the entries need a
-    real transactions row. Typed `adjustment`: no money entered or left
-    the platform, it moved between two of one merchant's own accounts.
-    """
-    return insert_row(
-        client,
-        "transactions",
-        {
-            "merchant_id": str(merchant_id),
-            "reference": generate_reference("PWF"),
-            "type": "adjustment",
-            "method": "MOBILE_MONEY",
-            "gross_amount": str(amount),
-            "fee_amount": "0",
-            "net_amount": str(amount),
-            "currency": currency,
-            "status": "successful",
-        },
-    )

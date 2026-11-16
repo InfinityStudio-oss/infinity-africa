@@ -58,7 +58,6 @@ def _merchant(fake_client, *, role="MERCHANT_ADMIN"):
 def _enable_payouts(fake_client, merchant_id, **overrides):
     row = {
         "merchant_id": str(merchant_id),
-        "enabled": True,
         "live_enabled": True,
         "sandbox_enabled": True,
         "paused": False,
@@ -255,7 +254,7 @@ def test_a_payout_key_cannot_fund_the_wallet_it_spends(fake_client):
     raw_key = _payout_key(fake_client, merchant_id)
 
     response = client.post(
-        "/v1/payout-wallet/fund",
+        "/v1/merchant/payout-wallet/fund",
         headers={"X-API-Key": raw_key, "Idempotency-Key": _idem()},
         json={"amount": "50000.00"},
     )
@@ -268,7 +267,7 @@ def test_a_payout_key_cannot_read_the_wallet(fake_client):
     merchant_id, _user_id, _beneficiary_id = _ready(fake_client)
     raw_key = _payout_key(fake_client, merchant_id)
 
-    response = client.get("/v1/payout-wallet", headers={"X-API-Key": raw_key})
+    response = client.get("/v1/merchant/payout-wallet", headers={"X-API-Key": raw_key})
 
     assert response.status_code in (401, 403), response.text
 
@@ -373,7 +372,7 @@ def test_funding_requires_step_up_mfa(fake_client):
     _merchant_id, user_id, _beneficiary_id = _ready(fake_client)
 
     response = client.post(
-        "/v1/payout-wallet/fund",
+        "/v1/merchant/payout-wallet/fund",
         headers={**auth_headers(user_id), "Idempotency-Key": _idem()},
         json={"amount": "10000.00"},
     )
@@ -397,7 +396,7 @@ def test_funding_with_mfa_moves_money_out_of_collections(fake_client):
     )
 
     response = client.post(
-        "/v1/payout-wallet/fund",
+        "/v1/merchant/payout-wallet/fund",
         headers={**auth_headers(user_id, aal="aal2"), "Idempotency-Key": _idem()},
         json={"amount": "30000.00"},
     )
@@ -432,7 +431,7 @@ def test_funding_more_than_collections_holds_is_refused(fake_client):
     )
 
     response = client.post(
-        "/v1/payout-wallet/fund",
+        "/v1/merchant/payout-wallet/fund",
         headers={**auth_headers(user_id, aal="aal2"), "Idempotency-Key": _idem()},
         json={"amount": "5000.00"},
     )
@@ -454,7 +453,7 @@ def test_merchant_staff_cannot_fund_the_wallet(fake_client):
     make_merchant_member(fake_client, merchant_id, staff_id, "MERCHANT_STAFF")
 
     response = client.post(
-        "/v1/payout-wallet/fund",
+        "/v1/merchant/payout-wallet/fund",
         headers={**auth_headers(staff_id, aal="aal2"), "Idempotency-Key": _idem()},
         json={"amount": "1000.00"},
     )
@@ -478,8 +477,8 @@ def test_funding_is_idempotent(fake_client):
     key = _idem()
     headers = {**auth_headers(user_id, aal="aal2"), "Idempotency-Key": key}
 
-    client.post("/v1/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
-    client.post("/v1/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
+    client.post("/v1/merchant/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
+    client.post("/v1/merchant/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
 
     accounts = {
         r["purpose"]: Decimal(str(r["balance"]))

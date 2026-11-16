@@ -44,6 +44,20 @@ class MerchantOverviewResponse(BaseModel):
     total_fees_charged: Decimal
 
 
+class MerchantActivityPointResponse(BaseModel):
+    """One day of the Overview trend.
+
+    `paid_out` is both products together - withdrawals a person approved
+    and payouts an API key sent - because a merchant looking at "what left
+    my account" means all of it, and charting one would show them half.
+    """
+
+    date: str
+    collected: Decimal
+    paid_out: Decimal
+    count: int
+
+
 # --- Wallet -------------------------------------------------------------------
 
 

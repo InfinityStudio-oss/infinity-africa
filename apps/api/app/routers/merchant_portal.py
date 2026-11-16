@@ -36,10 +36,21 @@ from fastapi import (
     status,
 )
 
-from app.auth import get_current_user, hash_api_key, require_own_merchant_role
+from app.auth import (
+    get_current_user,
+    hash_api_key,
+    reject_api_keys,
+    require_own_merchant_role,
+)
 from app.config import get_settings
 from app.core.cache import cache_get, cache_set, merchant_key
-from app.core.errors import APIError, ConflictError, NotFoundError, ValidationAPIError
+from app.core.errors import (
+    APIError,
+    ConflictError,
+    MfaRequiredError,
+    NotFoundError,
+    ValidationAPIError,
+)
 from app.core.feature_flags import (
     require_merchant_api_keys_enabled,
     require_withdrawals_enabled,
@@ -83,6 +94,7 @@ from app.schemas.merchant_notifications import (
 )
 from app.schemas.merchant_portal import (
     CreateOrderMinimalRequest,
+    MerchantActivityPointResponse,
     MerchantDynamicQrCollectionRequest,
     MerchantHostedCheckoutCollectionRequest,
     MerchantInvoiceCreate,
@@ -101,6 +113,11 @@ from app.schemas.merchant_portal import (
 from app.schemas.merchants import MerchantResponse
 from app.schemas.notifications import NotificationResponse
 from app.schemas.payment_links import PaymentLinkResponse
+from app.schemas.payouts import (
+    MerchantPayoutWalletResponse,
+    PayoutResponse,
+    PayoutWalletFundRequest,
+)
 from app.schemas.referrals import MerchantReferralSummaryResponse
 from app.schemas.refunds import RefundResponse
 from app.schemas.reports import ReportRequest, ReportResponse
@@ -144,12 +161,20 @@ from app.services.email import (
 )
 from app.services.hosted_checkout import execute_hosted_checkout_collection
 from app.services.idempotency import run_idempotent
-from app.services.ledger import export_wallet_ledger_rows, list_wallet_ledger
+from app.services.ledger import (
+    export_wallet_ledger_rows,
+    get_payout_wallet_balances,
+    list_wallet_ledger,
+    post_payout_wallet_funding,
+)
 from app.services.merchant_gate import require_approved_merchant
 from app.services.merchant_notifications import (
     get_or_create_notification_settings,
 )
-from app.services.merchant_overview import get_merchant_overview
+from app.services.merchant_overview import (
+    get_merchant_activity_series,
+    get_merchant_overview,
+)
 from app.services.payment_links import (
     batch_collection_counts,
     build_public_url,
@@ -158,6 +183,11 @@ from app.services.payment_links import (
     get_with_effective_status,
     validate_payment_link_for_collection,
     with_effective_status,
+)
+from app.services.payouts import (
+    PayoutSettings,
+    assert_payout_allowed,
+    load_payout_settings,
 )
 from app.services.referrals import issue_referral_code, merchant_referral_summary
 from app.services.report_rendering import render_report
@@ -188,6 +218,9 @@ _API_KEYS_TTL_SECONDS = 60
 _ADMIN_AND_STAFF = (UserRole.MERCHANT_ADMIN, UserRole.MERCHANT_STAFF)
 _ADMIN_ONLY = (UserRole.MERCHANT_ADMIN,)
 _ADMIN_AND_DEVELOPER = (UserRole.MERCHANT_ADMIN, UserRole.DEVELOPER)
+# Reading payouts is reading the account's own money movements, so
+# every merchant-scoped role may; only an admin may fund the wallet.
+_PAYOUT_VIEW_ROLES = (UserRole.MERCHANT_ADMIN, UserRole.MERCHANT_STAFF, UserRole.DEVELOPER)
 
 
 # --- Profile / overview ------------------------------------------------------
@@ -2745,3 +2778,260 @@ def deactivate_my_merchant_user(
             resource_id=user_row_id,
         )
     return APIResponse(data=_merchant_user_response(client, row))
+
+
+# --- payouts, read-only, for the portal --------------------------------------
+#
+# Deliberately separate routes from /v1/payouts rather than a shared
+# handler with two credential types. The partner API answers a payout key
+# and takes its merchant and environment from that key; this surface
+# answers a person and takes both from their membership. Folding them
+# together would mean one handler holding two different ideas of who the
+# caller is, on a money surface - which is how a credential ends up
+# reaching a path nobody meant it to.
+#
+# Nothing here is cached. Payout balances are the numbers a merchant reads
+# to decide whether to fund the wallet or whether a payment went out, and
+# a stale one is a wrong money decision, not a cosmetic lag.
+
+
+def _resolve_payout_environment(
+    client, *, merchant_id: uuid.UUID, requested: str | None
+) -> tuple[str, PayoutSettings]:
+    """Which environment this merchant may look at, decided here.
+
+    The client may ask, but it does not choose: the answer comes from
+    merchant_payout_settings, so a request for `live` from a merchant who
+    only has the sandbox turned on is refused rather than quietly
+    answered with live data. With nothing requested the server picks -
+    live when enabled, otherwise sandbox - so the portal does not have to
+    know the rollout state to render the page.
+    """
+    row = execute_maybe_single(
+        client.table("merchant_payout_settings")
+        .select("*")
+        .eq("merchant_id", str(merchant_id))
+        .maybe_single()
+    )
+    if not row:
+        raise NotFoundError("The Disbursement API is not enabled for this account.")
+
+    allowed = [
+        env
+        for env, flag in (("live", row.get("live_enabled")), ("sandbox", row.get("sandbox_enabled")))
+        if bool(flag)
+    ]
+    if not allowed:
+        raise NotFoundError("The Disbursement API is not enabled for this account.")
+
+    environment = requested or allowed[0]
+    if environment not in allowed:
+        raise ValidationAPIError(
+            f"Payouts are not enabled for the {environment} environment on this account."
+        )
+
+    settings = load_payout_settings(client, merchant_id=merchant_id, environment=environment)
+    return environment, settings
+
+
+@router.get("/payouts", response_model=APIResponse[list[PayoutResponse]])
+def list_my_payouts(
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading payouts in the dashboard"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
+    pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    environment: Annotated[str | None, Query(pattern="^(sandbox|live)$")] = None,
+):
+    client = get_supabase_admin()
+    resolved, _settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=environment
+    )
+    rows, total = list_for_merchant(
+        client,
+        "payouts",
+        merchant_id=membership.merchant_id,
+        pagination=pagination,
+        filters={"environment": resolved},
+    )
+    return APIResponse(
+        data=[PayoutResponse.from_row(row) for row in rows],
+        meta=build_page_meta(pagination, total),
+    )
+
+
+@router.get("/payout-wallet", response_model=APIResponse[MerchantPayoutWalletResponse])
+def read_my_payout_wallet(
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading the payout wallet"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
+    environment: Annotated[str | None, Query(pattern="^(sandbox|live)$")] = None,
+    currency: Annotated[str, Query(pattern="^[A-Z]{3}$")] = "TZS",
+):
+    """Balances plus the state the Fund button needs to render honestly.
+
+    `paused` and the limits come back with the balances because a page
+    showing a healthy balance next to an enabled Fund button, on an
+    account whose payouts are paused, is a page that invites an action it
+    will then refuse.
+    """
+    client = get_supabase_admin()
+    resolved, settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=environment
+    )
+    available, reserved = get_payout_wallet_balances(
+        client, merchant_id=membership.merchant_id, currency=currency, environment=resolved
+    )
+    return APIResponse(
+        data=MerchantPayoutWalletResponse(
+            available=available,
+            reserved=reserved,
+            currency=currency,
+            environment=resolved,
+            paused=settings.paused if settings else True,
+            paused_reason=settings.paused_reason if settings else None,
+            per_payout_limit_tzs=settings.per_payout_limit_tzs if settings else None,
+            daily_limit_tzs=settings.daily_limit_tzs if settings else None,
+            can_fund=membership.role == UserRole.MERCHANT_ADMIN,
+        )
+    )
+
+
+@router.get("/payouts/{payout_id}", response_model=APIResponse[PayoutResponse])
+def read_my_payout(
+    payout_id: uuid.UUID,
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading a payout in the dashboard"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
+):
+    client = get_supabase_admin()
+    row = get_by_id(client, "payouts", payout_id)
+    # One answer for "does not exist" and "is not yours", so the id space
+    # cannot be probed from the portal any more than from the API.
+    if not row or uuid.UUID(row["merchant_id"]) != membership.merchant_id:
+        raise NotFoundError("Payout not found")
+
+    allowed, _settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=row["environment"]
+    )
+    if row["environment"] != allowed:
+        raise NotFoundError("Payout not found")
+    return APIResponse(data=PayoutResponse.from_row(row))
+
+
+@router.post("/payout-wallet/fund", response_model=APIResponse[MerchantPayoutWalletResponse])
+async def fund_my_payout_wallet(
+    payload: PayoutWalletFundRequest,
+    # Declared first so it answers first. Behind the membership dependency
+    # an API-key caller would be told "Missing bearer token", which sends
+    # a partner looking for a token they are not supposed to have.
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Funding the payout wallet"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+):
+    """Move settled funds from Collections into the Payout Wallet.
+
+    This lives on /v1/merchant/* and not beside /v1/payouts, because the
+    prefix is how you know which credential a route takes. A payout key
+    that could top up the pot it draws on would be self-replenishing, and
+    the wallet balance would stop being the ceiling on what a leaked key
+    can cost - which is the entire reason the Disbursement API can run
+    without a person approving each call.
+
+    Step-up MFA on top of the session, because this is the act that sets
+    that ceiling. Everything downstream - the balance check, the rolling
+    limit, the reservation - only constrains money that came through here.
+    """
+    if user.assurance_level != "aal2":
+        raise MfaRequiredError(
+            "Funding the payout wallet requires two-factor authentication. "
+            "Complete the MFA challenge and try again."
+        )
+
+    client = get_supabase_admin()
+    resolved, settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=payload.environment
+    )
+    assert_payout_allowed(settings, environment=resolved)
+
+    async def _handler() -> tuple[int, dict]:
+        transaction = insert_row(
+            client,
+            "transactions",
+            {
+                "merchant_id": str(membership.merchant_id),
+                "reference": generate_reference("PWF"),
+                # No money entered or left the platform; it moved between
+                # two of one merchant's own accounts.
+                "type": "adjustment",
+                "method": "MOBILE_MONEY",
+                "gross_amount": str(payload.amount),
+                "fee_amount": "0",
+                "net_amount": str(payload.amount),
+                "currency": payload.currency,
+                "status": "successful",
+            },
+        )
+        post_payout_wallet_funding(
+            client,
+            transaction_id=uuid.UUID(transaction["id"]),
+            merchant_id=membership.merchant_id,
+            amount=payload.amount,
+            currency=payload.currency,
+            environment=resolved,
+        )
+        write_audit_log(
+            client,
+            actor_id=membership.user_id,
+            actor_type="user",
+            merchant_id=membership.merchant_id,
+            action="payout_wallet.funded",
+            resource_type="transaction",
+            resource_id=uuid.UUID(transaction["id"]),
+            metadata={
+                "amount": str(payload.amount),
+                "currency": payload.currency,
+                "environment": resolved,
+            },
+        )
+        available, reserved = get_payout_wallet_balances(
+            client,
+            merchant_id=membership.merchant_id,
+            currency=payload.currency,
+            environment=resolved,
+        )
+        return status.HTTP_200_OK, MerchantPayoutWalletResponse(
+            available=available,
+            reserved=reserved,
+            currency=payload.currency,
+            environment=resolved,
+            paused=settings.paused if settings else True,
+            paused_reason=settings.paused_reason if settings else None,
+            per_payout_limit_tzs=settings.per_payout_limit_tzs if settings else None,
+            daily_limit_tzs=settings.daily_limit_tzs if settings else None,
+            can_fund=True,
+        ).model_dump(mode="json")
+
+    _status_code, body = await run_idempotent(
+        client,
+        merchant_id=membership.merchant_id,
+        endpoint="POST /v1/merchant/payout-wallet/fund",
+        idempotency_key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        handler=_handler,
+    )
+    return APIResponse(data=MerchantPayoutWalletResponse(**body))
+
+
+@router.get("/activity-series", response_model=APIResponse[list[MerchantActivityPointResponse]])
+def read_my_activity_series(
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading the activity series"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
+    days: Annotated[int, Query(ge=7, le=90)] = 14,
+):
+    """Daily money in and money out, for the Overview charts.
+
+    Dense - every day in the window is present, zeros included - because
+    a chart built from a sparse series closes its own gaps and hides the
+    quiet days, which are usually the ones worth seeing.
+    """
+    client = get_supabase_admin()
+    series = get_merchant_activity_series(client, merchant_id=membership.merchant_id, days=days)
+    return APIResponse(data=[MerchantActivityPointResponse(**point) for point in series])

@@ -6,6 +6,9 @@ import { PageHeader } from "@/components/portal/page-header";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency } from "@/lib/format";
 import type { MerchantOverview } from "@/lib/portal/api";
+import type { MerchantActivityPoint } from "@/lib/portal/types";
+
+import { ActivityChart } from "./activity-chart";
 
 const KYC_TONE: Record<string, "positive-solid" | "pending" | "negative" | "neutral"> = {
   verified: "positive-solid",
@@ -25,7 +28,16 @@ const KYC_LABEL: Record<string, string> = {
  * succeeds — see app/dashboard/overview/page.tsx for the fallback to
  * OverviewWelcome when it doesn't (no real merchant row for this user
  * yet). */
-export function OverviewDashboard({ overview }: { overview: MerchantOverview }) {
+export function OverviewDashboard({
+  overview,
+  activitySeries = [],
+}: {
+  overview: MerchantOverview;
+  /** Defaults to empty so the page still renders if the series call
+   * fails. A dashboard that 500s because a chart could not load is a
+   * worse outcome than a dashboard with no chart. */
+  activitySeries?: MerchantActivityPoint[];
+}) {
   const currency = overview.merchant.currency;
   const kycStatus = overview.merchant.kyc_status;
 
@@ -55,6 +67,12 @@ export function OverviewDashboard({ overview }: { overview: MerchantOverview }) 
         <KpiCard icon="description" label="Unpaid Invoices" value={String(overview.unpaid_invoices)} />
         <KpiCard icon="account_balance" label="Successful Withdrawals" value={String(overview.successful_withdrawals)} />
       </div>
+
+      {activitySeries.length > 0 && (
+        <Card>
+          <ActivityChart series={activitySeries} currency={currency} />
+        </Card>
+      )}
 
       <Card>
         <h3 className="text-lg font-semibold text-on-surface mb-4">Quick Actions</h3>
