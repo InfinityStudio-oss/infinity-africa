@@ -266,7 +266,8 @@ body {
  * differently from the active one — worse than one shared value.
  */
 .admin-sidebar-nav .material-symbols-outlined,
-.portal-sidebar-nav .material-symbols-outlined {
+.portal-sidebar-nav .material-symbols-outlined,
+.section-nav .material-symbols-outlined {
   font-size: 18px;
   display: inline-flex;
   align-items: center;

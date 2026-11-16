@@ -67,7 +67,7 @@ export function ApiCredentialsTabs({ initialTab }: { initialTab?: string }) {
         <nav
           role="tablist"
           aria-label="API Credentials sections"
-          className="flex flex-nowrap gap-0.5 rounded-lg border border-surface-container-highest bg-surface-container-low p-1 overflow-x-auto lg:flex-col lg:gap-1.5 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0"
+          className="section-nav flex flex-nowrap gap-0.5 rounded-lg border border-surface-container-highest bg-surface-container-low p-1 overflow-x-auto lg:flex-col lg:gap-1.5 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0"
         >
           {TABS.map((tab) => (
             <button
@@ -82,7 +82,7 @@ export function ApiCredentialsTabs({ initialTab }: { initialTab?: string }) {
                   : "text-on-surface-variant hover:bg-surface-container-highest lg:border-surface-container-highest lg:bg-surface"
               }`}
             >
-              <Icon name={tab.icon} className="text-[16px] lg:text-[18px] shrink-0" />
+              <Icon name={tab.icon} className="shrink-0" />
               {tab.label}
             </button>
           ))}
