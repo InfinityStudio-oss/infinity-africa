@@ -80,8 +80,8 @@ export function ApiCredentialsOverview({ onSelectTab }: { onSelectTab: (tab: Api
         description="Your API integration at a glance — keys, webhooks, IP protection, and what's left to set up."
         action={
           merchant?.merchant_code ? (
-            <p className="text-xs text-on-surface-variant">
-              ID: <span className="font-mono font-semibold text-on-background">{merchant.merchant_code}</span>
+            <p className="text-xs on-gradient-muted">
+              ID: <span className="font-mono font-semibold on-gradient">{merchant.merchant_code}</span>
             </p>
           ) : undefined
         }

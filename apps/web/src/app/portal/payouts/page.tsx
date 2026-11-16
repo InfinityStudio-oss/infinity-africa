@@ -108,7 +108,7 @@ export default function PayoutsPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Payouts" description="Send money out through the Disbursement API" />
-        <div className="text-sm text-on-surface-variant">Loading…</div>
+        <div className="text-sm on-gradient-muted">Loading…</div>
       </div>
     );
   }

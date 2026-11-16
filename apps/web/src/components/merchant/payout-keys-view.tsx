@@ -77,7 +77,7 @@ export function PayoutKeysView() {
   }
 
   if (loading) {
-    return <div className="text-sm text-on-surface-variant">Loading…</div>;
+    return <div className="text-sm on-gradient-muted">Loading…</div>;
   }
 
   if (noAccess) {
