@@ -22,6 +22,7 @@ Everything here is deliberately inert and boring:
 """
 
 import logging
+import os
 import uuid
 from typing import Annotated, Literal
 from urllib.parse import urlparse
@@ -230,6 +231,53 @@ _REPORTED_SETTINGS = (
     "auto_withdrawal_max_amount_tzs",
     "auto_withdrawal_daily_limit_tzs",
 )
+
+
+def _deployed_revision() -> dict:
+    """Which commit this container was built from.
+
+    Behind Super Admin rather than on /health, and that placement is the
+    whole point. A public build marker was tried and reverted: this
+    repository is public, so a commit hash there lets anyone resolve the
+    running build's exact dependency tree and look up which advisories
+    apply to it. Public liveness and "which build" are different
+    questions with different audiences, and
+    test_health_reveals_nothing_beyond_liveness exists to keep them
+    apart.
+
+    Read from the environment directly rather than through Settings, so
+    a missing marker can never fail validation and take the API down -
+    the way a settings typo did for twenty minutes on 2026-10-16.
+    """
+    for name in (
+        "RAILWAY_GIT_COMMIT_SHA",
+        "VERCEL_GIT_COMMIT_SHA",
+        "RENDER_GIT_COMMIT",
+        "SOURCE_COMMIT",
+        "GIT_COMMIT",
+    ):
+        value = os.environ.get(name)
+        if value:
+            return {"revision": value[:12], "source": name}
+    # None is the honest answer. A platform that injects no marker, and a
+    # deploy predating this field, look the same from in here - and
+    # guessing would defeat the one question this answers.
+    return {"revision": None, "source": None}
+
+
+@router.get("/deployment", response_model=APIResponse[dict])
+def report_deployment(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[None, Depends(_RATE_LIMIT)],
+):
+    """Is a given fix actually running?
+
+    A deployment timestamp does not answer that - redeploying an older
+    revision produces a newer timestamp - so this reports the commit
+    itself. Compare it against `git log` to settle the question without
+    a platform console.
+    """
+    return APIResponse(data=_deployed_revision())
 
 
 @router.get("/settings", response_model=APIResponse[dict])
