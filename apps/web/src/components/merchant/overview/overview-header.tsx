@@ -78,6 +78,7 @@ export function OverviewHeader({
   customEnd,
   onCustomChange,
   canCreatePaymentLink,
+  loading = false,
   now,
 }: {
   businessName: string | null | undefined;
@@ -88,6 +89,11 @@ export function OverviewHeader({
   customEnd: string;
   onCustomChange: (start: string, end: string) => void;
   canCreatePaymentLink: boolean;
+  /** While the merchant is still being fetched, the greeting shows a
+   * placeholder rather than its fallback - "Welcome to InfinityPay" is
+   * what a merchant with no name sees, and flashing it at a merchant who
+   * has one reads as the account being lost. */
+  loading?: boolean;
   /** Injectable so the greeting can be tested at a fixed hour. */
   now?: Date;
 }) {
@@ -101,7 +107,11 @@ export function OverviewHeader({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5 min-w-0">
             <h1 className="on-gradient text-xl sm:text-2xl md:text-[28px] font-bold truncate min-w-0">
-              {name ? `${greetingFor(now)}, ${name}` : "Welcome to InfinityPay"}
+              {loading
+                ? `${greetingFor(now)}…`
+                : name
+                  ? `${greetingFor(now)}, ${name}`
+                  : "Welcome to InfinityPay"}
             </h1>
             {status && (
               <StatusBadge

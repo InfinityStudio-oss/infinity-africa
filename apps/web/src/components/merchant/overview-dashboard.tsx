@@ -6,7 +6,7 @@ import { Card } from "@/components/portal/card";
 import { Icon } from "@/components/portal/icon";
 import { KpiCard } from "@/components/portal/kpi-card";
 import { formatCurrency } from "@/lib/format";
-import { getOverviewReport } from "@/lib/portal/api";
+import { getOverviewReport, getPayoutWallet, readMerchantOverview } from "@/lib/portal/api";
 import type { MerchantOverview } from "@/lib/portal/api";
 import type { MerchantOverviewReport, PayoutWallet } from "@/lib/portal/types";
 
@@ -99,40 +99,30 @@ function buildTasks(overview: MerchantOverview): ChecklistTask[] {
 }
 
 export function OverviewDashboard({
-  overview,
-  overviewError = null,
-  initialReport,
-  initialReportError = null,
-  payoutWallet,
   canCreatePaymentLink = true,
 }: {
-  /** Null when the overview call failed. The page still renders - this
-   * merchant has an account - with the figures that depend on it showing
-   * an error rather than a zero. */
-  overview: MerchantOverview | null;
-  overviewError?: string | null;
-  /** Fetched on the server for the default period, so the first paint
-   * already has the charts rather than a spinner. */
-  initialReport: MerchantOverviewReport | null;
-  initialReportError?: string | null;
-  /** Null when this merchant has no Disbursement API access - the card
-   * is then not rendered at all rather than shown empty. */
-  payoutWallet: PayoutWallet | null;
   canCreatePaymentLink?: boolean;
-}) {
+} = {}) {
+  // Fetched here, on the client, and not by the server component that
+  // renders this. lib/portal/api.ts signs requests with the browser
+  // session; on the server it has none, so every call came back 401 and
+  // the page silently showed the first-run screen instead.
+  const [overview, setOverview] = useState<MerchantOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [payoutWallet, setPayoutWallet] = useState<PayoutWallet | null>(null);
+  const [booting, setBooting] = useState(true);
+
   const currency = overview?.merchant.currency ?? "TZS";
 
   const [range, setRange] = useState<DateRangeKey>("7d");
   const [customStart, setCustomStart] = useState(daysAgo(6));
   const [customEnd, setCustomEnd] = useState(dayInDarEsSalaam());
-  const [report, setReport] = useState<MerchantOverviewReport | null>(initialReport);
-  const [loading, setLoading] = useState(false);
+  const [report, setReport] = useState<MerchantOverviewReport | null>(null);
+  const [loading, setLoading] = useState(true);
   // Null means "no error". An empty report and a failed fetch are
   // different screens: showing zeros for a failed load tells a merchant
   // they took nothing, which may be false.
-  const [error, setError] = useState<string | null>(
-    initialReport ? null : (initialReportError ?? "load-failed"),
-  );
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     async (next: DateRangeKey, start: string, end: string) => {
@@ -152,16 +142,29 @@ export function OverviewDashboard({
     [],
   );
 
-  // Skips the first render: the server already fetched the default
-  // period, and refetching it immediately would make the page flash.
-  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!hydrated) {
-      setHydrated(true);
-      return;
-    }
+    let cancelled = false;
+    void (async () => {
+      const [merchant, wallet] = await Promise.all([
+        readMerchantOverview(),
+        getPayoutWallet(),
+      ]);
+      if (cancelled) return;
+      setOverview(merchant.data);
+      setOverviewError(merchant.error);
+      // noAccess means no Disbursement API for this merchant, so the
+      // card is not rendered at all rather than shown empty.
+      setPayoutWallet(wallet.data);
+      setBooting(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     void load(range, customStart, customEnd);
-  }, [range, customStart, customEnd, hydrated, load]);
+  }, [range, customStart, customEnd, load]);
 
   // No overview means no signal about what is set up, so the
   // checklist is omitted rather than guessed at - showing every task
@@ -173,6 +176,7 @@ export function OverviewDashboard({
       <OverviewHeader
         businessName={overview?.merchant.business_name}
         accountStatus={overview?.merchant.kyc_status}
+        loading={booting}
         range={range}
         onRangeChange={setRange}
         customStart={customStart}
@@ -221,25 +225,25 @@ export function OverviewDashboard({
           // not ask" are different statements, and the first sends a
           // merchant looking for missing money.
           value={overview ? formatCurrency(overview.available_balance, currency) : "—"}
-          caption={overviewError ? "Could not load" : "Current balance"}
+          caption={booting ? "Loading…" : overviewError ? "Could not load" : "Current balance"}
         />
         <KpiCard
           icon="payments"
           label="Successful Collections"
-          value={error ? "—" : formatCurrency(report?.successful_collections ?? "0", currency)}
-          caption={error ? "Could not load" : `${report?.successful_count ?? 0} payments`}
+          value={loading || error || !report ? "—" : formatCurrency(report.successful_collections, currency)}
+          caption={loading ? "Loading…" : error ? "Could not load" : `${report?.successful_count ?? 0} payments`}
         />
         <KpiCard
           icon="request_quote"
           label="Fees Paid"
-          value={error ? "—" : formatCurrency(report?.fees_paid ?? "0", currency)}
-          caption={error ? "Could not load" : "In this period"}
+          value={loading || error || !report ? "—" : formatCurrency(report.fees_paid, currency)}
+          caption={loading ? "Loading…" : error ? "Could not load" : "In this period"}
         />
         <KpiCard
           icon="hourglass_top"
           label="Pending Collections"
-          value={error ? "—" : formatCurrency(report?.pending_collections ?? "0", currency)}
-          caption={error ? "Could not load" : `${report?.pending_count ?? 0} in flight`}
+          value={loading || error || !report ? "—" : formatCurrency(report.pending_collections, currency)}
+          caption={loading ? "Loading…" : error ? "Could not load" : `${report?.pending_count ?? 0} in flight`}
         />
       </div>
 
