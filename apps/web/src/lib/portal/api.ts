@@ -24,7 +24,7 @@ import type {
   Collection,
   Customer,
   Disbursement,
-  MerchantActivityPoint,
+  MerchantOverviewReport,
   Payout,
   PayoutWallet,
   Dispute,
@@ -1039,6 +1039,18 @@ export async function fundPayoutWallet(input: FundPayoutWalletInput): Promise<Pa
   });
 }
 
-export async function getActivitySeries(days = 14): Promise<MerchantActivityPoint[]> {
-  return (await apiGet<MerchantActivityPoint[]>(`/v1/merchant/activity-series?days=${days}`)) ?? [];
+
+export async function getOverviewReport(
+  params: { days?: number } | { startDate: string; endDate: string },
+): Promise<ApiReadResult<MerchantOverviewReport>> {
+  const query =
+    "days" in params && params.days !== undefined
+      ? `days=${params.days}`
+      : `start_date=${encodeURIComponent((params as { startDate: string }).startDate)}&end_date=${encodeURIComponent(
+          (params as { endDate: string }).endDate,
+        )}`;
+  // apiRead, not apiGet: a failed load and an empty period are different
+  // screens, and showing zeros for a failure tells a merchant they took
+  // nothing when they may not have.
+  return apiRead<MerchantOverviewReport>(`/v1/merchant/overview-report?${query}`);
 }

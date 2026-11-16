@@ -44,18 +44,33 @@ class MerchantOverviewResponse(BaseModel):
     total_fees_charged: Decimal
 
 
-class MerchantActivityPointResponse(BaseModel):
-    """One day of the Overview trend.
-
-    `paid_out` is both products together - withdrawals a person approved
-    and payouts an API key sent - because a merchant looking at "what left
-    my account" means all of it, and charting one would show them half.
-    """
-
+class CollectionsSeriesPointResponse(BaseModel):
     date: str
-    collected: Decimal
-    paid_out: Decimal
+    amount: Decimal
     count: int
+
+
+class CollectionsByMethodResponse(BaseModel):
+    method: str
+    amount: Decimal
+    count: int
+
+
+class MerchantOverviewReportResponse(BaseModel):
+    """The Overview charts and their cards, from one pass over one set of
+    rows - so the bar chart's total and the donut's centre cannot drift
+    apart. `pending_collections` is deliberately not date-filtered: it
+    answers "what is still in flight now", not "in the window"."""
+
+    start_date: str
+    end_date: str
+    series: list[CollectionsSeriesPointResponse]
+    by_method: list[CollectionsByMethodResponse]
+    successful_collections: Decimal
+    successful_count: int
+    fees_paid: Decimal
+    pending_collections: Decimal
+    pending_count: int
 
 
 # --- Wallet -------------------------------------------------------------------

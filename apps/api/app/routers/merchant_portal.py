@@ -18,7 +18,7 @@ existing /v1/disbursements/* routes are untouched.
 import logging
 import secrets
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated
 
@@ -59,7 +59,7 @@ from app.core.pagination import PaginationParams, build_page_meta, pagination_pa
 from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.core.references import generate_reference
 from app.core.request_ip import client_ip
-from app.core.time import utc_now_iso
+from app.core.time import dar_es_salaam_date, utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.api_keys import (
     ApiKeyCreate,
@@ -94,10 +94,10 @@ from app.schemas.merchant_notifications import (
 )
 from app.schemas.merchant_portal import (
     CreateOrderMinimalRequest,
-    MerchantActivityPointResponse,
     MerchantDynamicQrCollectionRequest,
     MerchantHostedCheckoutCollectionRequest,
     MerchantInvoiceCreate,
+    MerchantOverviewReportResponse,
     MerchantOverviewResponse,
     MerchantPaymentLinkCreate,
     MerchantPaymentLinkUpdate,
@@ -172,8 +172,8 @@ from app.services.merchant_notifications import (
     get_or_create_notification_settings,
 )
 from app.services.merchant_overview import (
-    get_merchant_activity_series,
     get_merchant_overview,
+    get_merchant_overview_report,
 )
 from app.services.payment_links import (
     batch_collection_counts,
@@ -3020,18 +3020,34 @@ async def fund_my_payout_wallet(
     return APIResponse(data=MerchantPayoutWalletResponse(**body))
 
 
-@router.get("/activity-series", response_model=APIResponse[list[MerchantActivityPointResponse]])
-def read_my_activity_series(
-    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading the activity series"))],
-    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
-    days: Annotated[int, Query(ge=7, le=90)] = 14,
-):
-    """Daily money in and money out, for the Overview charts.
 
-    Dense - every day in the window is present, zeros included - because
-    a chart built from a sparse series closes its own gaps and hides the
-    quiet days, which are usually the ones worth seeing.
+@router.get("/overview-report", response_model=APIResponse[MerchantOverviewReportResponse])
+def read_my_overview_report(
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Reading the overview report"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_PAYOUT_VIEW_ROLES))],
+    start_date: Annotated[date | None, Query()] = None,
+    end_date: Annotated[date | None, Query()] = None,
+    days: Annotated[int | None, Query(ge=1, le=366)] = None,
+):
+    """Collections reporting for the Overview, over a Dar es Salaam date range.
+
+    `days` is the shorthand the Last 7 / Last 30 buttons use and counts
+    back from today inclusive, so "Last 7 days" is today plus the six
+    before it. An explicit start_date/end_date wins over it.
     """
+    today = dar_es_salaam_date(datetime.now(timezone.utc))
+    if start_date is None or end_date is None:
+        window = days or 7
+        end_date = end_date or today
+        start_date = start_date or (end_date - timedelta(days=window - 1))
+    if start_date > end_date:
+        raise ValidationAPIError("The start date cannot be after the end date.")
+
     client = get_supabase_admin()
-    series = get_merchant_activity_series(client, merchant_id=membership.merchant_id, days=days)
-    return APIResponse(data=[MerchantActivityPointResponse(**point) for point in series])
+    report = get_merchant_overview_report(
+        client,
+        merchant_id=membership.merchant_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return APIResponse(data=MerchantOverviewReportResponse(**report))

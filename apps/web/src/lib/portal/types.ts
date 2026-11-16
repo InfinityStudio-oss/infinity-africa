@@ -699,15 +699,36 @@ export interface PayoutWallet {
   can_fund: boolean;
 }
 
-/** GET /v1/merchant/activity-series.
- *
- * Dense: every day in the window is present, zeros included. A sparse
- * series lets a chart close its own gaps, which hides exactly the quiet
- * days worth seeing.
- */
-export interface MerchantActivityPoint {
+
+// --- Overview reporting ------------------------------------------------------
+
+export interface CollectionsSeriesPoint {
   date: string;
-  collected: string;
-  paid_out: string;
+  amount: string;
   count: number;
+}
+
+export interface CollectionsByMethod {
+  method: string;
+  amount: string;
+  count: number;
+}
+
+/** GET /v1/merchant/overview-report.
+ *
+ * `series` and `by_method` are two views of one set of rows, built in a
+ * single pass on the server, so the bar chart's total and the donut's
+ * centre agree by construction. `pending_collections` is deliberately
+ * NOT scoped to the period: it answers "what is in flight now".
+ */
+export interface MerchantOverviewReport {
+  start_date: string;
+  end_date: string;
+  series: CollectionsSeriesPoint[];
+  by_method: CollectionsByMethod[];
+  successful_collections: string;
+  successful_count: number;
+  fees_paid: string;
+  pending_collections: string;
+  pending_count: number;
 }

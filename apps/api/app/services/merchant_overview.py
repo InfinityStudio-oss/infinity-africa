@@ -14,14 +14,19 @@ app/services/ledger.py's post_collection_entries), not per-merchant.
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from supabase import Client
 
 from app.core.cache import cache_get, cache_set, merchant_key
 from app.core.errors import NotFoundError
-from app.core.time import dar_es_salaam_day_start_utc, is_dar_es_salaam_today
+from app.core.time import (
+    dar_es_salaam_date,
+    dar_es_salaam_day_bounds_utc,
+    dar_es_salaam_day_start_utc,
+    is_dar_es_salaam_today,
+)
 from app.services.crud import fetch_all, get_by_id
 from app.services.ledger import get_wallet_balance
 
@@ -217,96 +222,118 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
     }
 
 
-def get_merchant_activity_series(
-    client: Client, *, merchant_id: uuid.UUID, days: int = 14
-) -> list[dict]:
-    """Daily money in and money out, for the Overview charts.
 
-    Returned as a dense series: every day in the window gets a row, zeros
-    included. A sparse series makes a chart lie - the gaps close up and a
-    quiet Sunday renders as if it never happened, which flattens exactly
-    the dips an operator is looking for. This product has already had one
-    false alarm from a window that clipped a day.
+def get_merchant_overview_report(
+    client: Client,
+    *,
+    merchant_id: uuid.UUID,
+    start_date: date,
+    end_date: date,
+) -> dict:
+    """Everything the Overview charts and cards need, from one pass.
 
-    Days are Africa/Dar_es_Salaam calendar days, matching the "today"
-    figures beside the chart. Using UTC here would put the chart and the
-    KPI cards a few hours out of step with each other, which reads as one
-    of them being broken.
+    The daily series and the by-method breakdown are built from the SAME
+    fetched rows rather than two queries with two filters. That is not an
+    optimisation - it is what makes the bar chart's total and the donut's
+    centre agree by construction. Two queries drift the moment one of
+    them grows a condition the other does not, and a merchant comparing
+    the two numbers has no way to tell which is wrong.
 
-    Cached with the other aggregates, never with a balance: these are
-    historical totals, so a minute of staleness costs nothing. The chart
-    is a trend, not a number anyone pays against.
+    **Source is `transactions`, not `collections`.** Two reasons:
+
+    1. Fees are posted there (`fee_amount`), so "Fees Paid" is what was
+       actually charged rather than what a pricing rule would charge now.
+    2. Sandbox collections never get a transactions row, so this is
+       live-only by construction. There is no environment column to
+       filter on and none is needed - adding one would be a filter that
+       does nothing, which reads as a guarantee it is not making.
+
+    Reversals follow the same rule the rest of merchant reporting uses:
+    only `status = 'successful'` counts. A reversed transaction leaves
+    `successful` and stops counting, in the period it was reversed, which
+    is how the wallet balance behaves too.
+
+    Dates are Africa/Dar_es_Salaam calendar days, inclusive at both ends,
+    matching every other merchant-facing date filter.
     """
-    cache_key = merchant_key(merchant_id, "activity-series", str(days))
-    cached = cache_get(cache_key)
-    if cached is not None:
-        return cached["series"]
+    start_utc, end_utc = dar_es_salaam_day_bounds_utc(start_date, end_date)
 
-    now = datetime.now(timezone.utc)
-    window_start = dar_es_salaam_day_start_utc(now) - timedelta(days=days - 1)
-
-    buckets: dict[str, dict] = {}
-    for offset in range(days):
-        day = (window_start + timedelta(days=offset)).date().isoformat()
-        buckets[day] = {"date": day, "collected": Decimal(0), "paid_out": Decimal(0), "count": 0}
-
-    def _bucket_for(value: str | None) -> dict | None:
-        if not value:
-            return None
-        try:
-            when = _parse_dt(value)
-        except ValueError:
-            return None
-        # Shift into Dar es Salaam before taking the calendar date, so a
-        # 01:00 local payment lands on the right day rather than the
-        # previous one.
-        key = (when + timedelta(hours=3)).date().isoformat()
-        return buckets.get(key)
-
-    collections = fetch_all(
-        client,
-        "collections",
-        select="amount, status, created_at",
-        filters={"merchant_id": str(merchant_id)},
+    rows = fetch_all(
+        lambda: client.table("transactions")
+        .select("gross_amount, fee_amount, method, created_at")
+        .eq("merchant_id", str(merchant_id))
+        .eq("type", "collection")
+        .eq("status", "successful")
+        .gte("created_at", start_utc.isoformat())
+        .lt("created_at", end_utc.isoformat())
     )
-    for row in collections:
-        if row.get("status") != "successful":
-            continue
-        bucket = _bucket_for(row.get("created_at"))
-        if bucket is None:
-            continue
-        bucket["collected"] += Decimal(str(row.get("amount") or 0))
-        bucket["count"] += 1
 
-    # Money out is both products: a withdrawal a person approved, and a
-    # payout an API key sent. Charting only one would show a merchant
-    # half of what left their account.
-    for table, amount_field, settled in (
-        ("disbursements", "amount", ("COMPLETED", "PROCESSED", "SUCCESSFUL")),
-        ("payouts", "total_debit", ("successful",)),
-    ):
-        rows = fetch_all(
-            client,
-            table,
-            select=f"{amount_field}, status, created_at",
-            filters={"merchant_id": str(merchant_id)},
-        )
-        for row in rows:
-            if str(row.get("status") or "").upper() not in {s.upper() for s in settled}:
-                continue
-            bucket = _bucket_for(row.get("created_at"))
-            if bucket is None:
-                continue
-            bucket["paid_out"] += Decimal(str(row.get(amount_field) or 0))
-
-    series = [
-        {
-            "date": bucket["date"],
-            "collected": str(bucket["collected"]),
-            "paid_out": str(bucket["paid_out"]),
-            "count": bucket["count"],
+    # A dense day-by-day series: every calendar day in the window, zeros
+    # included. A sparse one lets the chart close its own gaps, which
+    # hides the quiet days - usually the ones worth seeing.
+    buckets: dict[str, dict] = {}
+    cursor = start_date
+    while cursor <= end_date:
+        buckets[cursor.isoformat()] = {
+            "date": cursor.isoformat(),
+            "amount": Decimal(0),
+            "count": 0,
         }
-        for bucket in buckets.values()
-    ]
-    cache_set(cache_key, {"series": series}, _SERIES_TTL_SECONDS)
-    return series
+        cursor += timedelta(days=1)
+
+    by_method: dict[str, dict] = {}
+    total_amount = Decimal(0)
+    total_fees = Decimal(0)
+
+    for row in rows:
+        amount = Decimal(str(row.get("gross_amount") or 0))
+        total_amount += amount
+        total_fees += Decimal(str(row.get("fee_amount") or 0))
+
+        day = dar_es_salaam_date(row["created_at"]).isoformat()
+        bucket = buckets.get(day)
+        if bucket is not None:
+            bucket["amount"] += amount
+            bucket["count"] += 1
+
+        method = row.get("method") or "UNKNOWN"
+        entry = by_method.setdefault(method, {"method": method, "amount": Decimal(0), "count": 0})
+        entry["amount"] += amount
+        entry["count"] += 1
+
+    pending = (
+        client.table("transactions")
+        .select("gross_amount", count="exact")
+        .eq("merchant_id", str(merchant_id))
+        .eq("type", "collection")
+        .in_("status", list(_PENDING_TRANSACTION_STATUSES))
+        .execute()
+    )
+    pending_rows = pending.data or []
+    pending_amount = sum(
+        (Decimal(str(row.get("gross_amount") or 0)) for row in pending_rows), Decimal(0)
+    )
+
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "series": [
+            {"date": b["date"], "amount": str(b["amount"]), "count": b["count"]}
+            for b in buckets.values()
+        ],
+        # Biggest first: a donut legend ordered by size is read top-down
+        # as a ranking, which is the question being asked of it.
+        "by_method": [
+            {"method": e["method"], "amount": str(e["amount"]), "count": e["count"]}
+            for e in sorted(by_method.values(), key=lambda e: e["amount"], reverse=True)
+        ],
+        "successful_collections": str(total_amount),
+        "successful_count": sum(b["count"] for b in buckets.values()),
+        "fees_paid": str(total_fees),
+        # Pending is deliberately NOT date-filtered. "What is still in
+        # flight" is a question about now, not about the reporting window
+        # - a merchant narrowing to last week does not stop caring about
+        # a payment that is pending today.
+        "pending_collections": str(pending_amount),
+        "pending_count": pending.count or len(pending_rows),
+    }
