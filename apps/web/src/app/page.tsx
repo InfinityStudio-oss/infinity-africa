@@ -77,33 +77,34 @@ export default function Home() {
       <Header />
 
       <main>
-        {/* Hero */}
-        <section className="relative pt-10 md:pt-14 pb-14 px-4 md:px-10 max-w-[1280px] mx-auto overflow-hidden">
+        {/* Hero — full-bleed brand gradient, light ink. */}
+        <section className="hero-gradient-surface">
+        <div className="relative pt-10 md:pt-14 pb-16 px-4 md:px-10 max-w-[1280px] mx-auto overflow-hidden">
           <div className="relative z-10 grid md:grid-cols-2 gap-14 items-center">
             <div className="space-y-8">
-              <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold text-on-surface leading-tight tracking-tight">
-                Collect Payments. <span className="text-primary-container">Create Pay by Links.</span> Get Paid
+              <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold on-gradient leading-tight tracking-tight">
+                Collect Payments. <span className="text-[#bcd6f7]">Create Pay by Links.</span> Get Paid
                 Faster.
               </h1>
-              <p className="text-lg text-on-surface-variant max-w-xl leading-relaxed">
+              <p className="text-lg on-gradient-muted max-w-xl leading-relaxed">
                 InfinityPay helps business and services providers accept mobile money payments, create secure
                 Pay by Links, generate invoices, and integrate payment collection into websites, mobile apps,
                 ecommerce platforms, and web apps.
               </p>
-              <p className="text-sm text-on-surface-variant/80 max-w-xl">
+              <p className="text-sm text-[#b9cbe2] max-w-xl">
                 Business and services providers can manage collected funds from their portal after verification.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
                   href="/create-account"
-                  className="bg-primary-container text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-all shadow-ambient-lg w-full sm:w-auto text-center inline-flex items-center justify-center gap-2"
+                  className="bg-surface text-on-surface text-sm font-semibold px-8 py-3.5 rounded-lg hover:opacity-90 transition-all shadow-ambient-lg w-full sm:w-auto text-center inline-flex items-center justify-center gap-2"
                 >
                   Start Integration
                   <Icon name="arrow_forward" className="text-[18px]" />
                 </Link>
                 <Link
                   href="/api-docs"
-                  className="bg-surface border border-outline-variant text-on-surface text-sm font-medium px-8 py-3.5 rounded-lg hover:border-primary-container hover:text-primary-container transition-all w-full sm:w-auto text-center"
+                  className="border border-white/35 on-gradient text-sm font-medium px-8 py-3.5 rounded-lg hover:bg-white/10 transition-all w-full sm:w-auto text-center"
                 >
                   View API Docs
                 </Link>
@@ -174,6 +175,7 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
         </section>
 
         {/* Trust strip */}

@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  /* InfinityPay palette: muted slate-blue page, pale blue-white cards,
-     deep blue ink, teal accents.
+  /* InfinityPay palette: deep blue page, pale blue-white cards, deep
+     blue ink, teal accents. Taken from the reference dashboard the
+     owner supplied on 2026-11-17 - sampled from the image rather than
+     eyeballed: its sidebar runs #2f6e94 at the top to #253154 at the
+     bottom, its page #32516c to #8aacc6, its cards around #aec4da.
+
+     Two deliberate departures from that sample. The cards here stay
+     near-white rather than the sampled #aec4da, which is the reference
+     image's compression blending card edges into the background. And
+     the gradient's bright end is capped at #35648f: the reference
+     brightens to #8aacc6, where white text falls to 2.39:1, which it
+     survives only because it puts text on the dark top-left and nowhere
+     else. Our pages put headings further down, and that is exactly how
+     the headings went invisible once already.
      ---------------------------------------------------------------
      On :root, not scoped to one shell, because the merchant portal,
      Super Admin and the public site are one product and were asked to
@@ -19,8 +31,8 @@
 
   /* Deep navy is the action colour, as in the reference - a dark,
      quiet button rather than a bright accent. */
-  --color-primary: #1f3157;
-  --color-primary-container: #2d4f91;
+  --color-primary: #1e3a5f;
+  --color-primary-container: #2c5680;
   --color-on-primary: #ffffff;
   --color-on-primary-container: #ffffff;
   --color-primary-fixed: #d9e4f7;
@@ -64,12 +76,12 @@
 
   /* The sidebar is a deeper slate than the page, so it reads as a panel
      rather than a continuation of the background. */
-  --color-sidebar: #2b3a55;
-  --color-sidebar-strong: #1d2840;
+  --color-sidebar: #2c5a84;
+  --color-sidebar-strong: #1b2847;
   --color-sidebar-text: #ffffff;
-  --color-sidebar-text-muted: #a9b8d0;
+  --color-sidebar-text-muted: #c3d4e8;
   --color-sidebar-hover: rgba(255, 255, 255, 0.08);
-  --color-sidebar-active-bg: #3d5a8a;
+  --color-sidebar-active-bg: #3b6fa5;
   --color-sidebar-active-text: #ffffff;
   --color-sidebar-focus: #9dc0ff;
 
@@ -202,8 +214,8 @@ body {
    --color-background fallback so a browser that ignores the gradient
    still gets readable paper rather than white. */
 .app-gradient-surface {
-  background-color: #44566f;
-  background-image: linear-gradient(145deg, #44566f 0%, #476175 55%, #426c74 100%);
+  background-color: #24476e;
+  background-image: linear-gradient(135deg, #1e3a5f 0%, #24476e 40%, #2c5680 75%, #35648f 100%);
   background-attachment: fixed;
 }
 
@@ -221,6 +233,20 @@ body {
 .admin-shell-scope aside :focus-visible {
   outline: 2px solid var(--color-sidebar-focus);
   outline-offset: 2px;
+}
+
+/* The marketing hero carries the brand gradient; the rest of the public
+   site stays light. Its own, shorter sweep rather than the app's: the
+   app gradient brightens to #35648f by its far end, and a hero is wide
+   enough to reach that, which would put the headline over a background
+   too light for white text. Both ends here are safe (11.5:1 and 7.6:1).
+
+   Body copy further down the page keeps dark ink on light sections -
+   marketing pages put long text directly on the background, and that is
+   the shape that went invisible in the portal. */
+.hero-gradient-surface {
+  background-color: #1e3a5f;
+  background-image: linear-gradient(120deg, #1e3a5f 0%, #24476e 55%, #2c5680 100%);
 }
 
 /* White ink where content sits directly on the gradient rather than on a

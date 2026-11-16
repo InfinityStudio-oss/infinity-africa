@@ -48,9 +48,13 @@ function label(method: string): string {
 }
 
 function compactTotal(value: number, currency: string): string {
+  // Everything is abbreviated, including small amounts. The full
+  // formatCurrency form ("TZS 1,000.00") is wider than the ring's hole
+  // and collided with it; the exact figure is in the legend directly
+  // below, so the centre only has to carry the magnitude.
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M ${currency}`;
   if (value >= 10_000) return `${Math.round(value / 1_000)}k ${currency}`;
-  return formatCurrency(String(value), currency);
+  return `${Math.round(value).toLocaleString("en-US")} ${currency}`;
 }
 
 export function CollectionsDonut({
@@ -110,7 +114,7 @@ export function CollectionsDonut({
         </p>
         <div className="mt-8 flex items-center justify-center">
           <div
-            className="w-36 h-36 rounded-full border-[18px] border-surface-container-highest"
+            className="w-36 h-36 rounded-full border-[11px] border-surface-container-highest"
             aria-hidden
           />
         </div>
@@ -149,14 +153,18 @@ export function CollectionsDonut({
           role="img"
           aria-labelledby={`${titleId} ${summaryId}`}
         >
+          {/* The track. Without it a merchant who only uses one method
+              sees a filled circle, which reads as a pie rather than a
+              proportion of anything. */}
+          <div className="absolute inset-0 rounded-full" style={{ background: "#e4edf8" }} aria-hidden />
           <div
             className="absolute inset-0 rounded-full"
             style={{ background: `conic-gradient(${stops.join(", ")})` }}
           />
           {/* The hole, in the card's own colour, with the total in it. */}
-          <div className="absolute inset-[22%] rounded-full bg-surface flex flex-col items-center justify-center">
+          <div className="absolute inset-[14%] rounded-full bg-surface flex flex-col items-center justify-center">
             <span className="text-[11px] text-on-surface-variant">Total</span>
-            <span className="text-base font-bold text-on-surface tabular-nums leading-tight text-center px-1">
+            <span className="text-lg font-bold text-on-surface tabular-nums leading-tight text-center px-2">
               {compactTotal(total, currency)}
             </span>
           </div>
@@ -189,7 +197,7 @@ export function CollectionsDonut({
                 </span>
               </span>
               <span className="tabular-nums text-on-surface-variant shrink-0">{share}%</span>
-              <span className="hidden sm:block tabular-nums text-on-surface font-medium text-right min-w-0 truncate">
+              <span className="hidden sm:block tabular-nums text-on-surface font-medium text-right shrink-0">
                 {formatCurrency(String(slice.amount), currency)}
               </span>
             </>

@@ -22,6 +22,11 @@ import type { CollectionsSeriesPoint } from "@/lib/portal/types";
 // minimum, and deliberately not darker: a bar chart is a field of large
 // shapes, and a button-weight fill makes it shout.
 const BAR = "#5b89d6";
+// The most recent day, picked out the way the reference does. It is the
+// one bar a merchant looks for first, and a second weight says so
+// without needing a label.
+const BAR_LATEST = "#2c5680";
+const GRID = "#dbe5f2";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
@@ -122,10 +127,14 @@ export function CollectionsBarChart({
             </div>
 
             <div
-              className="flex-1 flex items-end gap-1.5 h-64 border-b border-outline-variant"
+              className="relative flex-1 flex items-end gap-1.5 h-64 border-b border-outline-variant"
               role="img"
               aria-labelledby={`${titleId} ${summaryId}`}
             >
+              {/* Two recessive gridlines, at the same values the axis
+                  already labels. Decorative, so hidden from the tree. */}
+              <div className="absolute inset-x-0 top-0 border-t" style={{ borderColor: GRID }} aria-hidden />
+              <div className="absolute inset-x-0 top-1/2 border-t" style={{ borderColor: GRID }} aria-hidden />
               {points.map((point, index) => {
                 const isHovered = hovered === index;
                 return (
@@ -156,13 +165,13 @@ export function CollectionsBarChart({
                       </div>
                     )}
                     <div
-                      className="w-2/3 max-w-[22px] rounded-t transition-opacity"
+                      className="w-3/4 min-w-[5px] max-w-[26px] rounded-t-md transition-opacity"
                       style={{
                         // A zero day draws nothing. A floor-height stub
                         // would read as "a little came in", which is a
                         // different claim.
                         height: `${point.amount > 0 ? Math.max((point.amount / ceiling) * 100, 1.5) : 0}%`,
-                        background: BAR,
+                        background: index === points.length - 1 ? BAR_LATEST : BAR,
                         opacity: hovered === null || isHovered ? 1 : 0.5,
                       }}
                     />
