@@ -42,6 +42,7 @@ from app.routers import (
     onboarding,
     pay_by_link,
     payment_links,
+    payouts,
     public_disputes,
     public_inquiries,
     system,
@@ -552,6 +553,11 @@ app.include_router(collections.router, prefix="/v1")
 app.include_router(collections.initiate_router, prefix="/v1")
 app.include_router(collections_api.router, prefix="/v1")
 app.include_router(disbursements.router, prefix="/v1")  # /v1/disbursements — fully flat
+# /v1/payouts (payout API keys) and /v1/payout-wallet (dashboard only).
+# Separate routers because they take different credentials on purpose:
+# a key that could fund the wallet it spends from would be unbounded.
+app.include_router(payouts.router, prefix="/v1")
+app.include_router(payouts.wallet_router, prefix="/v1")
 app.include_router(transactions.router, prefix="/v1")
 app.include_router(transactions.by_reference_router, prefix="/v1")
 app.include_router(webhooks.router, prefix="/v1")

@@ -376,8 +376,13 @@ def test_a_zero_or_negative_amount_is_refused(fake_client):
 
 
 def test_a_created_payout_is_already_funded(fake_client):
-    """No window exists where the worker could find a queued payout with
-    nothing reserved behind it."""
+    """No window exists where the worker could find a funded payout with
+    nothing reserved behind it.
+
+    `processing` is the marker: authorize_payout sets it in the same
+    transaction as the reservation, so the status and the money are
+    always in step and a second authorisation cannot reserve again.
+    """
     mid, ben = _ready(fake_client, funded="50000.00")
 
     payout = create_payout(
@@ -390,7 +395,7 @@ def test_a_created_payout_is_already_funded(fake_client):
         api_key_id=None,
     )
 
-    assert payout["status"] == "queued"
+    assert payout["status"] == "processing"
     assert _bal(fake_client, mid, "payout_reserved") == Decimal("20000.00")
 
 
@@ -579,7 +584,7 @@ def test_payouts_inside_the_daily_limit_are_allowed(fake_client):
             currency=CUR,
             api_key_id=None,
         )
-        assert payout["status"] == "queued"
+        assert payout["status"] == "processing"
 
     assert _bal(fake_client, mid, "payout_reserved") == Decimal("10000.00")
 
@@ -676,7 +681,7 @@ def test_refunded_payouts_do_not_count_against_the_limit(fake_client):
         currency=CUR,
         api_key_id=None,
     )
-    assert allowed["status"] == "queued"
+    assert allowed["status"] == "processing"
 
 
 def test_in_flight_payouts_do_count_against_the_limit(fake_client):
@@ -738,7 +743,7 @@ def test_the_limit_is_per_environment(fake_client):
         currency=CUR,
         api_key_id=None,
     )
-    assert live["status"] == "queued"
+    assert live["status"] == "processing"
 
 
 def test_the_limit_is_per_merchant(fake_client):
@@ -754,7 +759,7 @@ def test_the_limit_is_per_merchant(fake_client):
         amount=Decimal("5000.00"), currency=CUR, api_key_id=None,
     )
 
-    assert other["status"] == "queued"
+    assert other["status"] == "processing"
 
 
 def test_no_daily_limit_configured_means_no_daily_limit(fake_client):
@@ -768,4 +773,4 @@ def test_no_daily_limit_configured_means_no_daily_limit(fake_client):
             fake_client, merchant_id=mid, environment="live", beneficiary_id=ben,
             amount=Decimal("10000.00"), currency=CUR, api_key_id=None,
         )
-        assert payout["status"] == "queued"
+        assert payout["status"] == "processing"

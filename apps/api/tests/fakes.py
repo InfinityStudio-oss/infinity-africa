@@ -538,7 +538,7 @@ class _FakeTable:
             ref = (row.get("provider_reference") or "").strip()
             if ref and any((r.get("provider_reference") or "") == ref for r in self.rows):
                 index = f"{self.name}_provider_reference_key"
-                error = Exception(  # noqa: TRY002
+                error = Exception(
                     f'duplicate key value violates unique constraint "{index}"'
                 )
                 error.code = "23505"
@@ -1329,9 +1329,17 @@ class FakeSupabaseClient:
             _finish("insufficient_funds", "The payout wallet has never been funded.")
             return _Result({"outcome": "insufficient_funds", "reason": "no payout wallet"})
 
+        # Claim the payout before reserving. Without this the row stays
+        # `queued` with its funds already held, and a second call
+        # reserves the same money again.
+        row["status"] = "processing"
+
         # The transactions row the entries hang off, exactly as the SQL
         # does it. ledger_entries.transaction_id is a foreign key, so a
-        # payout id will not do.
+        # payout id will not do. gross is the whole wallet debit and net
+        # is what the beneficiary receives: the real table has a
+        # net = gross - fee check constraint, which this fake does not
+        # enforce, so getting it wrong here is silent.
         transaction = self.table("transactions")._table.insert(
             {
                 "merchant_id": row["merchant_id"],
@@ -1339,7 +1347,7 @@ class FakeSupabaseClient:
                 "type": "payout",
                 "method": "MOBILE_MONEY",
                 "payout_id": row["id"],
-                "gross_amount": str(row["amount"]),
+                "gross_amount": str(total_debit),
                 "fee_amount": str(row["fee_amount"]),
                 "net_amount": str(row["amount"]),
                 "currency": row["currency"],
@@ -1368,8 +1376,13 @@ class FakeSupabaseClient:
                     },
                 ]
             )
-        except Exception as exc:  # noqa: BLE001 - mirrors the SQL exception block
+        except Exception as exc:
             if "INSUFFICIENT_BALANCE" in str(exc):
+                # The SQL does this insert inside the block the handler
+                # rolls back, so a refusal leaves no transactions row.
+                # Here the rollback has to be explicit.
+                transactions = self.table("transactions")._table
+                transactions.rows = [r for r in transactions.rows if r["id"] != transaction["id"]]
                 _finish(
                     "insufficient_funds",
                     "Payout wallet balance could not cover this payout.",
@@ -1430,7 +1443,7 @@ class FakeSupabaseClient:
             raise Exception(  # noqa: TRY002 - mirrors a raw Postgres FK error
                 'insert or update on table "ledger_entries" violates foreign key '
                 'constraint "ledger_entries_transaction_id_fkey". '
-                f"Key (transaction_id)=({sorted(missing)[0]}) is not present in table "
+                f"Key (transaction_id)=({min(missing)}) is not present in table "
                 '"transactions".'
             )
 

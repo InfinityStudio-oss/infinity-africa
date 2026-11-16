@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.ip_allowlist import _validate_ip_or_cidr
 
@@ -69,6 +69,12 @@ class InlineIpAllowlistEntry(BaseModel):
 
 
 class ApiKeyCreate(BaseModel):
+    # Unknown fields are refused rather than dropped. Pydantic ignores
+    # extras by default, so a client sending a field this model does not
+    # declare gets a 201 and no hint that it was discarded - which, on a
+    # credential, reads as "accepted" for something that never applied.
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     environment: str = Field(default="sandbox", pattern="^(sandbox|live)$")
     # Defaults to standard, so every existing caller and every stored
@@ -156,6 +162,18 @@ class ApiKeyCreate(BaseModel):
 
 
 class ApiKeyRename(BaseModel):
+    """The only field of an issued key a merchant may change.
+
+    extra="forbid" is the point of this model, not an afterthought. The
+    route writes {"name": ...} and nothing else, so a stray `scopes` or
+    `key_type` in the body could never have been written - but it was
+    silently dropped, and a caller who believed they had narrowed a key's
+    scopes would have been wrong with no way to tell. Refusing the field
+    says so.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=100)
 
 
@@ -165,6 +183,8 @@ class ApiKeyIpWhitelistUpdate(BaseModel):
     the key to already have at least one non-rejected linked allowlist
     entry — add IPs first via POST /v1/merchant/ip-allowlist with this
     key's id, then flip this."""
+
+    model_config = ConfigDict(extra="forbid")
 
     ip_whitelist_enabled: bool
 

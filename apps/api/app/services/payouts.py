@@ -32,7 +32,7 @@ The shape of the decision, in the order it has to happen:
   the same trap.
 
 Nothing here dispatches to a provider. A payout leaves this module
-`queued` and funded; the worker is what talks to Selcom.
+`processing` and funded; the worker is what talks to Selcom.
 """
 
 from __future__ import annotations
@@ -182,10 +182,12 @@ def create_payout(
 ) -> dict:
     """Validate, price, reserve and queue - or change nothing at all.
 
-    Returns the created payout row, `queued` and funded. The reservation
-    is posted through the same locked, no-negative ledger function every
-    other money movement uses, so a payout that gets a row is a payout
-    whose funds are already held.
+    Returns the created payout row, `processing` and funded. The
+    status and the reservation are set in one transaction, so a second
+    authorisation of the same payout cannot hold the money twice. The
+    reservation is posted through the same locked, no-negative ledger
+    function every other money movement uses, so a payout that gets a
+    row is a payout whose funds are already held.
     """
     settings = assert_payout_allowed(
         load_payout_settings(client, merchant_id=merchant_id, environment=environment),

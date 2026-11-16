@@ -37,6 +37,7 @@ from app.auth import (
     authorize_merchant_action,
     get_authenticated_caller,
     require_api_key_scope,
+    require_dashboard_session,
 )
 from app.core.errors import NotFoundError
 from app.core.feature_flags import require_withdrawals_enabled
@@ -75,19 +76,27 @@ async def _create_disbursement(
 ) -> APIResponse[DisbursementResponse]:
     require_withdrawals_enabled()
     authorize_merchant_action(caller, payload.merchant_id, *_DASHBOARD_ROLES)
-    # Every other API-key surface gates on a scope - collections,
-    # invoices, payment_links, transactions all call this. This one did
-    # not, so authenticating with ANY active key was enough to move money
-    # out of a merchant's balance: authorize_merchant_action only proves
-    # the key belongs to the merchant, never what it is allowed to do. A
-    # key issued for collections could request a payout, and with
-    # withdrawal automation on it would not wait for a person.
+    # Two gates, in this order, and the order is the message.
     #
-    # Deliberately `disbursements:write`, matching the resource:write
-    # convention the other scopes use, and deliberately NOT the
-    # `disbursements:create` scope the prefunded payout API uses. Those
-    # are different pots of money: this route draws from the merchant's
-    # Collections balance, so a payout key must not reach it.
+    # This route authenticated with ANY active key and no scope check at
+    # all, so a key issued for collections could move money out of a
+    # merchant's balance - authorize_merchant_action only proves the key
+    # belongs to the merchant, never what it may do. That was first closed
+    # with a scope nothing can be granted, which worked but located the
+    # rule in app/schemas/api_keys.py: add `disbursements:write` to the
+    # grantable list by accident and this route silently reopens.
+    #
+    # So the rule is stated here instead, and stated first. A key gets
+    # "not available to API keys", which is true and actionable, rather
+    # than "missing scope disbursements:write", which sends a merchant
+    # looking for a scope that does not exist for them. The scope check
+    # stays behind it as the second layer.
+    #
+    # `disbursements:write` is deliberately NOT the `disbursements:create`
+    # scope the prefunded payout API uses. Different pots: this route
+    # draws on the merchant's Collections balance, so a payout key must
+    # not reach it even if the ban above were ever lifted.
+    require_dashboard_session(caller, action="Requesting a withdrawal")
     require_api_key_scope(caller, "disbursements:write")
     client = get_supabase_admin()
 
@@ -170,6 +179,7 @@ def list_disbursements(
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
 ):
     authorize_merchant_action(caller, merchant_id, *_DASHBOARD_ROLES)
+    require_dashboard_session(caller, action="Listing withdrawals")
     require_api_key_scope(caller, "disbursements:read")
     client = get_supabase_admin()
     rows, total = list_for_merchant(client, "disbursements", merchant_id=merchant_id, pagination=pagination)
@@ -192,5 +202,6 @@ def get_disbursement(
     # row should be told it does not own the row, and a caller who owns it
     # but lacks the scope should be told about the scope. Reversing these
     # would let scope probing reveal which ids exist.
+    require_dashboard_session(caller, action="Reading a withdrawal")
     require_api_key_scope(caller, "disbursements:read")
     return APIResponse(data=DisbursementResponse(**row))

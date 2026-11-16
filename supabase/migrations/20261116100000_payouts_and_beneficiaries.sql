@@ -171,7 +171,7 @@ create index if not exists payouts_pending_work_idx
 comment on table public.payouts is
   'Payouts sent from a merchant''s prefunded Payout Wallet via the Disbursement API. Separate from public.disbursements, which are withdrawals from the Collections balance - different money, different authority, different lifecycle.';
 comment on column public.payouts.status is
-  'needs_reconciliation means the outcome is unknown and the reserve is STILL HELD. Nothing releases funds on a timeout.';
+  'queued means created but not yet authorized and holding nothing; processing means authorize_payout has reserved the funds, so only a processing payout may be dispatched. needs_reconciliation means the outcome is unknown and the reserve is STILL HELD. Nothing releases funds on a timeout.';
 comment on column public.payouts.provider_reference is
   'Our stable handle, generated once at creation and used as the provider idempotency key, so a retry after an ambiguous dispatch asks about the same payout rather than starting another.';
 
@@ -395,27 +395,57 @@ begin
     return jsonb_build_object('outcome', 'insufficient_funds', 'reason', 'no payout wallet');
   end if;
 
-  -- The transactions row the ledger entries hang off. Created here, in
-  -- the same transaction as the reservation, so a payout can never have
-  -- entries without a parent or a parent without entries.
-  insert into public.transactions (
-    merchant_id, reference, type, method, payout_id,
-    gross_amount, fee_amount, net_amount, currency, status
-  ) values (
-    v_row.merchant_id,
-    v_row.provider_reference,
-    'payout',
-    'MOBILE_MONEY',
-    v_row.id,
-    v_row.amount,
-    v_row.fee_amount,
-    v_row.amount,
-    v_row.currency,
-    'processing'
-  )
-  returning id into v_transaction_id;
+  -- Claim the payout before reserving anything.
+  --
+  -- Without this the row stayed `queued` after its funds were reserved,
+  -- so a second authorisation - a retry, a duplicate worker tick, a
+  -- client resending - passed the `queued` guard above and reserved the
+  -- same money twice. Nothing caught it but the unique index on
+  -- transactions.reference, which turned a double spend into an
+  -- unhandled exception rather than a refusal, and only because the
+  -- provider reference happens to be reused as the transaction
+  -- reference. `processing` is also what tells the worker which queued
+  -- payouts are actually funded; it already counts against the rolling
+  -- limit, so the sum above is unchanged.
+  update public.payouts
+  set status = 'processing'
+  where id = v_row.id;
 
+  -- The transactions row and the entries that hang off it, inside one
+  -- block so that catching a refusal rolls back both.
+  --
+  -- The insert used to sit outside this block. A refused reservation
+  -- then left the row behind: a transactions row of type `payout` stuck
+  -- in `processing`, with no ledger entry that will ever balance it,
+  -- against a payout the same handler had just marked `cancelled`. It
+  -- inflated the merchant's history with a payment that never happened
+  -- and is exactly the shape of row a reconciliation sweep picks up and
+  -- tries to finish.
+  --
+  -- gross is the whole wallet debit and net is what the beneficiary
+  -- receives, because transactions_net_amount_consistent requires
+  -- net = gross - fee. Setting gross to the amount and net to the amount
+  -- as well made every payout carrying a fee fail that check outright,
+  -- which is to say every real payout: quote_fee returns zero only for a
+  -- merchant on a zero-fee rule.
   begin
+    insert into public.transactions (
+      merchant_id, reference, type, method, payout_id,
+      gross_amount, fee_amount, net_amount, currency, status
+    ) values (
+      v_row.merchant_id,
+      v_row.provider_reference,
+      'payout',
+      'MOBILE_MONEY',
+      v_row.id,
+      v_row.total_debit,
+      v_row.fee_amount,
+      v_row.amount,
+      v_row.currency,
+      'processing'
+    )
+    returning id into v_transaction_id;
+
     perform public.post_ledger_entries(jsonb_build_array(
       jsonb_build_object(
         'transaction_id', v_transaction_id,

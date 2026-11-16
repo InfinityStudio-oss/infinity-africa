@@ -1940,6 +1940,15 @@ def rotate_my_api_key(
             "key_last4": last4,
             "hashed_key": hash_api_key(plaintext),
             "scopes": old_row["scopes"],
+            # Carried forward, because the scopes are. Without it the new
+            # row took the column default of 'standard' while keeping the
+            # old key's payout scopes, which is not just a mislabelled
+            # row: assert_payout_key_allowed() returns early for anything
+            # that is not key_type 'payout', so the replacement never got
+            # checked against merchant_payout_settings. Rotating was
+            # therefore a way to mint a working payout credential for a
+            # merchant whose payouts had since been turned off.
+            "key_type": old_row.get("key_type", "standard"),
             "status": "active",
             "ip_whitelist_enabled": old_row.get("ip_whitelist_enabled", False),
             "continue_without_ip_whitelist": old_row.get("continue_without_ip_whitelist", True),

@@ -35,11 +35,12 @@ as untested. CI provides a throwaway Postgres service for it.
 
 import os
 import pathlib
-import re
 import threading
 import uuid
 
 import pytest
+
+from tests.sql_statements import replayable_statements
 
 psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 not installed; locking checks skipped")
 
@@ -137,11 +138,16 @@ def _guard_against_a_real_database(url: str) -> None:
 
 
 def _statements(path: pathlib.Path) -> str:
-    """The create/comment/grant statements from a migration, skipping its
-    prose. Dollar-quoted function bodies are kept whole."""
-    text = path.read_text(encoding="utf-8")
-    pattern = r"(create (?:or replace )?(?:function|table)[\s\S]*?(?:\$\$;|\);))|(comment on [\s\S]*?;)|((?:revoke|grant)[^;]*;)"
-    return "\n".join(match.group(0) for match in re.finditer(pattern, text))
+    """The DDL and grants from a migration, skipping its prose.
+
+    This used to be a regular expression that ended every statement at
+    the first semicolon. Two of these migrations contain a semicolon
+    inside a comment string, so the extracted SQL was malformed and every
+    test in this file errored during setup - which reads as "20 errors",
+    not as "the locking is untested", and is easy to scroll past. The
+    lexer in tests/sql_statements.py knows which semicolons terminate.
+    """
+    return replayable_statements(path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

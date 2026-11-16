@@ -103,7 +103,7 @@ def test_collections_key_cannot_request_a_payout(fake_client, route):
     )
 
     assert response.status_code == 403
-    assert "disbursements:write" in response.json()["error"]["message"]
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 @pytest.mark.parametrize("route", CREATE_ROUTES)
@@ -132,9 +132,20 @@ def test_the_payout_scope_is_not_grantable_from_the_portal():
 
 
 @pytest.mark.parametrize("route", CREATE_ROUTES)
-def test_a_key_holding_the_scope_is_allowed_through(fake_client, route):
-    """The gate must be a scope check, not a blanket ban on API keys -
-    otherwise it is untestable that the right key still works."""
+def test_no_api_key_reaches_this_route_whatever_it_holds(fake_client, route):
+    """A blanket ban, not a scope check - and this reverses an earlier
+    decision here, so it is worth saying why.
+
+    The first fix gave these routes a scope nothing could be granted,
+    which left the rule sitting in a tuple in app/schemas/api_keys.py
+    rather than on the route. Two things then went wrong at once: the
+    route trusts another file to stay correct, and a key that acquires
+    the scope some other way - rotation used to mint one - is let
+    straight through.
+
+    A key forced to hold `disbursements:write` is exactly that row, so it
+    is what this test uses. It must still be refused.
+    """
     merchant_id, _admin_id = _merchant(fake_client)
     raw_key, _ = make_api_key(
         fake_client, merchant_id, scopes=["disbursements:write"]
@@ -146,7 +157,8 @@ def test_a_key_holding_the_scope_is_allowed_through(fake_client, route):
         json=_payout_body(merchant_id, bank=route == "bank-account"),
     )
 
-    assert response.status_code != 403, response.text
+    assert response.status_code == 403, response.text
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 # --- reads ----------------------------------------------------------------
@@ -162,11 +174,18 @@ def test_listing_payouts_needs_the_read_scope(fake_client):
         headers={"X-API-Key": raw_key},
     )
 
+    # The ban answers before the scope check, so this is the message a
+    # key gets whether or not it holds the scope. That is the point: it
+    # tells the caller the route is not for them, instead of naming a
+    # scope they can never be granted.
     assert response.status_code == 403
-    assert "disbursements:read" in response.json()["error"]["message"]
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
-def test_listing_payouts_is_allowed_with_the_read_scope(fake_client):
+def test_reading_withdrawals_is_closed_to_keys_holding_the_read_scope(fake_client):
+    """Same reversal as the create path: the read routes are a dashboard
+    surface, and a key carrying `disbursements:read` is a drifted row
+    rather than a legitimate caller."""
     merchant_id, _admin_id = _merchant(fake_client)
     raw_key, _ = make_api_key(fake_client, merchant_id, scopes=["disbursements:read"])
 
@@ -176,7 +195,8 @@ def test_listing_payouts_is_allowed_with_the_read_scope(fake_client):
         headers={"X-API-Key": raw_key},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 403
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 def test_a_missing_payout_is_404_before_the_scope_is_considered(fake_client):
@@ -256,7 +276,7 @@ def test_payout_key_cannot_create_a_legacy_withdrawal(fake_client, route):
     )
 
     assert response.status_code == 403
-    assert "disbursements:write" in response.json()["error"]["message"]
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 def test_payout_key_cannot_list_legacy_withdrawals(fake_client):
@@ -270,7 +290,7 @@ def test_payout_key_cannot_list_legacy_withdrawals(fake_client):
     )
 
     assert response.status_code == 403
-    assert "disbursements:read" in response.json()["error"]["message"]
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 def test_payout_key_cannot_fetch_a_legacy_withdrawal(fake_client):
@@ -291,7 +311,7 @@ def test_payout_key_cannot_fetch_a_legacy_withdrawal(fake_client):
     )
 
     assert response.status_code == 403
-    assert "disbursements:read" in response.json()["error"]["message"]
+    assert "not available to API keys" in response.json()["error"]["message"]
 
 
 def test_full_scope_standard_key_cannot_fetch_a_legacy_withdrawal(fake_client):

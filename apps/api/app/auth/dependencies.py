@@ -37,6 +37,7 @@ from app.core.rate_limit import enforce_rate_limit
 from app.core.request_ip import client_ip
 from app.core.time import utc_now_iso
 from app.database.session import get_supabase_admin
+from app.schemas.api_keys import scopes_for_key_type
 from app.schemas.auth import (
     ApiKeyContext,
     AuthenticatedCaller,
@@ -259,7 +260,7 @@ def verify_api_key(
     supabase = get_supabase_admin()
     data = execute_maybe_single(
         supabase.table("api_keys")
-        .select("id, merchant_id, environment, status, scopes, ip_whitelist_enabled")
+        .select("id, merchant_id, environment, status, scopes, key_type, ip_whitelist_enabled")
         .eq("hashed_key", hash_api_key(raw_key))
         .eq("status", "active")
         .maybe_single()
@@ -374,7 +375,34 @@ def verify_api_key(
     except Exception:  # noqa: BLE001, S110 — never let usage tracking fail the request
         pass
 
-    context = ApiKeyContext(**{k: v for k, v in data.items() if k != "ip_whitelist_enabled"})
+    # A key may only act on the scopes its own type can hold.
+    #
+    # Creation already refuses a mismatch, so in a healthy database this
+    # changes nothing. It is here for the rows where creation was not the
+    # last word: rotation used to mint the replacement without carrying
+    # key_type over, leaving a 'standard' row holding payout scopes, and
+    # any future path that writes a key - a backfill, a support fix, a
+    # migration - gets the same check for free. Enforcing it at
+    # authentication means a drifted row cannot act on the scopes it
+    # should never have had, whatever put them there.
+    #
+    # Narrowing, never widening: the key gets the intersection, so this
+    # can only ever remove a permission.
+    allowed = set(scopes_for_key_type(data.get("key_type") or "standard"))
+    granted = list(data.get("scopes") or [])
+    permitted = [s for s in granted if s in allowed]
+    if len(permitted) != len(granted):
+        logger.warning(
+            "api_key_scope_mismatch id=%s key_type=%s dropped=%s",
+            data["id"],
+            data.get("key_type"),
+            sorted(set(granted) - allowed),
+        )
+    data = {**data, "scopes": permitted}
+
+    context = ApiKeyContext(
+        **{k: v for k, v in data.items() if k not in ("ip_whitelist_enabled", "key_type")}
+    )
     # Picked up by ApiRequestLogMiddleware (app/middleware/api_request_log.py)
     # after the response completes — this dependency itself only handles
     # the rejection-path logs above, since those happen before a response
@@ -492,6 +520,59 @@ def require_api_key_scope(caller: AuthenticatedCaller | MerchantActor, *scopes: 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail=f"API key missing required scope: {missing}"
     )
+
+
+def require_dashboard_session(caller: AuthenticatedCaller | MerchantActor, *, action: str) -> None:
+    """Refuse an API key outright. For routes only a person may take.
+
+    Some routes are closed to API keys by holding a scope that nothing
+    can grant. That works, but it is a property of a tuple in
+    app/schemas/api_keys.py rather than of the route, and it fails open:
+    add the scope to the grantable list by accident - a plausible edit,
+    since the list is where you go to add scopes - and the route silently
+    reopens to every key that asks for it.
+
+    This states the rule where the rule applies. Legacy withdrawals spend
+    the merchant's Collections balance and are approved by a human; the
+    Payout Wallet API is the programmatic path, and it draws on a
+    separate, prefunded pot precisely so that a leaked key cannot reach
+    the rest of a merchant's money.
+    """
+    if caller.actor_type != "api_key":
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"{action} is not available to API keys. Sign in to the dashboard, "
+            "or use the Payout Wallet API (POST /v1/payouts) for programmatic payouts."
+        ),
+    )
+
+
+def reject_api_keys(action: str):
+    """Dependency form of require_dashboard_session, for routes whose
+    other dependencies would otherwise answer first.
+
+    require_dashboard_session is called inside a handler, so it runs after
+    request-body validation and after every dependency has resolved. On a
+    route that also depends on a bearer token, an API-key caller therefore
+    got "Missing bearer token" - true, but it reads as "your credential
+    expired" rather than "this route is not for keys", and a partner
+    debugging it will go looking for a token they are not supposed to
+    have. As a dependency declared first, this answers first.
+    """
+
+    def _dependency(api_key: Annotated[str | None, Depends(_api_key_header)] = None) -> None:
+        if api_key:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"{action} is not available to API keys. Sign in to the dashboard, "
+                    "or use the Payout Wallet API (POST /v1/payouts) for programmatic payouts."
+                ),
+            )
+
+    return _dependency
 
 
 def get_merchant_actor(*allowed_roles: UserRole):

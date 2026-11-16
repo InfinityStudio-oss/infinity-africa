@@ -16,11 +16,18 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PayoutCreateRequest(BaseModel):
     """Create one payout to an already-approved beneficiary."""
+
+    # Refused, not ignored. A merchant_id in this body is the specific
+    # case: Pydantic would drop it and return 201, so a partner who sent
+    # one would believe they had aimed the payout at that merchant. On a
+    # money-moving call the quiet version of that answer is the dangerous
+    # one - say no instead.
+    model_config = ConfigDict(extra="forbid")
 
     beneficiary_id: uuid.UUID
     amount: Decimal = Field(gt=0, description="Payout amount, exclusive of fees")
