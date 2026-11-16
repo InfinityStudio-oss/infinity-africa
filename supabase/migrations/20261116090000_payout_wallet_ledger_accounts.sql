@@ -64,8 +64,33 @@ drop index if exists public.ledger_accounts_platform_purpose_key;
 
 -- --- 2. the two new purposes ---------------------------------------------
 
-alter table public.ledger_accounts
-  drop constraint if exists ledger_accounts_purpose_check;
+-- Dropped by lookup rather than by name. The original was written inline
+-- (`purpose text not null check (...)`), so its name is whatever Postgres
+-- generated - almost certainly ledger_accounts_purpose_check, but
+-- `drop constraint if exists <guess>` fails SILENTLY when the guess is
+-- wrong. The new constraint would then be added BESIDE the old one, the
+-- old one would go on rejecting 'payout_available', and the migration
+-- would report success while leaving the feature unable to create an
+-- account. Finding it instead makes a wrong guess impossible, and the
+-- assertion below makes a silent miss impossible too.
+do $$
+declare
+  v_name text;
+begin
+  for v_name in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'ledger_accounts'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%purpose%'
+  loop
+    execute format('alter table public.ledger_accounts drop constraint %I', v_name);
+  end loop;
+end
+$$;
 
 alter table public.ledger_accounts
   add constraint ledger_accounts_purpose_check check (purpose in (
@@ -73,6 +98,29 @@ alter table public.ledger_accounts
     'fee_receivable', 'disbursement_payable',
     'payout_available', 'payout_reserved'
   ));
+
+-- Prove the new purposes are actually insertable, rather than assuming the
+-- drop above found everything. The probe row never survives: raising
+-- inside the inner block rolls the block back to its implicit savepoint,
+-- so the insert is undone whichever branch is taken, and PROBE_OK is
+-- simply how success exits.
+do $$
+begin
+  begin
+    insert into public.ledger_accounts (merchant_id, name, account_type, purpose, currency, environment)
+    values (null, 'constraint probe', 'liability', 'payout_available', 'TZS', 'sandbox');
+    raise exception 'PROBE_OK';
+  exception
+    when check_violation then
+      raise exception
+        'MIGRATION FAILED: a CHECK constraint still rejects payout_available. An older constraint survived the drop above.';
+    when others then
+      if sqlerrm <> 'PROBE_OK' then
+        raise;
+      end if;
+  end;
+end
+$$;
 
 -- --- 3. the guard ---------------------------------------------------------
 
