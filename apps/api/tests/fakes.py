@@ -20,6 +20,15 @@ POSTGREST_DEFAULT_PAGE = 1000
 _IN_LIST_CHAR_BUDGET = 25_000
 
 
+# Account purposes post_ledger_entries refuses to take negative. Kept as a
+# named set, and in step with the SQL, because the whole value of the fake
+# here is that an overdraw fails in tests for the same reason it fails in
+# Postgres. If these drift, a test suite goes green over a wallet the
+# database would never have let go below zero.
+# Source: supabase/migrations/20261116090000_payout_wallet_ledger_accounts.sql
+_NO_NEGATIVE_PURPOSES = frozenset({"merchant_wallet", "payout_available", "payout_reserved"})
+
+
 def _url_too_long_error(table: str, column: str, count: int, rendered: int):
     """What the server in front of PostgREST really does with an `.in_()`
     list long enough to blow the URL limit: a 400 whose body is the plain
@@ -399,6 +408,17 @@ class _FakeTable:
         now = datetime.now(timezone.utc).isoformat()
         row.setdefault("created_at", now)
         row.setdefault("updated_at", now)
+        if self.name == "ledger_accounts":
+            # `environment text not null default 'live'`
+            # (20261116090000_payout_wallet_ledger_accounts.sql). The
+            # default matters here rather than being cosmetic: every
+            # account lookup now filters on environment, so a row seeded
+            # without one would be invisible to _get_or_create_ledger_account
+            # and it would quietly create a SECOND wallet beside the
+            # seeded one. Balances would then be read from an empty
+            # account and every balance assertion in the suite would be
+            # testing the wrong row.
+            row.setdefault("environment", "live")
         if self.name == "webhook_events":
             # collection_id is GENERATED ALWAYS AS ((payload->>'collection_id')
             # ::uuid) STORED. Postgres computes it on write and refuses an
@@ -1159,8 +1179,9 @@ class FakeSupabaseClient:
 
     def _post_ledger_entries(self, entries: list[dict]) -> _Result:
         """Mirrors supabase/migrations/20260814130002_post_ledger_entries_function.sql,
-        20260814140001_post_ledger_entries_balance_check.sql, and
-        20260828020000_post_ledger_entries_balance_snapshot.sql: inserts
+        20260814140001_post_ledger_entries_balance_check.sql,
+        20260828020000_post_ledger_entries_balance_snapshot.sql, and
+        20261116090000_payout_wallet_ledger_accounts.sql: inserts
         each entry (with its own balance_before/after snapshot) and updates
         its account's cached balance, using the same asset/expense-vs-
         liability/equity/revenue sign convention, and rejects the *whole*
@@ -1191,10 +1212,11 @@ class FakeSupabaseClient:
             is_debit = entry["direction"] == "debit"
             delta = amount if (is_debit == increases_on_debit) else -amount
             new_balance = current + delta
-            if account.get("purpose") == "merchant_wallet" and new_balance < 0:
+            if account.get("purpose") in _NO_NEGATIVE_PURPOSES and new_balance < 0:
                 raise Exception(  # noqa: TRY002 - mirrors a raw postgrest/Postgres error, see services/ledger.py
-                    f"INSUFFICIENT_BALANCE: wallet {account_id} balance {current} "
-                    f"cannot cover a {entry['direction']} of {amount} (would be {new_balance})"
+                    f"INSUFFICIENT_BALANCE: account {account_id} ({account.get('purpose')}) "
+                    f"balance {current} cannot cover a {entry['direction']} of {amount} "
+                    f"(would be {new_balance})"
                 )
             running_balances[account_id] = new_balance
             snapshots.append((current, new_balance))

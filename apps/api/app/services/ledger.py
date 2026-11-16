@@ -37,8 +37,21 @@ def _get_or_create_ledger_account(
     purpose: str,
     account_type: str,
     currency: str,
+    environment: str = "live",
 ) -> uuid.UUID:
-    query = client.table("ledger_accounts").select("id").eq("purpose", purpose).eq("currency", currency)
+    """`environment` defaults to 'live' so every pre-existing caller keeps
+    resolving the account it always did - that is what the backfill in
+    20261116090000 set every existing row to, and it is accurate: sandbox
+    collections have never reached the ledger. Only the payout wallet
+    passes it explicitly, because a sandbox payout wallet must hold a
+    balance to be testable and must not be the live one."""
+    query = (
+        client.table("ledger_accounts")
+        .select("id")
+        .eq("purpose", purpose)
+        .eq("currency", currency)
+        .eq("environment", environment)
+    )
     query = query.eq("merchant_id", str(merchant_id)) if merchant_id else query.is_("merchant_id", "null")
     existing = execute_maybe_single(query.maybe_single())
 
@@ -55,6 +68,7 @@ def _get_or_create_ledger_account(
                 "account_type": account_type,
                 "purpose": purpose,
                 "currency": currency,
+                "environment": environment,
                 "balance": "0",
             },
         )
@@ -733,3 +747,289 @@ def reverse_disbursement_entries(
         client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
     )
     _invalidate_display_after_ledger_write(merchant_id)
+
+
+# --- Prefunded Payout Wallet ------------------------------------------------
+#
+# A second pocket, deliberately not a flag on the first. Collections money
+# lives in `merchant_wallet` and is what Withdrawals spend; payout money
+# lives in `payout_available` and is what the Disbursement API spends. They
+# are different ledger accounts so the two paths can never reach the same
+# shilling, and so a payout key that is compromised cannot drain a
+# merchant's collections.
+#
+# `payout_reserved` holds funds committed to a payout that has not settled.
+# Money sits there for exactly as long as the outcome is unknown, which is
+# why nothing releases it on a timeout - see the worker.
+#
+# All three balances are protected against going negative by
+# post_ledger_entries itself (20261116090000), under the same row lock the
+# collections wallet has always had. The checks in this module are the
+# fast, friendly rejection; that function is what makes them safe when two
+# requests arrive at once.
+
+PAYOUT_AVAILABLE = "payout_available"
+PAYOUT_RESERVED = "payout_reserved"
+
+
+def _payout_account(
+    client: Client, *, merchant_id: uuid.UUID, purpose: str, currency: str, environment: str
+) -> uuid.UUID:
+    return _get_or_create_ledger_account(
+        client,
+        merchant_id=merchant_id,
+        purpose=purpose,
+        account_type="liability",
+        currency=currency,
+        environment=environment,
+    )
+
+
+def get_payout_wallet_balances(
+    client: Client, *, merchant_id: uuid.UUID, currency: str, environment: str
+) -> tuple[Decimal, Decimal]:
+    """(available, reserved) for this merchant's payout wallet.
+
+    Read straight off the cached balances, the same way get_wallet_balance
+    does. Both accounts are created on first read: a merchant who has
+    never funded a payout wallet has one showing zero rather than an
+    error, which is what the dashboard card needs.
+    """
+    balances = []
+    for purpose in (PAYOUT_AVAILABLE, PAYOUT_RESERVED):
+        account_id = _payout_account(
+            client, merchant_id=merchant_id, purpose=purpose, currency=currency, environment=environment
+        )
+        account = get_by_id(client, "ledger_accounts", account_id)
+        balances.append(Decimal(str(account["balance"])) if account else Decimal(0))
+    return balances[0], balances[1]
+
+
+def post_payout_wallet_funding(
+    client: Client,
+    *,
+    transaction_id: uuid.UUID,
+    merchant_id: uuid.UUID,
+    amount: Decimal,
+    currency: str,
+    environment: str,
+) -> list[dict]:
+    """Move settled funds from Collections into the Payout Wallet.
+
+    Debit merchant_wallet, credit payout_available. Both are the
+    merchant's own liability accounts, so this is a transfer between two
+    of their pockets and the platform's position is unchanged - there is
+    no fee leg and no revenue leg, and inventing one here would overstate
+    platform revenue on money that has not been paid out yet. The fee is
+    charged when a payout actually settles, in post_payout_settlement.
+
+    The debit goes through the same locked, no-negative check that a
+    withdrawal does, against the same account. That is what stops a
+    merchant funding a payout wallet with money a concurrent withdrawal
+    is already spending: whichever posting reaches the row lock second
+    sees the reduced balance and is rejected outright.
+    """
+    wallet_account_id = _get_or_create_ledger_account(
+        client,
+        merchant_id=merchant_id,
+        purpose="merchant_wallet",
+        account_type="liability",
+        currency=currency,
+    )
+    payout_account_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_AVAILABLE, currency=currency, environment=environment
+    )
+
+    posted = _post_entries(
+        client,
+        [
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(wallet_account_id),
+                "direction": "debit",
+                "amount": str(amount),
+                "currency": currency,
+                "description": "Transferred to payout wallet",
+            },
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(payout_account_id),
+                "direction": "credit",
+                "amount": str(amount),
+                "currency": currency,
+                "description": "Payout wallet funded from collections",
+            },
+        ],
+    )
+    _record_wallet_snapshot(
+        client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
+    )
+    _invalidate_display_after_ledger_write(merchant_id)
+    return posted
+
+
+def post_payout_reservation(
+    client: Client,
+    *,
+    transaction_id: uuid.UUID,
+    merchant_id: uuid.UUID,
+    total_debit: Decimal,
+    currency: str,
+    environment: str,
+) -> list[dict]:
+    """Commit funds to a payout that has been accepted but not dispatched.
+
+    `total_debit` is amount + fee: the merchant must have the fee in hand
+    at reservation time, not discover at settlement that they cannot
+    cover it. Debit payout_available, credit payout_reserved - the money
+    stays the merchant's, it is simply no longer spendable.
+
+    This is the real insufficient-funds boundary for the API. A payout
+    accepted here is funded; nothing downstream has to ask again.
+    """
+    available_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_AVAILABLE, currency=currency, environment=environment
+    )
+    reserved_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_RESERVED, currency=currency, environment=environment
+    )
+    posted = _post_entries(
+        client,
+        [
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(available_id),
+                "direction": "debit",
+                "amount": str(total_debit),
+                "currency": currency,
+                "description": "Reserved for payout",
+            },
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(reserved_id),
+                "direction": "credit",
+                "amount": str(total_debit),
+                "currency": currency,
+                "description": "Payout reservation held",
+            },
+        ],
+    )
+    _invalidate_display_after_ledger_write(merchant_id)
+    return posted
+
+
+def post_payout_release(
+    client: Client,
+    *,
+    transaction_id: uuid.UUID,
+    merchant_id: uuid.UUID,
+    total_debit: Decimal,
+    currency: str,
+    environment: str,
+) -> list[dict]:
+    """Give a reservation back: the payout definitively failed, or was
+    confirmed never dispatched.
+
+    The exact reverse of post_payout_reservation. "Definitively" is the
+    load-bearing word - a timeout is not a failure, and releasing on one
+    is how a payout gets paid twice. The caller is responsible for having
+    confirmed the outcome; see _assert_provider_did_not_already_pay on
+    the withdrawal side for the same rule.
+    """
+    available_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_AVAILABLE, currency=currency, environment=environment
+    )
+    reserved_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_RESERVED, currency=currency, environment=environment
+    )
+    posted = _post_entries(
+        client,
+        [
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(reserved_id),
+                "direction": "debit",
+                "amount": str(total_debit),
+                "currency": currency,
+                "description": "Payout reservation released",
+            },
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(available_id),
+                "direction": "credit",
+                "amount": str(total_debit),
+                "currency": currency,
+                "description": "Returned to payout wallet",
+            },
+        ],
+    )
+    _invalidate_display_after_ledger_write(merchant_id)
+    return posted
+
+
+def post_payout_settlement(
+    client: Client,
+    *,
+    transaction_id: uuid.UUID,
+    merchant_id: uuid.UUID,
+    amount: Decimal,
+    currency: str,
+    environment: str,
+    fee_amount: Decimal = Decimal(0),
+) -> list[dict]:
+    """A payout confirmed paid: the reservation becomes a real outflow.
+
+    Debit payout_reserved by amount + fee; credit settlement_clearing
+    with the amount that left, and platform_revenue with the fee. The
+    same shape post_disbursement_entries uses for a withdrawal, differing
+    only in which pocket is debited - which keeps platform-level
+    reporting over settlement and revenue identical whichever product
+    moved the money.
+
+    Reserved never goes negative (the database refuses), so settling a
+    payout twice fails on the second attempt rather than inventing an
+    outflow.
+    """
+    reserved_id = _payout_account(
+        client, merchant_id=merchant_id, purpose=PAYOUT_RESERVED, currency=currency, environment=environment
+    )
+    settlement_id = _get_or_create_ledger_account(
+        client, merchant_id=None, purpose="settlement_clearing", account_type="asset", currency=currency
+    )
+
+    entries = [
+        {
+            "transaction_id": str(transaction_id),
+            "ledger_account_id": str(reserved_id),
+            "direction": "debit",
+            "amount": str(amount + fee_amount),
+            "currency": currency,
+            "description": "Payout settled from reservation",
+        },
+        {
+            "transaction_id": str(transaction_id),
+            "ledger_account_id": str(settlement_id),
+            "direction": "credit",
+            "amount": str(amount),
+            "currency": currency,
+            "description": "Payout disbursed from settlement",
+        },
+    ]
+    if fee_amount > 0:
+        revenue_id = _get_or_create_ledger_account(
+            client, merchant_id=None, purpose="platform_revenue", account_type="revenue", currency=currency
+        )
+        entries.append(
+            {
+                "transaction_id": str(transaction_id),
+                "ledger_account_id": str(revenue_id),
+                "direction": "credit",
+                "amount": str(fee_amount),
+                "currency": currency,
+                "description": "Payout fee revenue",
+            }
+        )
+
+    posted = _post_entries(client, entries)
+    _invalidate_display_after_ledger_write(merchant_id)
+    return posted
