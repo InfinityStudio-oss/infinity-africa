@@ -249,6 +249,32 @@ body {
   background-image: linear-gradient(120deg, #1e3a5f 0%, #24476e 55%, #2c5680 100%);
 }
 
+/* Anything painted a pale surface gets dark ink, whatever contains it.
+   ---------------------------------------------------------------
+   <main> defaults to light ink because it sits on the gradient, and
+   Card declares dark ink on itself. That covers everything built from
+   Card - but 311 places across 99 files roll their own panel with
+   `bg-surface rounded-xl border ...` and never set a text colour. Those
+   inherited the light ink and rendered white text on a white panel; the
+   Pay by Link form was unreadable that way, inputs included, since
+   Tailwind's preflight makes form controls inherit colour too.
+
+   :where() gives this zero specificity, which is the whole trick: it
+   beats inheritance, so an unstyled panel gets readable ink, and it
+   loses to any explicit text-* utility, so nothing that deliberately
+   sets its own colour is touched. Dark surfaces (bg-primary, the
+   sidebar) are deliberately absent from the list. */
+:where(
+  .bg-surface,
+  .bg-surface-container-lowest,
+  .bg-surface-container-low,
+  .bg-surface-container,
+  .bg-surface-container-high,
+  .bg-surface-container-highest
+) {
+  color: var(--color-on-surface);
+}
+
 /* White ink where content sits directly on the gradient rather than on a
    card - the greeting, and anything beside it. */
 .on-gradient {
