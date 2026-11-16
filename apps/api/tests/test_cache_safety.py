@@ -61,6 +61,32 @@ class _FakeRedis:
             self.store.pop(key, None)
 
 
+def _seed_transaction(fake_client, merchant_id) -> uuid.UUID:
+    """A real transactions row for a ledger posting to hang off.
+
+    ledger_entries.transaction_id is a foreign key. This test used to
+    pass a bare uuid4, which the fake accepted because it did not
+    enforce foreign keys. Postgres would have rejected the call, so the
+    coverage was over a state that cannot exist.
+    """
+    return uuid.UUID(
+        fake_client.seed(
+            "transactions",
+            {
+                "merchant_id": str(merchant_id),
+                "reference": f"TEST-{uuid.uuid4().hex[:10]}",
+                "type": "collection",
+                "method": "MOBILE_MONEY",
+                "gross_amount": "0",
+                "fee_amount": "0",
+                "net_amount": "0",
+                "currency": "TZS",
+                "status": "successful",
+            },
+        )["id"]
+    )
+
+
 @pytest.fixture
 def redis(monkeypatch):
     fake = _FakeRedis()
@@ -299,7 +325,7 @@ def test_a_ledger_write_drops_the_cached_overview(fake_client, redis):
 
     post_collection_entries(
         fake_client,
-        transaction_id=uuid.uuid4(),
+        transaction_id=_seed_transaction(fake_client, merchant_id),
         merchant_id=merchant_id,
         gross_amount=D(1000),
         fee_amount=D(0),

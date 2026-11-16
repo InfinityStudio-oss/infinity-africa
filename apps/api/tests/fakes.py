@@ -1329,11 +1329,29 @@ class FakeSupabaseClient:
             _finish("insufficient_funds", "The payout wallet has never been funded.")
             return _Result({"outcome": "insufficient_funds", "reason": "no payout wallet"})
 
+        # The transactions row the entries hang off, exactly as the SQL
+        # does it. ledger_entries.transaction_id is a foreign key, so a
+        # payout id will not do.
+        transaction = self.table("transactions")._table.insert(
+            {
+                "merchant_id": row["merchant_id"],
+                "reference": row["provider_reference"],
+                "type": "payout",
+                "method": "MOBILE_MONEY",
+                "payout_id": row["id"],
+                "gross_amount": str(row["amount"]),
+                "fee_amount": str(row["fee_amount"]),
+                "net_amount": str(row["amount"]),
+                "currency": row["currency"],
+                "status": "processing",
+            }
+        )
+
         try:
             self._post_ledger_entries(
                 [
                     {
-                        "transaction_id": row["id"],
+                        "transaction_id": transaction["id"],
                         "ledger_account_id": available["id"],
                         "direction": "debit",
                         "amount": str(total_debit),
@@ -1341,7 +1359,7 @@ class FakeSupabaseClient:
                         "description": "Reserved for payout",
                     },
                     {
-                        "transaction_id": row["id"],
+                        "transaction_id": transaction["id"],
                         "ledger_account_id": reserved["id"],
                         "direction": "credit",
                         "amount": str(total_debit),
@@ -1388,6 +1406,33 @@ class FakeSupabaseClient:
         balance_before — exactly like the real function's sequential loop.
         """
         accounts_table = self.table("ledger_accounts")._table
+
+        # ledger_entries.transaction_id REFERENCES transactions(id). The
+        # fake does not enforce foreign keys generally, and that gap hid a
+        # real bug: authorize_payout posted entries against the PAYOUT id,
+        # which is not a transactions id. Twenty-eight tests passed; the
+        # first call against Postgres would have failed on the constraint.
+        # Enforced here rather than everywhere because this is the table
+        # where a dangling parent means money with no record behind it.
+        # Scanned with an early exit rather than by materialising every
+        # transactions id: a batch names one or two, while the table can
+        # hold thousands by the end of a long test, and building that set
+        # on every posting put eight minutes on the suite.
+        needed = {str(e.get("transaction_id")) for e in entries}
+        found: set[str] = set()
+        for parent in self.table("transactions")._table.rows:
+            if parent["id"] in needed:
+                found.add(parent["id"])
+                if len(found) == len(needed):
+                    break
+        missing = needed - found
+        if missing:
+            raise Exception(  # noqa: TRY002 - mirrors a raw Postgres FK error
+                'insert or update on table "ledger_entries" violates foreign key '
+                'constraint "ledger_entries_transaction_id_fkey". '
+                f"Key (transaction_id)=({sorted(missing)[0]}) is not present in table "
+                '"transactions".'
+            )
 
         running_balances: dict[str, Decimal] = {}
         snapshots: list[tuple[Decimal | None, Decimal | None]] = []

@@ -29,6 +29,32 @@ from tests.factories import (
 client = TestClient(app)
 
 
+def _parent_transaction(fake_client, merchant_id) -> uuid.UUID:
+    """A real transactions row for a ledger posting to hang off.
+
+    ledger_entries.transaction_id is a foreign key. These tests used to
+    pass a bare uuid4, which the fake accepted because it did not
+    enforce foreign keys. Postgres would have rejected every one of
+    those calls, so the coverage was over a state that cannot exist.
+    """
+    return uuid.UUID(
+        fake_client.seed(
+            "transactions",
+            {
+                "merchant_id": str(merchant_id),
+                "reference": f"TEST-{uuid.uuid4().hex[:10]}",
+                "type": "collection",
+                "method": "MOBILE_MONEY",
+                "gross_amount": "0",
+                "fee_amount": "0",
+                "net_amount": "0",
+                "currency": "TZS",
+                "status": "successful",
+            },
+        )["id"]
+    )
+
+
 @pytest.fixture(autouse=True)
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
@@ -1064,7 +1090,7 @@ def test_wallet_ledger_returns_entries_newest_first_with_running_balance(fake_cl
 
     post_collection_entries(
         fake_client,
-        transaction_id=uuid.uuid4(),
+        transaction_id=_parent_transaction(fake_client, merchant_id),
         merchant_id=merchant_id,
         gross_amount=Decimal("1000.00"),
         fee_amount=Decimal(0),
@@ -1073,7 +1099,7 @@ def test_wallet_ledger_returns_entries_newest_first_with_running_balance(fake_cl
     )
     post_disbursement_entries(
         fake_client,
-        transaction_id=uuid.uuid4(),
+        transaction_id=_parent_transaction(fake_client, merchant_id),
         merchant_id=merchant_id,
         amount=Decimal("300.00"),
         currency="TZS",
@@ -1097,7 +1123,7 @@ def test_wallet_ledger_paginates(fake_client):
     for _ in range(3):
         post_collection_entries(
             fake_client,
-            transaction_id=uuid.uuid4(),
+            transaction_id=_parent_transaction(fake_client, merchant_id),
             merchant_id=merchant_id,
             gross_amount=Decimal("100.00"),
             fee_amount=Decimal(0),

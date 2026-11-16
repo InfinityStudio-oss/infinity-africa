@@ -256,6 +256,55 @@ create trigger payouts_reversal_valid
 --   insufficient_funds  payout wallet cannot cover it; nothing reserved
 --   not_queued          the payout was not in `queued` (double call)
 
+-- --- transactions carries payouts too -----------------------------------
+--
+-- ledger_entries.transaction_id is a FOREIGN KEY to transactions. Every
+-- ledger posting therefore needs a real transactions row behind it - a
+-- payout id is not one, and passing it would fail on the foreign key the
+-- moment this ran against Postgres rather than the in-memory fake, which
+-- does not enforce foreign keys.
+--
+-- So payouts get the same treatment collections and disbursements have:
+-- a transactions row, linked back, with its own type. `payout` rather
+-- than reusing `disbursement`, so platform reporting can tell money sent
+-- by a machine from a merchant's prefunded wallet apart from a
+-- withdrawal a person approved out of Collections.
+
+alter table public.transactions
+  add column if not exists payout_id uuid references public.payouts (id) on delete set null;
+
+create index if not exists transactions_payout_id_idx
+  on public.transactions (payout_id)
+  where payout_id is not null;
+
+do $$
+declare
+  v_name text;
+begin
+  for v_name in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'transactions'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%collection%'
+      and pg_get_constraintdef(con.oid) ilike '%disbursement%'
+  loop
+    execute format('alter table public.transactions drop constraint %I', v_name);
+  end loop;
+end
+$$;
+
+alter table public.transactions
+  add constraint transactions_type_check check (type in (
+    'collection', 'disbursement', 'fee', 'refund', 'reversal', 'adjustment', 'payout'
+  ));
+
+comment on column public.transactions.payout_id is
+  'Set for transactions created by the Disbursement API. Distinct from disbursement_id, which is a withdrawal from the Collections balance.';
+
 create or replace function public.authorize_payout(
   p_payout_id uuid,
   p_daily_limit numeric default null
@@ -270,6 +319,7 @@ declare
   v_today numeric(18, 2);
   v_available_id uuid;
   v_reserved_id uuid;
+  v_transaction_id uuid;
 begin
   select * into v_row from public.payouts where id = p_payout_id;
   if not found then
@@ -345,10 +395,30 @@ begin
     return jsonb_build_object('outcome', 'insufficient_funds', 'reason', 'no payout wallet');
   end if;
 
+  -- The transactions row the ledger entries hang off. Created here, in
+  -- the same transaction as the reservation, so a payout can never have
+  -- entries without a parent or a parent without entries.
+  insert into public.transactions (
+    merchant_id, reference, type, method, payout_id,
+    gross_amount, fee_amount, net_amount, currency, status
+  ) values (
+    v_row.merchant_id,
+    v_row.provider_reference,
+    'payout',
+    'MOBILE_MONEY',
+    v_row.id,
+    v_row.amount,
+    v_row.fee_amount,
+    v_row.amount,
+    v_row.currency,
+    'processing'
+  )
+  returning id into v_transaction_id;
+
   begin
     perform public.post_ledger_entries(jsonb_build_array(
       jsonb_build_object(
-        'transaction_id', v_row.id,
+        'transaction_id', v_transaction_id,
         'ledger_account_id', v_available_id,
         'direction', 'debit',
         'amount', v_row.total_debit,
@@ -356,7 +426,7 @@ begin
         'description', 'Reserved for payout'
       ),
       jsonb_build_object(
-        'transaction_id', v_row.id,
+        'transaction_id', v_transaction_id,
         'ledger_account_id', v_reserved_id,
         'direction', 'credit',
         'amount', v_row.total_debit,
@@ -386,6 +456,7 @@ begin
 
   return jsonb_build_object(
     'outcome', 'authorized',
+    'transaction_id', v_transaction_id,
     'reserved', v_row.total_debit::text,
     'already_today', coalesce(v_today, 0)::text
   );
