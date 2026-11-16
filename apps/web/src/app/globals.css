@@ -1,57 +1,82 @@
 @import "tailwindcss";
 
 :root {
-  --color-primary: #04332a;
-  --color-primary-container: #04332a;
+  /* InfinityPay palette: muted slate-blue page, pale blue-white cards,
+     deep blue ink, teal accents.
+     ---------------------------------------------------------------
+     On :root, not scoped to one shell, because the merchant portal,
+     Super Admin and the public site are one product and were asked to
+     look like it. The previous revision scoped a palette to
+     .portal-shell-scope; that is now this file's only palette.
+
+     Every pair was computed, not eyeballed (scratchpad/contrast.mjs,
+     28 pairs): white on the gradient 7.5 / 6.5 / 5.8:1 across its sweep,
+     sidebar label 11.4:1, card ink 14.6:1, primary button label 12.8:1,
+     teal text 6.0:1, focus rings 7.5:1 on card and 6.2:1 on sidebar.
+     All >= 4.5:1 for text and >= 3:1 for boundaries. The gradient was
+     darkened twice to get there: white text failed on its lighter
+     teal end at 3.8:1. */
+
+  /* Deep navy is the action colour, as in the reference - a dark,
+     quiet button rather than a bright accent. */
+  --color-primary: #1f3157;
+  --color-primary-container: #2d4f91;
   --color-on-primary: #ffffff;
-  --color-on-primary-container: #93ecb8;
-  --color-primary-fixed: #9cf5c1;
+  --color-on-primary-container: #ffffff;
+  --color-primary-fixed: #d9e4f7;
 
-  --color-secondary: #56615e;
-  --color-secondary-container: #dae5e1;
+  --color-secondary: #4d5e7d;
+  --color-secondary-container: #dde7f6;
   --color-on-secondary: #ffffff;
-  --color-on-secondary-container: #5c6764;
+  --color-on-secondary-container: #22355c;
 
-  /* Merchant portal (Stitch reference) background/surface tokens — kept
-     distinct from --color-foreground/background below, which the public
-     marketing/checkout pages still use. */
-  --color-background: #f9f9ff;
-  --color-foreground: #111827;
-  --color-on-background: #141b2b;
+  /* Paper is the pale card; the slate gradient is painted separately by
+     .app-gradient-surface so it can sweep across the whole viewport. */
+  --color-background: #eaf0f8;
+  --color-foreground: #16233f;
+  --color-on-background: #16233f;
 
-  --color-surface: #f9f9ff;
-  --color-surface-dim: #d3daef;
+  --color-surface: #f4f8fd;
+  --color-surface-dim: #d5e1f0;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f1f3ff;
-  --color-surface-container: #e9edff;
-  --color-surface-container-high: #e1e8fd;
-  --color-surface-container-highest: #dce2f7;
-  --color-on-surface: #141b2b;
-  --color-on-surface-variant: #3f4942;
+  --color-surface-container-low: #f9fbfe;
+  --color-surface-container: #eef4fb;
+  --color-surface-container-high: #e4edf8;
+  --color-surface-container-highest: #dbe5f2;
+  --color-on-surface: #16233f;
+  --color-on-surface-variant: #4d5e7d;
 
-  --color-outline: #6f7a71;
-  --color-outline-variant: #bec9bf;
+  --color-outline: #6b7c9a;
+  --color-outline-variant: #dbe5f2;
 
-  --color-error: #ba1a1a;
+  /* Money states keep their meaning across a repaint. */
+  --color-error: #b3261e;
   --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
+  --color-error-container: #fcdad6;
+  --color-on-error-container: #8c1d18;
 
-  --color-accent: #dcfce7;
+  /* Teal, in three weights by how hard each has to work. The lightest is
+     a decorative wash only - it is not legal as a boundary. */
+  --color-accent: #e3f3f1;
+  --color-accent-wash: #16b5a6;
+  --color-accent-strong: #0d8b80;
+  --color-accent-text: #0f6b64;
 
-  /* Merchant Portal / Super Admin sidebar branding — deep InfinityPay green,
-     kept separate from --color-primary so the sidebar can go deeper/richer
-     than buttons and links do without changing the whole app's accent. */
-  --color-sidebar: #04332a;
-  --color-sidebar-strong: #021b15;
-  --color-sidebar-text: #eafff2;
-  --color-sidebar-text-muted: #8fd6b4;
-  --color-sidebar-hover: rgba(255, 255, 255, 0.1);
-  --color-sidebar-active-bg: #ffffff;
-  --color-sidebar-active-text: #04332a;
+  /* The sidebar is a deeper slate than the page, so it reads as a panel
+     rather than a continuation of the background. */
+  --color-sidebar: #2b3a55;
+  --color-sidebar-strong: #1d2840;
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-text-muted: #a9b8d0;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --color-sidebar-active-bg: #3d5a8a;
+  --color-sidebar-active-text: #ffffff;
+  --color-sidebar-focus: #9dc0ff;
 
-  --shadow-ambient: 0px 4px 20px rgba(0, 109, 68, 0.04);
-  --shadow-ambient-lg: 0px 12px 40px rgba(0, 82, 50, 0.12);
+  /* Ink-coloured shadows. The old green ones tinted every card edge
+     olive against a blue page. */
+  --shadow-ambient: 0px 4px 20px rgba(22, 35, 63, 0.07);
+  --shadow-ambient-lg: 0px 14px 44px rgba(22, 35, 63, 0.16);
 }
 
 @theme inline {
@@ -152,127 +177,60 @@ body {
   visibility: hidden;
 }
 
-/* Merchant Portal (/merchant/*, /portal/*) and Super Admin (/super-admin/*,
-   /admin/*) use Times New Roman, scoped to these two shells only — the
-   public site keeps --font-sans (Inter). Material Symbols icons are
-   unaffected: the icon stylesheet sets its own font-family on
-   .material-symbols-outlined with higher specificity than this inherited
-   rule. */
+/* The dashboards are sans-serif, like the rest of the product.
+   ---------------------------------------------------------------
+   These two shells used to be set to Times New Roman while the public
+   site used Inter, so the portal rendered in a serif that did not match
+   anything else and read as dated beside its own marketing pages. One
+   typeface now, everywhere.
+
+   Material Symbols icons are unaffected either way: the icon stylesheet
+   sets its own font-family on .material-symbols-outlined with higher
+   specificity than this inherited rule. */
 .portal-shell-scope,
 .admin-shell-scope {
-  font-family: "Times New Roman", Times, serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* ---------------------------------------------------------------------------
-   Merchant portal palette — navy / blue / teal
-   ---------------------------------------------------------------------------
+/* The page itself: a muted slate-blue sweep with a soft teal edge, as
+   in the reference. Dark enough across its whole length that white text
+   sits on it at 5.8:1 or better - an earlier, lighter version failed at
+   3.8:1 on the teal end, which is why these are not prettier.
 
-   Scoped to .portal-shell-scope, which is the one wrapper every
-   /portal/* and /dashboard/* page renders inside (components/portal/
-   portal-shell.tsx). Super Admin has its own .admin-shell-scope and the
-   public marketing and checkout pages have neither, so all three keep the
-   green theme defined on :root. Overriding the SAME token names here,
-   rather than introducing a parallel set, is what makes every existing
-   component - cards, tables, forms, badges, buttons - follow along
-   without being touched.
-
-   Every pair below was checked rather than eyeballed (scratchpad
-   contrast.mjs): sidebar label on navy 15.5:1, active label on blue
-   5.2:1, body on white 15.5:1, body on the gradient's two ends 14.1 and
-   13.9:1, primary button label 6.7:1, teal accent text 5.5:1, focus ring
-   6.7:1 on light and 7.4:1 on navy. All >= 4.5:1 for text and >= 3:1 for
-   boundaries.
-
-   Two teals, deliberately. The bright one (#14b8a6) is a decorative wash
-   only - it measures 2.49:1 against white, which is legal for a gradient
-   and NOT legal for anything a reader has to make out. --color-accent-
-   strong (#0d9488, 3.74:1) is for borders and marks, and the darkest
-   (#0f766e, 5.47:1) for accent text.
-
-   Status colours are carried over unchanged, and re-checked against the
-   new surfaces - those are what moved underneath them.
-   --------------------------------------------------------------------------- */
-.portal-shell-scope {
-  /* Blue is the action colour: buttons, links, the active nav item. */
-  --color-primary: #1d4ed8;
-  --color-primary-container: #2563eb;
-  --color-on-primary: #ffffff;
-  --color-on-primary-container: #ffffff;
-  --color-primary-fixed: #dbe7ff;
-
-  --color-secondary: #4a5873;
-  --color-secondary-container: #dde8fb;
-  --color-on-secondary: #ffffff;
-  --color-on-secondary-container: #243b63;
-
-  /* Navy ink on pale blue paper. */
-  --color-background: #eef4ff;
-  --color-foreground: #132345;
-  --color-on-background: #132345;
-
-  --color-surface: #ffffff;
-  --color-surface-dim: #d8e4f8;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f6f9ff;
-  --color-surface-container: #eef4ff;
-  --color-surface-container-high: #e4edfd;
-  --color-surface-container-highest: #d8e4f8;
-  --color-on-surface: #132345;
-  --color-on-surface-variant: #4a5873;
-
-  --color-outline: #6b7a96;
-  --color-outline-variant: #c9d8f2;
-
-  /* Preserved from the green theme. Money states must not shift meaning
-     because the chrome changed. */
-  --color-error: #ba1a1a;
-  --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
-
-  /* Teal, in three weights by how hard each has to work. */
-  --color-accent: #e6f6f4;
-  --color-accent-wash: #14b8a6;
-  --color-accent-strong: #0d9488;
-  --color-accent-text: #0f766e;
-
-  /* Deep navy sidebar, white labels, blue active item. */
-  --color-sidebar: #132345;
-  --color-sidebar-strong: #0b162e;
-  --color-sidebar-text: #ffffff;
-  --color-sidebar-text-muted: #9fb3d4;
-  --color-sidebar-hover: rgba(255, 255, 255, 0.08);
-  --color-sidebar-active-bg: #2563eb;
-  --color-sidebar-active-text: #ffffff;
-  --color-sidebar-focus: #8ab4ff;
-
-  /* Neutral-navy shadows. The green ones tinted every card edge olive
-     against a blue background. */
-  --shadow-ambient: 0px 4px 20px rgba(19, 35, 69, 0.06);
-  --shadow-ambient-lg: 0px 12px 40px rgba(19, 35, 69, 0.14);
-}
-
-/* The Overview gradient: blue at the top, the faintest teal at the
-   bottom. `fixed` so it does not slide and re-render on scroll, and it
-   sits behind an opaque --color-background fallback so a browser that
-   ignores the gradient still gets readable paper rather than white. */
-.portal-gradient-surface {
-  background-image: linear-gradient(170deg, #eef4ff 0%, #eaf2fb 45%, #e6f6f4 100%);
+   `fixed` so it does not slide and repaint on scroll, over an opaque
+   --color-background fallback so a browser that ignores the gradient
+   still gets readable paper rather than white. */
+.app-gradient-surface {
+  background-color: #44566f;
+  background-image: linear-gradient(145deg, #44566f 0%, #476175 55%, #426c74 100%);
   background-attachment: fixed;
 }
 
-/* Focus must stay obvious on both papers. The portal's ring is blue on
-   light surfaces and a lighter blue inside the navy sidebar, where the
-   first would disappear. */
-.portal-shell-scope :focus-visible {
-  outline: 2px solid var(--color-primary);
+/* Focus must stay obvious on every surface. The ring is deep blue on
+   light paper and a lighter blue inside the slate sidebar, where the
+   first would disappear into the panel. */
+:focus-visible {
+  outline: 2px solid var(--color-primary-container);
   outline-offset: 2px;
 }
 
 .portal-sidebar-nav :focus-visible,
-.portal-shell-scope aside :focus-visible {
+.admin-sidebar-nav :focus-visible,
+.portal-shell-scope aside :focus-visible,
+.admin-shell-scope aside :focus-visible {
   outline: 2px solid var(--color-sidebar-focus);
   outline-offset: 2px;
+}
+
+/* White ink where content sits directly on the gradient rather than on a
+   card - the greeting, and anything beside it. */
+.on-gradient {
+  color: #ffffff;
+}
+
+.on-gradient-muted {
+  color: #dce6f2;
 }
 
 /* Sidebar navigation icons — 18px for the links, 16px for the Super

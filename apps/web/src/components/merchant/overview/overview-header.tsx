@@ -99,8 +99,8 @@ export function OverviewHeader({
     <header className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold text-on-surface truncate">
+          <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+            <h1 className="on-gradient text-xl sm:text-2xl md:text-[28px] font-bold truncate min-w-0">
               {name ? `${greetingFor(now)}, ${name}` : "Welcome to InfinityPay"}
             </h1>
             {status && (
@@ -114,7 +114,7 @@ export function OverviewHeader({
           {needsAttention && (
             <Link
               href="/onboarding"
-              className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              className="on-gradient mt-1.5 inline-flex items-center gap-1 text-sm font-medium underline-offset-2 hover:underline"
             >
               {status === "SUSPENDED"
                 ? "Contact support to restore your account"
@@ -124,10 +124,15 @@ export function OverviewHeader({
           )}
         </div>
 
+        {/* The topbar carries this same action from lg upward (it is
+            `hidden lg:flex` there), so showing it here too would put two
+            identical buttons on one screen. Below lg the topbar hides
+            it, and this is the only way to reach it - hence the mirror
+            of that breakpoint rather than dropping the button. */}
         {canCreatePaymentLink && (
           <Link
             href="/dashboard/pay-by-link"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary text-on-primary px-4 py-2.5 text-sm font-semibold shrink-0 hover:opacity-90 transition-opacity"
+            className="lg:hidden inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-on-primary px-4 py-2.5 text-sm font-semibold shrink-0 shadow-ambient hover:opacity-90 transition-opacity"
           >
             <Icon name="add_link" className="text-[18px]" />
             Create Payment Link
@@ -139,7 +144,7 @@ export function OverviewHeader({
         <div
           role="group"
           aria-label="Reporting period"
-          className="inline-flex rounded-lg border border-outline-variant bg-surface p-0.5"
+          className="inline-flex rounded-xl bg-surface p-0.5 shadow-ambient"
         >
           {RANGES.map((option) => (
             <button
@@ -169,9 +174,9 @@ export function OverviewHeader({
               value={customStart}
               max={customEnd}
               onChange={(event) => onCustomChange(event.target.value, customEnd)}
-              className="px-2.5 py-1.5 rounded-lg border border-outline-variant bg-surface text-sm text-on-surface"
+              className="px-2.5 py-1.5 rounded-xl bg-surface text-sm text-on-surface shadow-ambient"
             />
-            <span className="text-sm text-on-surface-variant">to</span>
+            <span className="on-gradient-muted text-sm">to</span>
             <label className="sr-only" htmlFor="overview-end">
               End date
             </label>
@@ -181,7 +186,7 @@ export function OverviewHeader({
               value={customEnd}
               min={customStart}
               onChange={(event) => onCustomChange(customStart, event.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-outline-variant bg-surface text-sm text-on-surface"
+              className="px-2.5 py-1.5 rounded-xl bg-surface text-sm text-on-surface shadow-ambient"
             />
           </div>
         )}

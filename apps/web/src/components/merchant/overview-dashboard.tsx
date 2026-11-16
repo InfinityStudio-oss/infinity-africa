@@ -100,20 +100,27 @@ function buildTasks(overview: MerchantOverview): ChecklistTask[] {
 
 export function OverviewDashboard({
   overview,
+  overviewError = null,
   initialReport,
+  initialReportError = null,
   payoutWallet,
   canCreatePaymentLink = true,
 }: {
-  overview: MerchantOverview;
+  /** Null when the overview call failed. The page still renders - this
+   * merchant has an account - with the figures that depend on it showing
+   * an error rather than a zero. */
+  overview: MerchantOverview | null;
+  overviewError?: string | null;
   /** Fetched on the server for the default period, so the first paint
    * already has the charts rather than a spinner. */
   initialReport: MerchantOverviewReport | null;
+  initialReportError?: string | null;
   /** Null when this merchant has no Disbursement API access - the card
    * is then not rendered at all rather than shown empty. */
   payoutWallet: PayoutWallet | null;
   canCreatePaymentLink?: boolean;
 }) {
-  const currency = overview.merchant.currency;
+  const currency = overview?.merchant.currency ?? "TZS";
 
   const [range, setRange] = useState<DateRangeKey>("7d");
   const [customStart, setCustomStart] = useState(daysAgo(6));
@@ -123,7 +130,9 @@ export function OverviewDashboard({
   // Null means "no error". An empty report and a failed fetch are
   // different screens: showing zeros for a failed load tells a merchant
   // they took nothing, which may be false.
-  const [error, setError] = useState<string | null>(initialReport ? null : "load-failed");
+  const [error, setError] = useState<string | null>(
+    initialReport ? null : (initialReportError ?? "load-failed"),
+  );
 
   const load = useCallback(
     async (next: DateRangeKey, start: string, end: string) => {
@@ -154,13 +163,16 @@ export function OverviewDashboard({
     void load(range, customStart, customEnd);
   }, [range, customStart, customEnd, hydrated, load]);
 
-  const tasks = buildTasks(overview);
+  // No overview means no signal about what is set up, so the
+  // checklist is omitted rather than guessed at - showing every task
+  // as incomplete would tell a trading merchant to start over.
+  const tasks = overview ? buildTasks(overview) : [];
 
   return (
     <div className="space-y-6">
       <OverviewHeader
-        businessName={overview.merchant.business_name}
-        accountStatus={overview.merchant.kyc_status}
+        businessName={overview?.merchant.business_name}
+        accountStatus={overview?.merchant.kyc_status}
         range={range}
         onRangeChange={setRange}
         customStart={customStart}
@@ -205,8 +217,11 @@ export function OverviewDashboard({
         <KpiCard
           icon="account_balance_wallet"
           label="Available Balance"
-          value={formatCurrency(overview.available_balance, currency)}
-          caption="Current balance"
+          // An em dash, never a zero. "You have nothing" and "we could
+          // not ask" are different statements, and the first sends a
+          // merchant looking for missing money.
+          value={overview ? formatCurrency(overview.available_balance, currency) : "—"}
+          caption={overviewError ? "Could not load" : "Current balance"}
         />
         <KpiCard
           icon="payments"
@@ -241,16 +256,16 @@ export function OverviewDashboard({
                 </p>
               </div>
             </div>
-            <div className="flex gap-8">
+            <div className="flex gap-6 sm:gap-8 min-w-0">
               <div>
                 <p className="text-xs text-on-surface-variant">Available</p>
-                <p className="text-lg font-bold text-on-surface tabular-nums">
+                <p className="text-base sm:text-lg font-bold text-on-surface tabular-nums break-words">
                   {formatCurrency(payoutWallet.available, payoutWallet.currency)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-on-surface-variant">Reserved</p>
-                <p className="text-lg font-bold text-on-surface tabular-nums">
+                <p className="text-base sm:text-lg font-bold text-on-surface tabular-nums break-words">
                   {formatCurrency(payoutWallet.reserved, payoutWallet.currency)}
                 </p>
               </div>

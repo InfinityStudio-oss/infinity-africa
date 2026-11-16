@@ -588,6 +588,18 @@ export async function getMerchantOverview(): Promise<MerchantOverview | null> {
   return apiGet<MerchantOverview>("/v1/merchant/overview");
 }
 
+/** The same call, but able to say WHY it failed.
+ *
+ * apiGet folds every outcome into null, and the Overview page used that
+ * null to choose between the dashboard and the first-run welcome screen.
+ * So any failure of this one request - a 500, an expired token, the API
+ * briefly unreachable - presented a verified, trading merchant with
+ * "Welcome to InfinityPay" and a setup checklist, indefinitely. That is
+ * what this exists to tell apart. */
+export async function readMerchantOverview(): Promise<ApiReadResult<MerchantOverview>> {
+  return apiRead<MerchantOverview>("/v1/merchant/overview");
+}
+
 // --- Business profile (LIVE) -------------------------------------------------
 
 export async function getMyMerchant(): Promise<MerchantProfile | null> {

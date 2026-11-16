@@ -65,11 +65,9 @@ export function PortalShell({
 
   return (
     <RoleProvider>
-      {/* portal-gradient-surface paints the blue-to-teal wash; bg-background
-          stays as the opaque fallback underneath it, so a browser that
-          ignores the gradient still gets readable paper rather than
-          white. */}
-      <div className="portal-shell-scope portal-gradient-surface min-h-screen bg-background text-on-background">
+      {/* app-gradient-surface paints the slate-blue wash; bg-background
+          stays as the opaque fallback underneath it. */}
+      <div className="portal-shell-scope app-gradient-surface min-h-screen bg-background text-on-background">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} verified={verified} />
         <Topbar onOpenSidebar={() => setSidebarOpen(true)} />
         <main className={mainClassName}>

@@ -17,7 +17,11 @@ import type { CollectionsSeriesPoint } from "@/lib/portal/types";
  * only hue, and it carries no identity, only "this is the measure".
  */
 
-const BAR = "#1d4ed8";
+// A lighter blue than the primary action colour, matching the
+// reference's bars. 3.29:1 against the card - above the 3:1 boundary
+// minimum, and deliberately not darker: a bar chart is a field of large
+// shapes, and a button-weight fill makes it shout.
+const BAR = "#5b89d6";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
@@ -89,7 +93,7 @@ export function CollectionsBarChart({
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 id={titleId} className="text-base font-semibold text-on-surface">
             Collections over time
           </h2>
@@ -111,14 +115,14 @@ export function CollectionsBarChart({
       ) : (
         <div className="mt-5">
           <div className="flex gap-2">
-            <div className="flex flex-col justify-between text-[10px] text-on-surface-variant tabular-nums h-48 shrink-0 text-right w-11">
+            <div className="flex flex-col justify-between text-[10px] text-on-surface-variant tabular-nums h-64 shrink-0 text-right w-11">
               <span>{compact(ceiling)}</span>
               <span>{compact(ceiling / 2)}</span>
               <span>0</span>
             </div>
 
             <div
-              className="flex-1 flex items-end gap-1 h-48 border-b border-outline-variant"
+              className="flex-1 flex items-end gap-1.5 h-64 border-b border-outline-variant"
               role="img"
               aria-labelledby={`${titleId} ${summaryId}`}
             >

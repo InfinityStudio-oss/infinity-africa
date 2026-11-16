@@ -15,17 +15,19 @@ import type { CollectionsByMethod } from "@/lib/portal/types";
  * reason; if these two ever disagree, the bug is upstream of this file.
  *
  * Colours are a fixed categorical order - blue, orange, teal, violet -
- * validated rather than chosen by eye: worst adjacent CVD Delta E 13.8
- * (target >= 8), normal-vision 28.8 (floor 15), all >= 3:1 against the
- * card. It opens with the two brand hues so the chart belongs to the
- * page. The order is fixed, so filtering or a slow month can never
- * repaint the methods that remain.
+ * validated rather than chosen by eye: worst adjacent CVD Delta E 14.5
+ * (target >= 8), normal-vision 25.4 (floor 15), all >= 3:1 against the
+ * pale card. It opens with the two brand hues so the chart belongs to
+ * the page. The teal was nudged from #0d8b80 to #0f9e90 because the
+ * first measured 0.099 chroma - a hair under the floor, which is the
+ * point where a slot starts reading as grey. The order is fixed, so
+ * filtering or a slow month can never repaint the methods that remain.
  *
  * Identity is never colour alone: every slice is also named in the
  * legend with its share, and the table view carries the same numbers.
  */
 
-const SLICE_COLORS = ["#1d4ed8", "#ea580c", "#0d9488", "#7c3aed"];
+const SLICE_COLORS = ["#2d4f91", "#d1600f", "#0f9e90", "#6b4fc4"];
 // Past four, the rest fold into one slice rather than inventing a fifth
 // hue. Neutral, because "Other" is not an identity - 4.76:1 on white.
 const OTHER_COLOR = "#64748b";
@@ -175,9 +177,19 @@ export function CollectionsDonut({
                 style={{ background: color }}
                 aria-hidden
               />
-              <span className="flex-1 truncate text-on-surface">{name}</span>
-              <span className="tabular-nums text-on-surface-variant">{share}%</span>
-              <span className="tabular-nums text-on-surface font-medium w-28 text-right">
+              {/* The name takes the slack and the amount wraps beneath it
+                  on a narrow screen. An earlier version pinned the amount
+                  to a fixed width and then to shrink-0, which is what
+                  pushed the whole page wider than a phone: a column that
+                  cannot shrink does not truncate, it widens its parent. */}
+              <span className="flex-1 min-w-0">
+                <span className="block truncate text-on-surface">{name}</span>
+                <span className="block sm:hidden tabular-nums text-xs text-on-surface-variant truncate">
+                  {formatCurrency(String(slice.amount), currency)}
+                </span>
+              </span>
+              <span className="tabular-nums text-on-surface-variant shrink-0">{share}%</span>
+              <span className="hidden sm:block tabular-nums text-on-surface font-medium text-right min-w-0 truncate">
                 {formatCurrency(String(slice.amount), currency)}
               </span>
             </>
