@@ -4,6 +4,7 @@ import pytest
 
 from app.core.rate_limit import _limiter as rate_limiter
 from app.database import session as session_module
+from tests import fakes as fakes_module
 from tests.fakes import FakeSupabaseClient
 
 
@@ -31,6 +32,14 @@ def fake_client(monkeypatch) -> FakeSupabaseClient:
     module means new routers/services need no test-side changes to pick it
     up automatically.
     """
+    # The fake's created_at is monotonic (see fakes._monotonic_now), and
+    # its high-water mark is module state. Left alone it carries across
+    # the whole session, so a later test's rows can be stamped ahead of
+    # the real clock and anything comparing them against datetime.now()
+    # sees rows in the future. Per-test reset keeps the monotonicity
+    # where it is needed - within one test - without coupling tests.
+    fakes_module._LAST_NOW.clear()
+
     client = FakeSupabaseClient()
     original = session_module.get_supabase_admin
 

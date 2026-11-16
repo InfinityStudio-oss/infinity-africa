@@ -51,10 +51,7 @@ from app.core.errors import (
     ValidationAPIError,
 )
 from app.services.crud import execute_maybe_single, get_by_id, insert_row
-from app.services.ledger import (
-    get_payout_wallet_balances,
-    post_payout_reservation,
-)
+from app.services.ledger import get_payout_wallet_balances
 
 logger = logging.getLogger("infinity.payouts")
 
@@ -243,31 +240,28 @@ def create_payout(
         },
     )
 
-    try:
-        post_payout_reservation(
-            client,
-            transaction_id=uuid.UUID(payout["id"]),
-            merchant_id=merchant_id,
-            total_debit=total_debit,
-            currency=currency,
-            environment=environment,
+    # The authoritative decision. The row exists but holds nothing until
+    # this returns `authorized`: the daily-limit sum and the reservation
+    # happen together, under one per-merchant advisory lock, so two
+    # concurrent payouts cannot both consume the same allowance or the
+    # same balance. authorize_payout marks the row cancelled itself on
+    # either refusal, so a payout is never left queued with no funds
+    # behind it.
+    outcome = _authorize(client, payout_id=uuid.UUID(payout["id"]), settings=settings)
+
+    if outcome["outcome"] == "daily_limit":
+        raise ConflictError(
+            "This payout would exceed the account's rolling 24-hour payout limit of "
+            f"{settings.daily_limit_tzs} {currency}. Already sent in the last 24 hours: "
+            f"{outcome.get('already_today', '0')} {currency}."
         )
-    except InsufficientBalanceError:
-        # Lost the race the friendly check above cannot win: another
-        # payout took the funds between the read and the reservation.
-        # The row must not survive as a `queued` payout with nothing
-        # behind it - the worker would dispatch money that was never
-        # reserved. Cancelled rather than deleted so the attempt stays
-        # visible, and cancelled is honest: it was never dispatched.
-        client.table("payouts").update(
-            {
-                "status": "cancelled",
-                "failure_code": "insufficient_funds",
-                "failure_reason": "Payout wallet balance was taken by another payout before this one reserved.",
-                "completed_at": "now()",
-            }
-        ).eq("id", payout["id"]).execute()
-        raise
+    if outcome["outcome"] == "insufficient_funds":
+        raise InsufficientBalanceError(
+            f"Payout wallet cannot cover {total_debit} {currency} "
+            f"({amount} plus {fee} fee). Fund the payout wallet first."
+        )
+    if outcome["outcome"] != "authorized":
+        raise ConflictError("This payout could not be authorized. Nothing was sent.")
 
     logger.info(
         "payout_created id=%s merchant=%s env=%s amount=%s fee=%s",
@@ -277,4 +271,31 @@ def create_payout(
         amount,
         fee,
     )
-    return payout
+    return get_by_id(client, "payouts", uuid.UUID(payout["id"])) or payout
+
+
+def _authorize(client: Client, *, payout_id: uuid.UUID, settings: PayoutSettings) -> dict:
+    """Call authorize_payout, and treat an unusable answer as a refusal.
+
+    A raise here means the decision did not complete, so whether funds
+    were reserved is unknown. The payout stays `queued` and reserves
+    nothing - the function is one transaction, so a failure rolled the
+    reservation back with it - and the caller is told it did not happen,
+    which is true.
+    """
+    try:
+        result = client.rpc(
+            "authorize_payout",
+            {
+                "p_payout_id": str(payout_id),
+                "p_daily_limit": (
+                    str(settings.daily_limit_tzs) if settings.daily_limit_tzs is not None else None
+                ),
+            },
+        ).execute()
+    except Exception as exc:  # noqa: BLE001 - narrowed to a refusal below
+        logger.warning("payout_authorize_failed id=%s error=%s", payout_id, type(exc).__name__)
+        return {"outcome": "error", "reason": type(exc).__name__}
+
+    data = result.data if isinstance(result.data, dict) else {}
+    return data or {"outcome": "error", "reason": "empty response"}

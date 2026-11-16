@@ -79,17 +79,34 @@ def _beneficiary(fake_client, merchant_id, environment="live", status="active"):
 
 
 def _fund(fake_client, merchant_id, amount, environment="live"):
-    fake_client.seed(
-        "ledger_accounts",
-        {
-            "merchant_id": str(merchant_id),
-            "name": "Merchant Wallet (test)",
-            "account_type": "liability",
-            "purpose": "merchant_wallet",
-            "currency": CUR,
-            "balance": str(amount),
-        },
+    # merchant_wallet is NOT environment-scoped - one per merchant, per
+    # the unique index on (merchant_id, purpose, currency, environment)
+    # where every wallet row is 'live'. Seeding a second one for a
+    # sandbox test would create a duplicate the real index forbids, and
+    # the next lookup would raise on two matching rows. Top the existing
+    # one up instead.
+    existing = next(
+        (
+            a
+            for a in fake_client.table("ledger_accounts")._table.rows
+            if a.get("merchant_id") == str(merchant_id) and a.get("purpose") == "merchant_wallet"
+        ),
+        None,
     )
+    if existing:
+        existing["balance"] = str(Decimal(str(existing["balance"])) + Decimal(str(amount)))
+    else:
+        fake_client.seed(
+            "ledger_accounts",
+            {
+                "merchant_id": str(merchant_id),
+                "name": "Merchant Wallet (test)",
+                "account_type": "liability",
+                "purpose": "merchant_wallet",
+                "currency": CUR,
+                "balance": str(amount),
+            },
+        )
     tx = fake_client.seed(
         "transactions",
         {
@@ -446,15 +463,22 @@ def test_a_payout_that_loses_the_race_is_cancelled_not_left_queued(fake_client, 
     """The friendly balance check can pass and the reservation still fail,
     when another payout takes the funds in between. The row must not
     survive as `queued`: the worker would dispatch money nothing is
-    holding."""
-    mid, ben = _ready(fake_client, funded="50000.00")
+    holding.
+
+    Modelled by making the pre-check read a balance the wallet does not
+    have, which is exactly what a stale read IS - the check sees funds
+    that another payout has already taken. authorize_payout then refuses
+    under its lock, which is the authoritative answer.
+    """
+    mid, ben = _ready(fake_client, funded="500.00")
 
     import app.services.payouts as payouts_module
 
-    def _lost_race(*_args, **_kwargs):
-        raise InsufficientBalanceError("Insufficient balance for this operation")
-
-    monkeypatch.setattr(payouts_module, "post_payout_reservation", _lost_race)
+    monkeypatch.setattr(
+        payouts_module,
+        "get_payout_wallet_balances",
+        lambda *_a, **_k: (Decimal("999999.00"), Decimal(0)),
+    )
 
     with pytest.raises(InsufficientBalanceError):
         create_payout(
@@ -530,3 +554,218 @@ def test_the_calling_key_is_recorded(fake_client):
     )
 
     assert payout["api_key_id"] == str(key_id)
+
+
+# --- the rolling 24h limit ------------------------------------------------
+#
+# Decided inside authorize_payout, under a per-merchant advisory lock,
+# together with the reservation. These tests prove the DECISION: which
+# payouts the limit refuses, what counts against the allowance, and that
+# a refusal reserves nothing. They prove nothing about the race itself -
+# the fake is single-threaded, so there is never a second caller for the
+# lock to make wait. That needs real Postgres on two connections.
+
+
+def test_payouts_inside_the_daily_limit_are_allowed(fake_client):
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs="10000")
+
+    for _ in range(4):
+        payout = create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("2500.00"),
+            currency=CUR,
+            api_key_id=None,
+        )
+        assert payout["status"] == "queued"
+
+    assert _bal(fake_client, mid, "payout_reserved") == Decimal("10000.00")
+
+
+def test_the_payout_that_crosses_the_daily_limit_is_refused(fake_client):
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs="10000")
+    for _ in range(4):
+        create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("2500.00"),
+            currency=CUR,
+            api_key_id=None,
+        )
+
+    with pytest.raises(ConflictError, match="24-hour"):
+        create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("0.01"),
+            currency=CUR,
+            api_key_id=None,
+        )
+
+    # The refusal cost nothing: still exactly the four that were allowed.
+    assert _bal(fake_client, mid, "payout_reserved") == Decimal("10000.00")
+
+
+def test_a_limit_refusal_cancels_the_row_rather_than_leaving_it_queued(fake_client):
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs="1000")
+
+    with pytest.raises(ConflictError):
+        create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("5000.00"),
+            currency=CUR,
+            api_key_id=None,
+        )
+
+    rows = fake_client.table("payouts")._table.rows
+    assert len(rows) == 1
+    assert rows[0]["status"] == "cancelled"
+    assert rows[0]["failure_code"] == "daily_limit_exceeded"
+
+
+def test_the_fee_counts_against_the_daily_limit(fake_client):
+    """total_debit, not amount. A limit that ignored fees would let a
+    merchant exceed it by exactly the fees they paid."""
+    mid, ben = _ready(
+        fake_client, funded="100000.00", daily_limit_tzs="1000", fee_flat_tzs="100"
+    )
+
+    with pytest.raises(ConflictError):
+        create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("950.00"),  # 950 + 100 fee = 1050 > 1000
+            currency=CUR,
+            api_key_id=None,
+        )
+
+
+def test_refunded_payouts_do_not_count_against_the_limit(fake_client):
+    """failed, cancelled and reversed gave their funds back, so they are
+    not money the merchant has sent."""
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs="5000")
+    spent = create_payout(
+        fake_client,
+        merchant_id=mid,
+        environment="live",
+        beneficiary_id=ben,
+        amount=Decimal("5000.00"),
+        currency=CUR,
+        api_key_id=None,
+    )
+
+    fake_client.table("payouts").update({"status": "failed"}).eq("id", spent["id"]).execute()
+
+    allowed = create_payout(
+        fake_client,
+        merchant_id=mid,
+        environment="live",
+        beneficiary_id=ben,
+        amount=Decimal("5000.00"),
+        currency=CUR,
+        api_key_id=None,
+    )
+    assert allowed["status"] == "queued"
+
+
+def test_in_flight_payouts_do_count_against_the_limit(fake_client):
+    """processing and needs_reconciliation are money that is out of the
+    door until proven otherwise. Not counting them would let a merchant
+    exceed the limit during exactly the window where nobody knows what
+    happened."""
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs="5000")
+    sent = create_payout(
+        fake_client,
+        merchant_id=mid,
+        environment="live",
+        beneficiary_id=ben,
+        amount=Decimal("3000.00"),
+        currency=CUR,
+        api_key_id=None,
+    )
+    fake_client.table("payouts").update({"status": "needs_reconciliation"}).eq(
+        "id", sent["id"]
+    ).execute()
+
+    with pytest.raises(ConflictError, match="24-hour"):
+        create_payout(
+            fake_client,
+            merchant_id=mid,
+            environment="live",
+            beneficiary_id=ben,
+            amount=Decimal("2500.00"),
+            currency=CUR,
+            api_key_id=None,
+        )
+
+
+def test_the_limit_is_per_environment(fake_client):
+    """Sandbox traffic must not consume a live allowance."""
+    mid = _merchant(fake_client)
+    _settings(fake_client, mid, daily_limit_tzs="5000")
+    live_ben = _beneficiary(fake_client, mid, environment="live")
+    sandbox_ben = _beneficiary(fake_client, mid, environment="sandbox")
+    _fund(fake_client, mid, "50000.00", environment="live")
+    _fund(fake_client, mid, "50000.00", environment="sandbox")
+
+    create_payout(
+        fake_client,
+        merchant_id=mid,
+        environment="sandbox",
+        beneficiary_id=uuid.UUID(sandbox_ben["id"]),
+        amount=Decimal("5000.00"),
+        currency=CUR,
+        api_key_id=None,
+    )
+
+    live = create_payout(
+        fake_client,
+        merchant_id=mid,
+        environment="live",
+        beneficiary_id=uuid.UUID(live_ben["id"]),
+        amount=Decimal("5000.00"),
+        currency=CUR,
+        api_key_id=None,
+    )
+    assert live["status"] == "queued"
+
+
+def test_the_limit_is_per_merchant(fake_client):
+    a, ben_a = _ready(fake_client, funded="50000.00", daily_limit_tzs="5000")
+    b, ben_b = _ready(fake_client, funded="50000.00", daily_limit_tzs="5000")
+
+    create_payout(
+        fake_client, merchant_id=a, environment="live", beneficiary_id=ben_a,
+        amount=Decimal("5000.00"), currency=CUR, api_key_id=None,
+    )
+    other = create_payout(
+        fake_client, merchant_id=b, environment="live", beneficiary_id=ben_b,
+        amount=Decimal("5000.00"), currency=CUR, api_key_id=None,
+    )
+
+    assert other["status"] == "queued"
+
+
+def test_no_daily_limit_configured_means_no_daily_limit(fake_client):
+    """Null is 'no merchant-specific limit', not 'zero'. Reading it as
+    zero would silently refuse every payout for every merchant whose
+    limit was never set."""
+    mid, ben = _ready(fake_client, funded="100000.00", daily_limit_tzs=None)
+
+    for _ in range(5):
+        payout = create_payout(
+            fake_client, merchant_id=mid, environment="live", beneficiary_id=ben,
+            amount=Decimal("10000.00"), currency=CUR, api_key_id=None,
+        )
+        assert payout["status"] == "queued"

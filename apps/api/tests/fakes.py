@@ -20,6 +20,44 @@ POSTGREST_DEFAULT_PAGE = 1000
 _IN_LIST_CHAR_BUDGET = 25_000
 
 
+_LAST_NOW: list[datetime] = []
+
+
+def _monotonic_now() -> str:
+    """A created_at that is strictly later on every payouts insert.
+
+    `datetime.now()` is not enough for this one table. On Windows its
+    resolution is coarse enough that a loop inserting four rows gives all
+    four the SAME timestamp, and real Postgres never does that for
+    separate requests: each one is its own transaction with its own
+    `now()`.
+
+    It matters because ordering decides money here. authorize_payout sums
+    earlier payouts with `(created_at, id) < (this.created_at, this.id)`;
+    with identical timestamps that tie-break falls through to random
+    uuids, so a payout counts only the half of its predecessors that
+    happen to sort below it and a daily limit silently lets through
+    roughly twice what it should. The bug would be in the fake, the green
+    test would be in CI, and the overspend would be in production.
+
+    Ties are still possible in production for genuinely simultaneous
+    requests, and the uuid tie-break handles those correctly - it only
+    has to be deterministic, so that two concurrent payouts cannot both
+    count themselves as earlier. What it must not do is stand in for
+    ordinary sequential inserts, which is what this prevents.
+
+    Deliberately NOT applied to every table. Doing that made the suite
+    forty times slower and broke four tests that compare fake rows
+    against the real clock, because the high-water mark drifts rows into
+    the future once enough inserts share a tick.
+    """
+    current = datetime.now(timezone.utc)
+    if _LAST_NOW and current <= _LAST_NOW[0]:
+        current = _LAST_NOW[0] + timedelta(microseconds=1)
+    _LAST_NOW[:] = [current]
+    return current.isoformat()
+
+
 # Account purposes post_ledger_entries refuses to take negative. Kept as a
 # named set, and in step with the SQL, because the whole value of the fake
 # here is that an overdraw fails in tests for the same reason it fails in
@@ -405,7 +443,13 @@ class _FakeTable:
         _assert_wire_safe(self.name, payload)
         row = dict(payload)
         row.setdefault("id", str(uuid.uuid4()))
-        now = datetime.now(timezone.utc).isoformat()
+        # Monotonic for payouts ONLY, not globally. Applying it to every
+        # table made the suite 40x slower and broke four unrelated tests
+        # that compare fake rows against the real clock: a high-water
+        # mark advancing on every insert drifts rows into the future.
+        # payouts is where it is actually needed, and where nothing else
+        # depends on the timestamp matching wall-clock.
+        now = _monotonic_now() if self.name == "payouts" else datetime.now(timezone.utc).isoformat()
         row.setdefault("created_at", now)
         row.setdefault("updated_at", now)
         if self.name == "api_keys":
@@ -598,6 +642,10 @@ class _FakeRpcCall:
     def execute(self) -> _Result:
         if self._fn_name == "post_ledger_entries":
             return self._client._post_ledger_entries(self._params.get("p_entries") or [])
+        if self._fn_name == "authorize_payout":
+            return self._client._authorize_payout(
+                self._params.get("p_payout_id"), self._params.get("p_daily_limit")
+            )
         if self._fn_name == "finalize_withdrawal_limits":
             return self._client._finalize_withdrawal_limits(self._params)
         if self._fn_name == "admin_overview_money":
@@ -1181,6 +1229,144 @@ class FakeSupabaseClient:
                 return _decide("auto", reason, "AUTO_ELIGIBLE")
 
         return _decide("manual", reason, code)
+
+    def _authorize_payout(self, payout_id, daily_limit) -> _Result:
+        """Mirrors supabase/migrations/20261116100000_payouts_and_beneficiaries.sql.
+
+        What it CANNOT mirror is the advisory lock, because this fake is
+        single-threaded: the whole point of pg_advisory_xact_lock is that
+        a second caller waits, and here there is never a second caller.
+        So these tests prove the DECISION - which payouts the limit
+        refuses, that a refusal reserves nothing, that a cancelled payout
+        stays cancelled - and prove nothing about the race. The race
+        needs real Postgres on two connections.
+
+        The rolling-24h sum, the (created_at, id) tie-break, the statuses
+        that count against the allowance, and the delegation to
+        post_ledger_entries are all mirrored exactly, because each is a
+        way the decision itself can be wrong.
+        """
+        from datetime import datetime, timedelta, timezone
+        from decimal import Decimal
+
+        payouts = self.table("payouts")._table
+        row = next((r for r in payouts.rows if r["id"] == str(payout_id)), None)
+        if row is None:
+            return _Result({"outcome": "not_queued", "reason": "payout not found"})
+        if row.get("status") != "queued":
+            return _Result(
+                {"outcome": "not_queued", "reason": f"payout is {row.get('status')}, not queued"}
+            )
+
+        def _finish(code: str, reason: str):
+            row["status"] = "cancelled"
+            row["failure_code"] = code
+            row["failure_reason"] = reason
+            row["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+        total_debit = Decimal(str(row["total_debit"]))
+        already = Decimal(0)
+
+        if daily_limit is not None:
+            limit = Decimal(str(daily_limit))
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            counts = ("queued", "processing", "needs_reconciliation", "successful")
+            for other in payouts.rows:
+                if other["id"] == row["id"]:
+                    continue
+                if other.get("merchant_id") != row.get("merchant_id"):
+                    continue
+                if other.get("environment") != row.get("environment"):
+                    continue
+                if other.get("status") not in counts:
+                    continue
+                created = other.get("created_at")
+                if not created:
+                    continue
+                when = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                if when < cutoff:
+                    continue
+                # (created_at, id) < (row.created_at, row.id) - the same
+                # tie-break the SQL uses, so two payouts created in the
+                # same microsecond still have a deterministic order and
+                # cannot both count themselves as earlier.
+                if (str(created), other["id"]) >= (str(row["created_at"]), row["id"]):
+                    continue
+                already += Decimal(str(other["total_debit"]))
+
+            if already + total_debit > limit:
+                _finish(
+                    "daily_limit_exceeded",
+                    f"Would exceed the rolling 24-hour payout limit of {limit} "
+                    f"(already sent: {already}).",
+                )
+                return _Result(
+                    {
+                        "outcome": "daily_limit",
+                        "reason": f"limit {limit}, already {already}, this {total_debit}",
+                        "already_today": str(already),
+                    }
+                )
+
+        accounts = self.table("ledger_accounts")._table
+
+        def _account(purpose: str):
+            return next(
+                (
+                    a
+                    for a in accounts.rows
+                    if a.get("merchant_id") == row["merchant_id"]
+                    and a.get("purpose") == purpose
+                    and a.get("currency") == row["currency"]
+                    and a.get("environment", "live") == row["environment"]
+                ),
+                None,
+            )
+
+        available = _account("payout_available")
+        reserved = _account("payout_reserved")
+        if available is None or reserved is None:
+            _finish("insufficient_funds", "The payout wallet has never been funded.")
+            return _Result({"outcome": "insufficient_funds", "reason": "no payout wallet"})
+
+        try:
+            self._post_ledger_entries(
+                [
+                    {
+                        "transaction_id": row["id"],
+                        "ledger_account_id": available["id"],
+                        "direction": "debit",
+                        "amount": str(total_debit),
+                        "currency": row["currency"],
+                        "description": "Reserved for payout",
+                    },
+                    {
+                        "transaction_id": row["id"],
+                        "ledger_account_id": reserved["id"],
+                        "direction": "credit",
+                        "amount": str(total_debit),
+                        "currency": row["currency"],
+                        "description": "Payout reservation held",
+                    },
+                ]
+            )
+        except Exception as exc:  # noqa: BLE001 - mirrors the SQL exception block
+            if "INSUFFICIENT_BALANCE" in str(exc):
+                _finish(
+                    "insufficient_funds",
+                    "Payout wallet balance could not cover this payout.",
+                )
+                return _Result({"outcome": "insufficient_funds", "reason": "balance check failed"})
+            raise
+
+        row["next_check_at"] = datetime.now(timezone.utc).isoformat()
+        return _Result(
+            {
+                "outcome": "authorized",
+                "reserved": str(total_debit),
+                "already_today": str(already),
+            }
+        )
 
     def _post_ledger_entries(self, entries: list[dict]) -> _Result:
         """Mirrors supabase/migrations/20260814130002_post_ledger_entries_function.sql,

@@ -223,3 +223,177 @@ $$;
 create trigger payouts_reversal_valid
   before insert or update of reversed_from_payout_id on public.payouts
   for each row execute function public.assert_payout_reversal_valid();
+
+-- --- authorize_payout -----------------------------------------------------
+--
+-- The rolling 24h limit check and the fund reservation, as ONE decision
+-- under one per-merchant advisory lock.
+--
+-- Both halves are read-then-write and both are wrong if two payouts
+-- interleave. Two calls can each see the same remaining daily allowance
+-- and both proceed; two calls can each see the same available balance
+-- and both proceed. Doing the check in the API and the reservation in a
+-- second round trip leaves exactly that gap, so the whole decision lives
+-- here instead.
+--
+-- Modelled on finalize_withdrawal_limits (20260922030000), including the
+-- (created_at, id) tie-break so two payouts created in the same
+-- microsecond still have a deterministic order and cannot both count
+-- themselves as "earlier".
+--
+-- Advisory, not a row lock on merchants, so it never contends with
+-- unrelated writes to the merchant row. Transaction-scoped so it is
+-- always released when this function ends, including on a raise.
+--
+-- Reservation is delegated to post_ledger_entries rather than reimplemented,
+-- so the no-negative guard and the balance_before/after snapshot apply to
+-- payouts exactly as they do to everything else. Calling it from inside
+-- this function keeps the advisory lock held across the posting.
+--
+-- Returns jsonb {outcome, reason}. Outcomes:
+--   authorized          reserved and ready to dispatch
+--   daily_limit         would exceed the rolling 24h limit; nothing reserved
+--   insufficient_funds  payout wallet cannot cover it; nothing reserved
+--   not_queued          the payout was not in `queued` (double call)
+
+create or replace function public.authorize_payout(
+  p_payout_id uuid,
+  p_daily_limit numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.payouts;
+  v_today numeric(18, 2);
+  v_available_id uuid;
+  v_reserved_id uuid;
+begin
+  select * into v_row from public.payouts where id = p_payout_id;
+  if not found then
+    return jsonb_build_object('outcome', 'not_queued', 'reason', 'payout not found');
+  end if;
+
+  if v_row.status <> 'queued' then
+    return jsonb_build_object(
+      'outcome', 'not_queued',
+      'reason', format('payout is %s, not queued', v_row.status)
+    );
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('payout:' || v_row.merchant_id::text));
+
+  -- Re-read inside the lock. The status may have changed between the
+  -- read above and the lock being granted, and acting on the stale read
+  -- would reserve funds twice for one payout.
+  select * into v_row from public.payouts where id = p_payout_id for update;
+  if v_row.status <> 'queued' then
+    return jsonb_build_object(
+      'outcome', 'not_queued',
+      'reason', format('payout is %s, not queued', v_row.status)
+    );
+  end if;
+
+  if p_daily_limit is not null then
+    -- Everything not definitively refunded counts against the allowance:
+    -- in-flight money is spent until proven otherwise. failed, cancelled
+    -- and reversed are excluded because their funds went back.
+    select coalesce(sum(total_debit), 0) into v_today
+    from public.payouts
+    where merchant_id = v_row.merchant_id
+      and environment = v_row.environment
+      and status in ('queued', 'processing', 'needs_reconciliation', 'successful')
+      and created_at >= now() - interval '24 hours'
+      and (created_at, id) < (v_row.created_at, v_row.id);
+
+    if v_today + v_row.total_debit > p_daily_limit then
+      update public.payouts
+      set status = 'cancelled',
+          failure_code = 'daily_limit_exceeded',
+          failure_reason = format(
+            'Would exceed the rolling 24-hour payout limit of %s (already sent: %s).',
+            p_daily_limit, v_today
+          ),
+          completed_at = now()
+      where id = v_row.id;
+
+      return jsonb_build_object(
+        'outcome', 'daily_limit',
+        'reason', format('limit %s, already %s, this %s', p_daily_limit, v_today, v_row.total_debit),
+        'already_today', v_today::text
+      );
+    end if;
+  end if;
+
+  select id into v_available_id from public.ledger_accounts
+  where merchant_id = v_row.merchant_id and purpose = 'payout_available'
+    and currency = v_row.currency and environment = v_row.environment;
+
+  select id into v_reserved_id from public.ledger_accounts
+  where merchant_id = v_row.merchant_id and purpose = 'payout_reserved'
+    and currency = v_row.currency and environment = v_row.environment;
+
+  if v_available_id is null or v_reserved_id is null then
+    update public.payouts
+    set status = 'cancelled',
+        failure_code = 'insufficient_funds',
+        failure_reason = 'The payout wallet has never been funded.',
+        completed_at = now()
+    where id = v_row.id;
+    return jsonb_build_object('outcome', 'insufficient_funds', 'reason', 'no payout wallet');
+  end if;
+
+  begin
+    perform public.post_ledger_entries(jsonb_build_array(
+      jsonb_build_object(
+        'transaction_id', v_row.id,
+        'ledger_account_id', v_available_id,
+        'direction', 'debit',
+        'amount', v_row.total_debit,
+        'currency', v_row.currency,
+        'description', 'Reserved for payout'
+      ),
+      jsonb_build_object(
+        'transaction_id', v_row.id,
+        'ledger_account_id', v_reserved_id,
+        'direction', 'credit',
+        'amount', v_row.total_debit,
+        'currency', v_row.currency,
+        'description', 'Payout reservation held'
+      )
+    ));
+  exception
+    when others then
+      if sqlerrm like 'INSUFFICIENT_BALANCE%' then
+        -- The authoritative answer, taken under the same lock. The
+        -- friendly check in the API can be stale; this one cannot.
+        update public.payouts
+        set status = 'cancelled',
+            failure_code = 'insufficient_funds',
+            failure_reason = 'Payout wallet balance could not cover this payout.',
+            completed_at = now()
+        where id = v_row.id;
+        return jsonb_build_object('outcome', 'insufficient_funds', 'reason', 'balance check failed');
+      end if;
+      raise;
+  end;
+
+  update public.payouts
+  set next_check_at = now()
+  where id = v_row.id;
+
+  return jsonb_build_object(
+    'outcome', 'authorized',
+    'reserved', v_row.total_debit::text,
+    'already_today', coalesce(v_today, 0)::text
+  );
+end;
+$$;
+
+comment on function public.authorize_payout(uuid, numeric) is
+  'Checks the rolling 24h payout limit and reserves the funds for one queued payout, as a single decision under a per-merchant advisory lock. Returns {outcome: authorized|daily_limit|insufficient_funds|not_queued}.';
+
+revoke execute on function public.authorize_payout(uuid, numeric) from public, anon, authenticated;
+grant execute on function public.authorize_payout(uuid, numeric) to service_role;
