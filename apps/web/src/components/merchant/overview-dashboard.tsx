@@ -14,8 +14,6 @@ import { CollectionsBarChart } from "./overview/collections-bar-chart";
 import { CollectionsDonut } from "./overview/collections-donut";
 import { OverviewHeader } from "./overview/overview-header";
 import type { DateRangeKey } from "./overview/overview-header";
-import { SetupChecklist } from "./overview/setup-checklist";
-import type { ChecklistTask } from "./overview/setup-checklist";
 
 /**
  * The merchant Overview: greeting, reporting, then setup.
@@ -58,44 +56,6 @@ function daysAgo(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return dayInDarEsSalaam(date);
-}
-
-function buildTasks(overview: MerchantOverview): ChecklistTask[] {
-  const kyc = overview.merchant.kyc_status;
-  return [
-    {
-      id: "verify",
-      label: "Verify your business",
-      description: "Upload your registration and ID so you can accept live payments.",
-      href: "/onboarding",
-      done: kyc === "VERIFIED" || kyc === "APPROVED",
-      icon: "verified_user",
-    },
-    {
-      id: "payment-link",
-      label: "Create your first payment link",
-      description: "The fastest way to take a payment without writing code.",
-      href: "/dashboard/pay-by-link",
-      done: overview.active_payment_links > 0,
-      icon: "add_link",
-    },
-    {
-      id: "collect",
-      label: "Take your first payment",
-      description: "Share a link or connect your system, then watch it land here.",
-      href: "/portal/collections",
-      done: Number(overview.total_collections) > 0,
-      icon: "payments",
-    },
-    {
-      id: "api",
-      label: "Connect your system",
-      description: "Issue an API key to collect and reconcile automatically.",
-      href: "/portal/api-credentials",
-      done: false,
-      icon: "vpn_key",
-    },
-  ];
 }
 
 export function OverviewDashboard({
@@ -165,11 +125,6 @@ export function OverviewDashboard({
   useEffect(() => {
     void load(range, customStart, customEnd);
   }, [range, customStart, customEnd, load]);
-
-  // No overview means no signal about what is set up, so the
-  // checklist is omitted rather than guessed at - showing every task
-  // as incomplete would tell a trading merchant to start over.
-  const tasks = overview ? buildTasks(overview) : [];
 
   return (
     <div className="space-y-6">
@@ -277,8 +232,6 @@ export function OverviewDashboard({
           </div>
         </Card>
       )}
-
-      <SetupChecklist tasks={tasks} />
     </div>
   );
 }

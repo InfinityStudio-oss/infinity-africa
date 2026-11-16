@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { CollectionsBarChart } from "./collections-bar-chart";
 import { CollectionsDonut } from "./collections-donut";
 import { OverviewHeader, displayNameFor, greetingFor } from "./overview-header";
-import { SetupChecklist } from "./setup-checklist";
-import type { ChecklistTask } from "./setup-checklist";
 import type { CollectionsByMethod, CollectionsSeriesPoint } from "@/lib/portal/types";
 
 vi.mock("next/navigation", () => ({
@@ -378,42 +376,3 @@ describe("CollectionsDonut", () => {
   });
 });
 
-// --- the checklist -----------------------------------------------------------
-
-function tasks(overrides: Partial<ChecklistTask>[] = []): ChecklistTask[] {
-  const base: ChecklistTask[] = [
-    { id: "a", label: "Verify your business", description: "d", href: "/onboarding", done: true, icon: "x" },
-    { id: "b", label: "Create your first payment link", description: "d", href: "/x", done: true, icon: "x" },
-  ];
-  return base.map((task, index) => ({ ...task, ...(overrides[index] ?? {}) }));
-}
-
-describe("SetupChecklist", () => {
-  it("opens expanded when something is outstanding", () => {
-    render(<SetupChecklist tasks={tasks([{ done: false }])} />);
-
-    expect(screen.getByText("1 of 2 tasks still to do.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Verify your business/i })).toBeInTheDocument();
-  });
-
-  it("never hides an outstanding task behind a disclosure", () => {
-    render(<SetupChecklist tasks={tasks([{ done: false }])} />);
-
-    expect(screen.queryByRole("button", { name: /Review/i })).not.toBeInTheDocument();
-  });
-
-  it("collapses to one line once everything is done", () => {
-    render(<SetupChecklist tasks={tasks()} />);
-
-    expect(screen.getByText("Setup complete")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Verify your business/i })).not.toBeInTheDocument();
-  });
-
-  it("can still be reopened when complete", () => {
-    render(<SetupChecklist tasks={tasks()} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Review/i }));
-
-    expect(screen.getByRole("link", { name: /Verify your business/i })).toBeInTheDocument();
-  });
-});
