@@ -19,7 +19,7 @@ export function AdminShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="admin-shell-scope min-h-screen bg-background text-on-background">
+    <div className="admin-shell-scope app-gradient-surface min-h-screen bg-background text-on-background">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <AdminTopbar
         onOpenSidebar={() => setSidebarOpen(true)}
@@ -27,7 +27,7 @@ export function AdminShell({
         adminEmail={adminEmail}
         adminFullName={adminFullName}
       />
-      <main className="pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 max-w-[1280px] mx-auto space-y-8">
+      <main className="on-gradient pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 max-w-[1280px] mx-auto space-y-8">
         {children}
       </main>
     </div>

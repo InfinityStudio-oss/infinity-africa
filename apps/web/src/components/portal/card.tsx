@@ -13,7 +13,7 @@ export function Card({
   return (
     <section
       id={id}
-      className={`min-w-0 bg-surface rounded-xl border border-surface-container-highest/60 shadow-ambient ${padded ? "p-6" : "overflow-hidden"} ${className}`}
+      className={`min-w-0 bg-surface text-on-surface rounded-xl border border-surface-container-highest/60 shadow-ambient ${padded ? "p-6" : "overflow-hidden"} ${className}`}
     >
       {children}
     </section>

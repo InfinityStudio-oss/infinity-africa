@@ -60,8 +60,8 @@ export function PortalShell({
   // template — that ordering depends on how the CSS build happens to sort
   // utilities, which is exactly the kind of thing that silently breaks.
   const mainClassName = fullWidth
-    ? "pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 space-y-8"
-    : "pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 max-w-[1280px] mx-auto space-y-8";
+    ? "on-gradient pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 space-y-8"
+    : "on-gradient pt-20 md:pt-24 pb-16 px-4 md:px-8 md:ml-64 max-w-[1280px] mx-auto space-y-8";
 
   return (
     <RoleProvider>
