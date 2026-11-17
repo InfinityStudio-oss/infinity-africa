@@ -365,11 +365,31 @@ export function CollectionPricingRulesView({
 
   return (
     <div className="space-y-8">
-      <div className="rounded-lg bg-primary-container/10 text-on-background px-4 py-3 text-sm flex items-start gap-2.5">
-        <Icon name="info" className="text-[18px] shrink-0 mt-0.5 text-primary" />
+      {/* This note sits directly on the app gradient, not inside a Card,
+          so it takes gradient ink - not the dark card ink the rest of
+          this file correctly uses.
+
+          It had `bg-primary-container/10` with `text-on-background`. A
+          ten percent wash over navy is very nearly transparent, so that
+          was dark ink on a dark gradient: 1.41-2.45:1 for the body,
+          1.03-1.69:1 for the second line and 1.04-1.81:1 for the icon,
+          measured at all four stops. Below the 3:1 floor everywhere, and
+          the second line was effectively invisible.
+
+          A dark scrim rather than a light wash, because the box has to
+          carry the muted line too: on `bg-primary/20` white reads
+          7.03-11.50:1 and `on-gradient-muted` 5.57-9.12:1, both past AA
+          at every stop. A white wash would have left the muted line at
+          3.94:1 on the far end.
+
+          The withdrawal note in pricing-rules-view.tsx keeps dark ink and
+          is right to - its background is fully opaque. Opacity is the
+          whole difference. */}
+      <div className="on-gradient rounded-lg border border-on-primary/15 bg-primary/20 px-4 py-3 text-sm flex items-start gap-2.5">
+        <Icon name="info" className="text-[18px] shrink-0 mt-0.5 on-gradient-muted" />
         <div className="space-y-1">
           <p>These fees apply to collection transactions only. Withdrawals do not charge business fees during MVP.</p>
-          <p className="text-on-surface-variant">Collection pricing is negotiated separately with each business/customer.</p>
+          <p className="on-gradient-muted">Collection pricing is negotiated separately with each business/customer.</p>
         </div>
       </div>
 

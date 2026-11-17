@@ -42,8 +42,14 @@ export default async function SuperAdminPricingRulesPage({
         merchantRules={collectionMerchantRules}
       />
 
+      {/* Same fault as the note above, found while fixing it: this sits on
+          the gradient with no background at all, and the summary is the
+          only thing visible while collapsed. `text-on-surface-variant`
+          put it at 1.05-1.76:1 on navy. `on-gradient-muted` is 4.94-9.12:1
+          and still reads as secondary, which is what an inactive section
+          wants. */}
       <details className="rounded-lg border border-surface-container-highest">
-        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-on-surface-variant">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold on-gradient-muted">
           Withdrawal Pricing Rules (Inactive) — no longer charges any merchant
         </summary>
         <div className="p-5 pt-0 space-y-8">

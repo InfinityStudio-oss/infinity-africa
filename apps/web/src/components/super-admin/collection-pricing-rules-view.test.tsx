@@ -85,6 +85,48 @@ describe("CollectionPricingRulesView", () => {
     expect(screen.getByText("Platform default", { exact: true })).toBeInTheDocument();
   });
 
+  it("writes the helper note in gradient ink, not the dark card ink", async () => {
+    // This note is the one element in this file that is NOT inside a
+    // Card - it sits straight on the app's navy gradient. It shipped
+    // with `bg-primary-container/10 text-on-background`, which is dark
+    // ink on a ten percent wash: 1.41-2.45:1 for the body and 1.03:1 at
+    // worst for the second line. Unreadable, and reported from a
+    // screenshot rather than caught here.
+    //
+    // Two things are pinned, because either one alone brings it back:
+    // the box must not carry an opacity-modified light wash it cannot
+    // hold ink against, and the text must not use card ink.
+    const { CollectionPricingRulesView } = await import("./collection-pricing-rules-view");
+    render(
+      <CollectionPricingRulesView
+        merchants={[merchant]}
+        platformRules={[platformRule]}
+        selectedMerchantId={null}
+        merchantRules={[]}
+      />,
+    );
+
+    const body = screen.getByText(
+      "These fees apply to collection transactions only. Withdrawals do not charge business fees during MVP.",
+    );
+    const note = body.closest("div")?.parentElement as HTMLElement;
+    expect(note).toBeTruthy();
+
+    // Gradient ink on the box, never card ink.
+    expect(note.className).toContain("on-gradient");
+    expect(note.className).not.toMatch(/text-on-background|text-on-surface\b|text-on-surface-variant/);
+
+    // A dark scrim, not a translucent light wash.
+    expect(note.className).toContain("bg-primary/20");
+    expect(note.className).not.toMatch(/bg-primary-container\/\d/);
+
+    // The muted second line has to clear AA on navy as well, so it takes
+    // the gradient's own muted token rather than the card one.
+    const muted = screen.getByText("Collection pricing is negotiated separately with each business/customer.");
+    expect(muted.className).toContain("on-gradient-muted");
+    expect(muted.className).not.toContain("text-on-surface-variant");
+  });
+
   it("surfaces a failed save's error message instead of doing nothing", async () => {
     const { updateCollectionPricingRuleAction } = await import("@/lib/admin/live-actions");
     vi.mocked(updateCollectionPricingRuleAction).mockResolvedValue({
