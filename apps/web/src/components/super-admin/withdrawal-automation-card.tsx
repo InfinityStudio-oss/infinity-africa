@@ -135,8 +135,19 @@ function PolicyEditor({
 
   const example = groupDecimalString(maxAmount);
 
+  // Both tones must be an OPAQUE surface. The active tone was
+  // `bg-primary-container/10` - a 10% wash, which over the app's navy
+  // gradient is very nearly transparent, while every label inside this
+  // card uses dark card ink (`on-background`, `on-surface-variant`).
+  // The result was a card whose text was invisible, and only once
+  // automation was switched on: the inactive branch already used a
+  // solid surface, so the bug shipped hidden behind a flag.
+  //
+  // Active is still distinguishable without a see-through fill - it
+  // keeps the primary border, the bolt icon and the status line in
+  // primary ink, and sits a step up the surface ramp from inactive.
   const statusTone = current.automation_active
-    ? "border-primary-container/50 bg-primary-container/10"
+    ? "border-primary-container/50 bg-surface-container-low"
     : "border-outline-variant bg-surface-container-lowest";
 
   return (

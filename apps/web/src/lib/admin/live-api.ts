@@ -204,23 +204,58 @@ async function apiPage<T>(path: string): Promise<{ rows: T[]; totalPages: number
  * reach it, and because the search and status filters on those tables
  * run in the browser over whatever this returned.
  *
- * Pages are fetched in order and stop as soon as the API says there are
- * no more, so a list that fits in one page costs exactly one request,
- * the same as before.
+ * A list that fits in one page costs exactly one request. Beyond that,
+ * the first page is fetched alone - it is the one that says how many
+ * there are - and the rest are fetched IN PARALLEL, in bounded waves,
+ * rather than one after another.
+ *
+ * That matters because these run server-side on Vercel against the API
+ * on Railway, so every page is a full network round trip and they were
+ * strictly sequential. The withdrawals list is 427 rows, which is five
+ * pages: five round trips stacked end to end before the page could
+ * paint, where it now costs two.
+ *
+ * The waves are what keeps the early stop working. A list can SHRINK
+ * between requests, leaving `total_pages` stale and the tail of the
+ * range empty; firing every page at once would ask for all of them
+ * regardless. Fetching a wave at a time means an empty page still ends
+ * the read, and the most that can be wasted is one wave.
+ *
+ * Order is preserved: pages are concatenated by number, never by which
+ * request happened to return first.
  */
-async function apiListAll<T>(path: string, params?: URLSearchParams): Promise<T[]> {
-  const query = new URLSearchParams(params);
-  query.set("page_size", String(PAGE_SIZE));
+const PAGE_CONCURRENCY = 4;
 
-  const rows: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
+async function apiListAll<T>(path: string, params?: URLSearchParams): Promise<T[]> {
+  const pageUrl = (page: number) => {
+    const query = new URLSearchParams(params);
+    query.set("page_size", String(PAGE_SIZE));
     query.set("page", String(page));
-    const result = await apiPage<T>(`${path}?${query.toString()}`);
-    rows.push(...result.rows);
-    // An empty page also stops it: a list that shrinks between requests
-    // must not spin to MAX_PAGES against a stale total_pages.
-    if (result.rows.length === 0 || page >= result.totalPages) break;
+    return `${path}?${query.toString()}`;
+  };
+
+  const first = await apiPage<T>(pageUrl(1));
+  if (first.rows.length === 0 || first.totalPages <= 1) return first.rows;
+
+  const lastPage = Math.min(first.totalPages, MAX_PAGES);
+  const rows = first.rows.slice();
+
+  for (let page = 2; page <= lastPage; page += PAGE_CONCURRENCY) {
+    const wave = await Promise.all(
+      Array.from({ length: Math.min(PAGE_CONCURRENCY, lastPage - page + 1) }, (_, index) =>
+        apiPage<T>(pageUrl(page + index)),
+      ),
+    );
+
+    // Appended in page order, which is NOT the order they resolved in.
+    // A table sorted newest-first would otherwise shuffle between loads.
+    for (const result of wave) rows.push(...result.rows);
+
+    // An empty page means the list shrank under us and the stale
+    // total_pages is promising rows that are no longer there.
+    if (wave.some((result) => result.rows.length === 0)) break;
   }
+
   return rows;
 }
 

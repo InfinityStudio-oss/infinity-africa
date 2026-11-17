@@ -344,4 +344,36 @@ describe("compareDecimalStrings", () => {
     expect(compareDecimalStrings(null, "100")).toBe(0);
     expect(compareDecimalStrings("100", null)).toBe(0);
   });
+
+  /**
+   * The card sits directly on the app's navy gradient and fills itself
+   * with a surface colour, while every label inside it uses dark card
+   * ink. A translucent fill therefore makes the whole card unreadable.
+   *
+   * That is exactly what shipped: the active tone was
+   * `bg-primary-container/10`, a 10% wash. Only the ACTIVE branch was
+   * affected - the inactive one already used a solid surface - so the
+   * bug stayed hidden until automation was switched on in production.
+   */
+  describe("is readable in both states", () => {
+    function toneOf(policy: WithdrawalAutomationPolicy) {
+      const { container } = render(<WithdrawalAutomationCard policy={policy} />);
+      return container.firstElementChild?.className ?? "";
+    }
+
+    it("fills the card with an opaque surface when automation is on", () => {
+      const tone = toneOf(onPolicy);
+
+      expect(tone).toMatch(/bg-surface/);
+      // A slashed background utility is an opacity modifier.
+      expect(tone).not.toMatch(/bg-[\w-]+\/\d/);
+    });
+
+    it("fills the card with an opaque surface when automation is off", () => {
+      const tone = toneOf(offPolicy);
+
+      expect(tone).toMatch(/bg-surface/);
+      expect(tone).not.toMatch(/bg-[\w-]+\/\d/);
+    });
+  });
 });

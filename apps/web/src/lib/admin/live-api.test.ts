@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/** Mirrors MAX_PAGES in live-api.ts, which is module-private. */
+const MAX_PAGES_FOR_TEST = 20;
+
 // live-api.ts is marked `import "server-only"`, which throws outside a
 // real RSC build.
 vi.mock("server-only", () => ({}));
@@ -96,7 +99,17 @@ describe("admin lists that must be complete on screen", () => {
     const { listAdminMerchants } = await import("./live-api");
 
     expect(await listAdminMerchants()).toHaveLength(1);
-    expect(calls).toHaveLength(2);
+    // Page 1, then one wave of four (pages 2-5) which all come back
+    // empty and end the read. Five requests, not the nine the stale
+    // total_pages promises and not the twenty MAX_PAGES allows.
+    //
+    // It was two when pages were fetched strictly one after another.
+    // Parallelism costs at most one wave of wasted requests in this
+    // case, and those go out together rather than end to end; the guard
+    // this test exists for - never spinning out to MAX_PAGES on a stale
+    // count - still holds.
+    expect(calls).toHaveLength(5);
+    expect(calls.length).toBeLessThan(MAX_PAGES_FOR_TEST);
   });
 
   it("gives back an empty list, not an exception, when the read fails", async () => {
@@ -115,5 +128,75 @@ describe("admin lists that must be complete on screen", () => {
 
     expect(await listAdminAuditLogs()).toHaveLength(100);
     expect(calls).toHaveLength(1);
+  });
+
+  /**
+   * Pages after the first go out together.
+   *
+   * These reads run server-side on Vercel against the API on Railway, so
+   * each page is a full network round trip. Fetched one after another,
+   * the 427-row withdrawals list cost five stacked round trips before
+   * the page could paint.
+   */
+  describe("pages after the first", () => {
+    /** Like listOf, but each response resolves on a short timer, so
+     * requests that overlap are actually in flight at the same time and
+     * the peak can be counted. No manual gating - an interval fast
+     * enough to drain one starves the event loop and hangs the worker. */
+    function gatedListOf(total: number) {
+      let inFlight = 0;
+      let peak = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight -= 1;
+          const query = new URLSearchParams(url.split("?")[1] ?? "");
+          const size = Number(query.get("page_size") ?? 20);
+          const page = Number(query.get("page") ?? 1);
+          const start = (page - 1) * size;
+          const rows = Array.from(
+            { length: Math.max(0, Math.min(size, total - start)) },
+            (_, i) => ({ merchant_id: String(start + i + 1) }),
+          );
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: rows,
+              meta: { page, page_size: size, total, total_pages: Math.ceil(total / size) },
+            }),
+          };
+        }),
+      );
+      return { peak: () => peak };
+    }
+
+    it("are fetched in parallel rather than one after another", async () => {
+      const gate = gatedListOf(427);
+      const { listAdminMerchants } = await import("./live-api");
+
+      const rows = await listAdminMerchants();
+
+      expect(rows).toHaveLength(427);
+      // Page 1 goes alone - it is the one that says how many there are -
+      // then 2..5 go together. Sequential would peak at exactly 1.
+      expect(gate.peak()).toBeGreaterThan(1);
+    });
+
+    it("keeps page order, not completion order", async () => {
+      // Whichever request wins the race, row 1 is still row 1. A table
+      // sorted newest-first would otherwise shuffle between loads.
+      gatedListOf(427);
+      const { listAdminMerchants } = await import("./live-api");
+
+      const rows = await listAdminMerchants();
+
+      expect(rows.map((row) => row.merchant_id)).toEqual(
+        Array.from({ length: 427 }, (_, i) => String(i + 1)),
+      );
+    });
   });
 });
