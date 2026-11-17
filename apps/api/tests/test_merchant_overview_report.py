@@ -160,29 +160,69 @@ def test_another_merchants_collections_never_appear(fake_client):
     assert Decimal(report["successful_collections"]) == Decimal("1000.00")
 
 
-# --- fees --------------------------------------------------------------------
+# --- fees are not reported ----------------------------------------------------
 
 
-def test_fees_are_the_posted_amounts(fake_client):
-    """Summed from what was charged on each transaction, not recomputed
-    from a pricing rule - the rule may have changed since."""
+def test_no_fee_aggregate_is_returned(fake_client):
+    """The merchant portal does not show a business a running total of
+    what the platform has charged it. Removing the card is not enough on
+    its own - the figure must not be in the payload either, or it is one
+    devtools tab away."""
     merchant_id, _user_id = _merchant(fake_client)
     _collection(fake_client, merchant_id, amount="1000.00", fee="30.00")
     _collection(fake_client, merchant_id, amount="2000.00", fee="60.00")
 
     report = _report(fake_client, merchant_id)
 
-    assert Decimal(report["fees_paid"]) == Decimal("90.00")
+    assert "fees_paid" not in report
+    assert not [key for key in report if "fee" in key.lower()]
 
 
-def test_fees_follow_the_same_filter_as_the_charts(fake_client):
+# --- average payment ----------------------------------------------------------
+
+
+def test_average_payment_is_the_mean_of_successful_collections(fake_client):
     merchant_id, _user_id = _merchant(fake_client)
     _collection(fake_client, merchant_id, amount="1000.00", fee="30.00")
-    _collection(fake_client, merchant_id, amount="1000.00", fee="999.00", status="failed")
+    _collection(fake_client, merchant_id, amount="2000.00", fee="60.00")
 
     report = _report(fake_client, merchant_id)
 
-    assert Decimal(report["fees_paid"]) == Decimal("30.00")
+    assert Decimal(report["average_payment"]) == Decimal("1500.00")
+
+
+def test_average_payment_follows_the_same_filter_as_the_charts(fake_client):
+    """A failed payment must not drag the average down - it is not a
+    payment the merchant took."""
+    merchant_id, _user_id = _merchant(fake_client)
+    _collection(fake_client, merchant_id, amount="1000.00")
+    _collection(fake_client, merchant_id, amount="5000.00", status="failed")
+
+    report = _report(fake_client, merchant_id)
+
+    assert Decimal(report["average_payment"]) == Decimal("1000.00")
+
+
+def test_average_payment_is_zero_not_an_error_when_nothing_succeeded(fake_client):
+    """A quiet window is a real answer, not a division by zero."""
+    merchant_id, _user_id = _merchant(fake_client)
+
+    report = _report(fake_client, merchant_id)
+
+    assert Decimal(report["average_payment"]) == Decimal("0.00")
+
+
+def test_average_payment_rounds_to_two_places(fake_client):
+    """1000 / 3 does not terminate; the card must not render a repeating
+    decimal."""
+    merchant_id, _user_id = _merchant(fake_client)
+    for _ in range(3):
+        _collection(fake_client, merchant_id, amount="1000.00")
+    _collection(fake_client, merchant_id, amount="0.01")
+
+    report = _report(fake_client, merchant_id)
+
+    assert Decimal(report["average_payment"]) == Decimal("750.00")
 
 
 # --- the window --------------------------------------------------------------

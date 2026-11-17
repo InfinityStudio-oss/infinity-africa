@@ -122,7 +122,6 @@ def test_a_merchants_lifetime_total_counts_every_page(client, merchant):
 
     expected = Decimal("10.00") * OLD_ROWS + Decimal("4700.00")
     assert overview["total_collections"] == expected
-    assert overview["total_fees_charged"] == Decimal("1.00") * OLD_ROWS
 
 
 def test_the_fake_client_truncates_like_postgrest(client, merchant):

@@ -41,7 +41,6 @@ class MerchantOverviewResponse(BaseModel):
     successful_withdrawals: int
     active_payment_links: int
     unpaid_invoices: int
-    total_fees_charged: Decimal
 
 
 class CollectionsSeriesPointResponse(BaseModel):
@@ -68,7 +67,13 @@ class MerchantOverviewReportResponse(BaseModel):
     by_method: list[CollectionsByMethodResponse]
     successful_collections: Decimal
     successful_count: int
-    fees_paid: Decimal
+    # What the merchant takes per payment. This slot used to carry
+    # `fees_paid`, the total charged by the platform in the window; that
+    # is deliberately no longer returned, so it cannot be read out of the
+    # response even though the card is gone. Per-transaction `fee_amount`
+    # is untouched - a merchant still needs it to reconcile a single
+    # payment against what landed in the wallet.
+    average_payment: Decimal
     pending_collections: Decimal
     pending_count: int
 

@@ -7,15 +7,18 @@ acceptable at merchant-portal scale (fetching and summing in Python);
 revisit with a real aggregate query or materialized view if this ever
 needs to scale past that.
 
-total_fees_charged sums transactions.fee_amount for this merchant's
-successful collections — NOT the ledger's platform_revenue account
-balance, which is platform-wide (merchant_id=None, see
-app/services/ledger.py's post_collection_entries), not per-merchant.
+Neither endpoint here returns a fee aggregate. The Overview used to
+carry two - `total_fees_charged` on the overview and `fees_paid` on the
+report - and the merchant portal is deliberately not a place where the
+platform shows a business a running total of what it has been charged.
+Per-transaction `fee_amount` stays on the transaction, ledger and payout
+rows, because a merchant needs it to reconcile a single payment against
+what landed in the wallet; it is the aggregate that is gone.
 """
 
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from supabase import Client
 
@@ -94,10 +97,10 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
 
     # Lifetime totals, so every page is needed: an unbounded select stops
     # at 1000 rows and would quietly under-report a busy merchant's
-    # takings and fees.
+    # takings.
     successful_collections = fetch_all(
         lambda: client.table("transactions")
-        .select("gross_amount, fee_amount, created_at")
+        .select("gross_amount, created_at")
         .eq("merchant_id", str(merchant_id))
         .eq("type", "collection")
         .eq("status", "successful")
@@ -150,10 +153,6 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
         ),
         Decimal(0),
     )
-    total_fees_charged = sum(
-        (Decimal(str(row["fee_amount"])) for row in successful_collections), Decimal(0)
-    )
-
     pending_transactions = (
         client.table("transactions")
         .select("id", count="exact")
@@ -203,7 +202,6 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
             "successful_withdrawals": successful_withdrawals,
             "active_payment_links": active_payment_links,
             "unpaid_invoices": unpaid_invoices,
-            "total_fees_charged": total_fees_charged,
         },
         _OVERVIEW_TTL_SECONDS,
     )
@@ -218,7 +216,6 @@ def get_merchant_overview(client: Client, *, merchant_id: uuid.UUID) -> dict:
         "successful_withdrawals": successful_withdrawals,
         "active_payment_links": active_payment_links,
         "unpaid_invoices": unpaid_invoices,
-        "total_fees_charged": total_fees_charged,
     }
 
 
@@ -241,8 +238,8 @@ def get_merchant_overview_report(
 
     **Source is `transactions`, not `collections`.** Two reasons:
 
-    1. Fees are posted there (`fee_amount`), so "Fees Paid" is what was
-       actually charged rather than what a pricing rule would charge now.
+    1. It is the row the money actually moved on, so the figures match
+       what was posted rather than what a pricing rule would compute now.
     2. Sandbox collections never get a transactions row, so this is
        live-only by construction. There is no environment column to
        filter on and none is needed - adding one would be a filter that
@@ -260,7 +257,7 @@ def get_merchant_overview_report(
 
     rows = fetch_all(
         lambda: client.table("transactions")
-        .select("gross_amount, fee_amount, method, created_at")
+        .select("gross_amount, method, created_at")
         .eq("merchant_id", str(merchant_id))
         .eq("type", "collection")
         .eq("status", "successful")
@@ -283,12 +280,10 @@ def get_merchant_overview_report(
 
     by_method: dict[str, dict] = {}
     total_amount = Decimal(0)
-    total_fees = Decimal(0)
 
     for row in rows:
         amount = Decimal(str(row.get("gross_amount") or 0))
         total_amount += amount
-        total_fees += Decimal(str(row.get("fee_amount") or 0))
 
         day = dar_es_salaam_date(row["created_at"]).isoformat()
         bucket = buckets.get(day)
@@ -300,6 +295,8 @@ def get_merchant_overview_report(
         entry = by_method.setdefault(method, {"method": method, "amount": Decimal(0), "count": 0})
         entry["amount"] += amount
         entry["count"] += 1
+
+    successful_count = sum(b["count"] for b in buckets.values())
 
     pending = (
         client.table("transactions")
@@ -328,8 +325,15 @@ def get_merchant_overview_report(
             for e in sorted(by_method.values(), key=lambda e: e["amount"], reverse=True)
         ],
         "successful_collections": str(total_amount),
-        "successful_count": sum(b["count"] for b in buckets.values()),
-        "fees_paid": str(total_fees),
+        "successful_count": successful_count,
+        # Mean takings per successful payment. Zero - not a division
+        # error - when nothing succeeded in the window, which is a real
+        # and readable answer for a quiet period.
+        "average_payment": str(
+            (total_amount / successful_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if successful_count
+            else Decimal("0.00")
+        ),
         # Pending is deliberately NOT date-filtered. "What is still in
         # flight" is a question about now, not about the reporting window
         # - a merchant narrowing to last week does not stop caring about

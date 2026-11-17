@@ -728,7 +728,7 @@ export interface MerchantOverviewReport {
   by_method: CollectionsByMethod[];
   successful_collections: string;
   successful_count: number;
-  fees_paid: string;
+  average_payment: string;
   pending_collections: string;
   pending_count: number;
 }

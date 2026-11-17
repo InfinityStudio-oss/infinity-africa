@@ -578,7 +578,6 @@ export interface MerchantOverview {
   successful_withdrawals: number;
   active_payment_links: number;
   unpaid_invoices: number;
-  total_fees_charged: string;
 }
 
 /** Returns null on any non-2xx (no real merchant yet for this user, token

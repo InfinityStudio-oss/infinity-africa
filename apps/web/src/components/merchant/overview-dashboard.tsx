@@ -26,7 +26,7 @@ import type { DateRangeKey } from "./overview/overview-header";
  *
  * Two kinds of number live on this page and they must not be confused:
  *
- *   - **Reporting** (the charts, Successful Collections, Fees Paid) is
+ *   - **Reporting** (the charts, Successful Collections, Average Payment) is
  *     scoped to the chosen period.
  *   - **Balances** (Available Balance, the Payout Wallet) are current
  *     ledger positions and ignore the date filter entirely. A balance
@@ -188,11 +188,18 @@ export function OverviewDashboard({
           value={loading || error || !report ? "—" : formatCurrency(report.successful_collections, currency)}
           caption={loading ? "Loading…" : error ? "Could not load" : `${report?.successful_count ?? 0} payments`}
         />
+        {/* Average payment, where "Fees Paid" used to be. The merchant
+            portal is not the place to show a business a running total of
+            what the platform has charged it; the figure is also gone
+            from the API response, so it cannot be read out of the
+            payload either. Per-payment fees remain on the transaction,
+            wallet-ledger and payout rows, which is where a merchant
+            needs them to reconcile. */}
         <KpiCard
-          icon="request_quote"
-          label="Fees Paid"
-          value={loading || error || !report ? "—" : formatCurrency(report.fees_paid, currency)}
-          caption={loading ? "Loading…" : error ? "Could not load" : "In this period"}
+          icon="receipt_long"
+          label="Average Payment"
+          value={loading || error || !report ? "—" : formatCurrency(report.average_payment, currency)}
+          caption={loading ? "Loading…" : error ? "Could not load" : "Per successful payment"}
         />
         <KpiCard
           icon="hourglass_top"

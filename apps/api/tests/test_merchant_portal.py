@@ -1073,7 +1073,10 @@ def test_overview_aggregates_all_fields(fake_client):
     assert data["successful_withdrawals"] == 1  # TXN-5
     assert data["active_payment_links"] == 1  # only slug-active
     assert data["unpaid_invoices"] == 1  # only INV-1
-    assert Decimal(data["total_fees_charged"]) == Decimal(450)
+    # No fee aggregate: the merchant portal does not show a business a
+    # running total of what the platform has charged it, and a removed
+    # card is no use if the figure is still in the payload.
+    assert "total_fees_charged" not in data
 
 
 def test_overview_404s_with_no_membership(fake_client):
