@@ -7,8 +7,12 @@ export const metadata = {
   title: "Businesses | InfinityPay Super Admin",
 };
 
-export default async function SuperAdminMerchantsPage() {
-  const merchants = await listAdminMerchants();
+export default async function SuperAdminMerchantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string }>;
+}) {
+  const [merchants, { search }] = await Promise.all([listAdminMerchants(), searchParams]);
 
   const counts = {
     total: merchants.length,
@@ -28,7 +32,7 @@ export default async function SuperAdminMerchantsPage() {
         <AdminKpiCard variant="brand" icon="block" label="Suspended" value={counts.suspended.toLocaleString()} />
       </div>
 
-      <MerchantsTable rows={merchants} />
+      <MerchantsTable rows={merchants} initialSearch={search ?? ""} />
     </div>
   );
 }

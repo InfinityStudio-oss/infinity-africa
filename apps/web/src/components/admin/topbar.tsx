@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Icon } from "@/components/portal/icon";
@@ -30,6 +31,8 @@ export function AdminTopbar({
   adminEmail?: string;
   adminFullName?: string | null;
 }) {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -42,14 +45,35 @@ export function AdminTopbar({
         >
           <Icon name="menu" />
         </button>
-        <div className="flex-1 max-w-xl hidden sm:flex items-center bg-surface-container-low rounded-full px-4 py-2 border border-outline-variant focus-within:border-primary transition-colors">
+        {/* This was a decorative input: no value, no onChange, no form,
+            no handler. Typing in it did nothing and pressing Enter did
+            nothing, while the placeholder promised three different
+            searches. It now submits, and the placeholder names only what
+            it actually searches — the same correction already made to the
+            merchant topbar. */}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const term = search.trim();
+            // An empty submit clears the filter rather than searching for
+            // nothing, which would read as "there are no businesses".
+            router.push(
+              term ? `/super-admin/merchants?search=${encodeURIComponent(term)}` : "/super-admin/merchants",
+            );
+          }}
+          className="flex-1 max-w-xl hidden sm:flex items-center bg-surface-container-low rounded-full px-4 py-2 border border-outline-variant focus-within:border-primary transition-colors"
+          role="search"
+        >
           <Icon name="search" className="text-on-surface-variant mr-2 text-[20px]" />
           <input
             className="bg-transparent border-none outline-none w-full text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant p-0"
-            placeholder="Search businesses, transactions, invoices..."
-            type="text"
+            placeholder="Search businesses by name, ID, email, or phone..."
+            aria-label="Search businesses by name, ID, email, or phone"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
-        </div>
+        </form>
       </div>
       <div className="flex items-center gap-1 md:gap-3">
         <button className="text-on-surface-variant hover:bg-surface-container-high transition-colors p-2 rounded-full relative" aria-label="Notifications">

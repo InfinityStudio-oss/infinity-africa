@@ -232,8 +232,17 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-export function MerchantsTable({ rows }: { rows: Merchant[] }) {
-  const [search, setSearch] = useState("");
+export function MerchantsTable({
+  rows,
+  initialSearch = "",
+}: {
+  rows: Merchant[];
+  initialSearch?: string;
+}) {
+  // Seeded from ?search= so the topbar's search box has somewhere to
+  // land. Without this the topbar would route here and the term would be
+  // silently dropped, which looks identical to "no results".
+  const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = rows.filter((merchant) => {

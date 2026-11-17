@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AdminKpiCard } from "@/components/admin/kpi-card";
 import { Card, tdClass, thClass } from "@/components/portal/card";
+import { PageHeader } from "@/components/portal/page-header";
 import { Icon } from "@/components/portal/icon";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { getAdminOverview, listAdminAuditLogs } from "@/lib/admin/live-api";
@@ -34,12 +35,17 @@ export default async function SuperAdminCommandCenterPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-on-surface mb-1">Dashboard</h2>
-          <p className="text-base text-on-surface-variant">Overview of platform operations and health.</p>
-        </div>
-      </div>
+      {/* PageHeader, not a hand-rolled heading. This block previously
+          wore the card tokens (`on-surface` / `on-surface-variant`),
+          which are dark ink meant for a pale card. Sat directly on the
+          app's navy gradient, measured across its four stops, the title
+          ran 1.36-2.50:1 and the description 1.76 down to 1.05:1 — not
+          low-contrast but invisible, which is what the screenshot shows.
+          On the gradient ink they are 11.50-6.23:1 and 9.12-4.94:1, all
+          above the 4.5:1 body-text minimum at every stop.
+          PageHeader carries the gradient ink and is what the other 50-odd
+          pages already use. */}
+      <PageHeader title="Dashboard" description="Overview of platform operations and health." />
 
       {!overview ? (
         <Card>
