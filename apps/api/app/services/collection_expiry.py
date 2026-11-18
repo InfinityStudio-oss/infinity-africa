@@ -63,6 +63,7 @@ from app.services.checkout_reconciliation import (
 )
 from app.services.collections import resolve_collection
 from app.services.crud import get_by_id, update_row
+from app.services.reconciliation_schedule import next_expiry_recheck_at
 from app.services.selcom.schemas import CollectionResult
 from app.services.selcom_checkout.client import (
     SelcomCheckoutHTTPClient,
@@ -117,7 +118,9 @@ def _expiry_candidates(client: Client, *, cutoff: datetime, limit: int) -> list[
     return rows[:limit]
 
 
-def _recheck_candidates(client: Client, *, since: datetime, until: datetime, limit: int) -> list[dict]:
+def _recheck_candidates(
+    client: Client, *, since: datetime, until: datetime, limit: int, now: datetime
+) -> list[dict]:
     """Expired collections still inside the grace window, and expired long
     enough ago to be worth asking about again.
 
@@ -126,6 +129,27 @@ def _recheck_candidates(client: Client, *, since: datetime, until: datetime, lim
     provider call to be told what we were just told. Waiting one expiry
     window between the two questions costs nothing — the grace window is
     measured in hours.
+
+    **`next_check_at` is what makes this drain.** It used to order by
+    `failed_at` and take the oldest `limit` rows with no further filter.
+    An unpaid candidate was never written to, so it stayed the oldest and
+    came back at the head of the very next sweep: the queue re-asked the
+    same 25 rows forever and never reached anything newer. Measured in
+    production on 2026-11-18, the 25 it kept re-asking had all expired
+    ~24 hours earlier and were about to age out anyway, while a
+    collection expired that morning was not even in the first 1,000 rows.
+    520 were overdue, the oldest by five hours.
+
+    Each unpaid answer now schedules the next question
+    (`next_expiry_recheck_at`), so a row leaves the head of the queue
+    whatever the answer. Rows are ordered by when they are next due, not
+    by age.
+
+    The column is shared with `reconcile_pending_checkout_collections`,
+    which cannot collide with this: that sweep filters `status =
+    'processing'` and every row here is `failed`. A NULL is treated as
+    due, so a collection that somehow never carried a schedule is picked
+    up rather than ignored forever.
     """
     rows = (
         client.table("collections")
@@ -134,7 +158,9 @@ def _recheck_candidates(client: Client, *, since: datetime, until: datetime, lim
         .eq("failure_reason_code", _INTERNAL_REASON)
         .gt("failed_at", _iso(since))
         .lt("failed_at", _iso(until))
-        .order("failed_at", desc=False)
+        .or_(f"next_check_at.is.null,next_check_at.lte.{_iso(now)}")
+        .order("next_check_at", desc=False)
+        .limit(limit)
         .execute()
         .data
         or []
@@ -273,13 +299,36 @@ async def _recover_late_payments(
         return 0
 
     candidates = _recheck_candidates(
-        client, since=now - timedelta(hours=grace_hours), until=now - quiet_period, limit=limit
+        client,
+        since=now - timedelta(hours=grace_hours),
+        until=now - quiet_period,
+        limit=limit,
+        now=now,
     )
     recovered = 0
     for row in candidates:
         collection_id = uuid.UUID(row["id"])
         try:
             if not await _provider_now_reports_paid(row):
+                # Schedule the next question before moving on. This write
+                # is the whole fix: an unpaid answer used to leave the row
+                # untouched, so it stayed at the head of the queue and the
+                # sweep asked about it again immediately, forever, while
+                # newer collections were never reached at all.
+                #
+                # Once the ladder is exhausted this lands past the grace
+                # window, so the row stops being a candidate and ages out
+                # rather than being asked about for 24 hours.
+                update_row(
+                    client,
+                    "collections",
+                    collection_id,
+                    {
+                        "next_check_at": next_expiry_recheck_at(
+                            row["failed_at"], now=now, grace_hours=grace_hours
+                        )
+                    },
+                )
                 continue
             # Reopened only now that the provider has actually said paid.
             # If this process dies between here and the refresh below, the

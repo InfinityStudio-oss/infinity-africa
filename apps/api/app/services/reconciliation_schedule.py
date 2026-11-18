@@ -108,4 +108,65 @@ def next_check_at(
     return (now + timedelta(seconds=base + jitter)).isoformat()
 
 
-__all__ = ["interval_for_age", "next_check_at"]
+# When to re-ask about a collection we have ALREADY expired, measured
+# from `failed_at`. A separate ladder from the tiers above, because it
+# answers a different question against a much tighter budget.
+#
+# The tiers above schedule a payment that is still live, over at most
+# collection_push_expiry_minutes. These schedule one we have already
+# given up on, over collection_push_expiry_grace_hours - 24 hours rather
+# than 5 minutes, across every row expired in that window.
+#
+# Why a fixed ladder and not an interval: selcom_outbound_max_per_minute
+# is 60 for the whole platform, and callers WAIT for a slot, so every
+# recheck is taken directly out of what live payments need. At roughly
+# 2,500 expiries a day a recurring interval is unaffordable - a 15 minute
+# one would cost ~160 calls a minute on its own. A ladder asks each
+# expired collection four times and then stops, which is ~4 calls per
+# collection, around 7 a minute at that volume.
+#
+# Front-loaded because that is where the answers are. A late approval is
+# someone who found their phone and typed their PIN a moment after we
+# gave up, not someone who did it six hours later.
+_RECHECK_AFTER_SECONDS: tuple[int, ...] = (300, 1200, 3600, 10800)
+
+
+def next_expiry_recheck_at(
+    failed_at: str | datetime,
+    *,
+    now: datetime | None = None,
+    grace_hours: int,
+) -> str:
+    """When to ask about this expired collection again, as an ISO string.
+
+    Returns a timestamp beyond the grace window once the ladder is
+    exhausted, which is how a row stops being a candidate: the caller
+    filters on `next_check_at <= now` AND `failed_at` inside the window,
+    so a row scheduled past its own window is never selected again and
+    simply ages out.
+
+    That "stop" value is what makes the queue drain. Without it an
+    unpaid candidate kept its place at the head forever - the sweep
+    re-asked the same oldest rows every pass and never reached anything
+    newer.
+    """
+    now = now or datetime.now(timezone.utc)
+    failed = (
+        failed_at
+        if isinstance(failed_at, datetime)
+        else datetime.fromisoformat(str(failed_at).replace("Z", "+00:00"))
+    )
+    age = max(0.0, (now - failed).total_seconds())
+
+    for offset in _RECHECK_AFTER_SECONDS:
+        if age < offset:
+            # Same jitter rationale as next_check_at: a burst of pushes
+            # that expired together must not come back together.
+            jitter = (offset - age) * _JITTER_FRACTION * (now.microsecond / 1_000_000)
+            return (now + timedelta(seconds=(offset - age) + jitter)).isoformat()
+
+    # Ladder exhausted - park it past its own grace window.
+    return (failed + timedelta(hours=max(1, grace_hours), minutes=1)).isoformat()
+
+
+__all__ = ["interval_for_age", "next_check_at", "next_expiry_recheck_at"]

@@ -192,7 +192,11 @@ class _FakeQuery:
         for branch in branches:
             column, _, rest = branch.strip().partition(".")
             op, _, value = rest.partition(".")
-            if op not in ("ilike", "eq"):
+            # `is` and `lte` are here for the expired-collection recheck
+            # queue (app/services/collection_expiry.py), which selects
+            # `next_check_at.is.null,next_check_at.lte.<now>` — a row with
+            # no schedule yet is due now, not invisible forever.
+            if op not in ("ilike", "eq", "is", "lte", "gte", "lt", "gt"):
                 raise NotImplementedError(f"fake or_() does not implement {op!r}")
             parsed.append((op, column, value))
         self._filters.append(("or", None, parsed))
@@ -281,6 +285,38 @@ class _FakeQuery:
             a, b = str(row_value), str(value)
         return -1 if a < b else (1 if a > b else 0)
 
+    def _or_branch_matches(self, row, op: str, column: str, value) -> bool:
+        """One branch of an `or_()`, matching how the real PostgREST
+        evaluates it.
+
+        `is.null` is the branch that matters most: a NULL column must
+        make the branch TRUE, not be stringified into the text "None"
+        and compared. The expired-collection recheck queue relies on
+        exactly that — a row with no `next_check_at` yet is due now
+        rather than invisible forever.
+        """
+        row_value = self._value_for(row, column)
+        if op == "ilike":
+            return self._ilike_matches(row_value, value)
+        if op == "is":
+            if str(value) == "null":
+                return row_value is None
+            if str(value) in ("true", "false"):
+                return bool(row_value) is (str(value) == "true")
+            return str(row_value) == str(value)
+        if op in ("lte", "gte", "lt", "gt"):
+            # A NULL never satisfies an ordering comparison in Postgres.
+            if row_value is None:
+                return False
+            cmp = self._compare(row_value, value)
+            return {
+                "lte": cmp <= 0,
+                "gte": cmp >= 0,
+                "lt": cmp < 0,
+                "gt": cmp > 0,
+            }[op]
+        return str(row_value) == str(value)
+
     @staticmethod
     def _ilike_matches(row_value, pattern: str) -> bool:
         """Mirrors Postgres ILIKE: `%`/`_` are wildcards, `\\` escapes the
@@ -339,12 +375,7 @@ class _FakeQuery:
             if kind == "neq" and str(self._value_for(row, column)) == str(value):
                 return False
             if kind == "or":
-                if not any(
-                    self._ilike_matches(self._value_for(row, col), val)
-                    if op == "ilike"
-                    else str(self._value_for(row, col)) == str(val)
-                    for op, col, val in value
-                ):
+                if not any(self._or_branch_matches(row, op, col, val) for op, col, val in value):
                     return False
                 continue
             if kind == "ilike" and not self._ilike_matches(self._value_for(row, column), value):

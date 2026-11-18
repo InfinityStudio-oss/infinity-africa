@@ -198,6 +198,84 @@ def test_an_expired_push_the_provider_still_calls_pending_stays_failed(fake_clie
     assert _row(fake_client, collection["id"])["status"] == "failed"
 
 
+def test_an_unpaid_recheck_does_not_block_the_queue_behind_it(fake_client, monkeypatch):
+    """The regression this queue was rewritten for.
+
+    The recheck used to order by `failed_at` and take the oldest N with
+    no other filter. An unpaid answer wrote nothing, so the same oldest
+    row came back at the head of the very next sweep and newer ones were
+    never reached. Found in production on 2026-11-18: the 25 rows being
+    re-asked had all expired ~24h earlier, 520 were overdue, and a
+    payment expired that morning was not in the first 1,000 rows.
+
+    With a batch of 1, two sweeps must ask about two DIFFERENT
+    collections. Before the fix the second sweep re-asked the first.
+    """
+    monkeypatch.setenv("COLLECTION_PUSH_EXPIRY_BATCH_SIZE", "1")
+
+    older, _ = _seed_pending_collection(fake_client, monkeypatch)
+    newer, _ = _seed_pending_collection(fake_client, monkeypatch)
+    for collection in (older, newer):
+        _age(fake_client, collection, minutes=90)
+    with patch(_REFRESH, return_value={"status": "processing"}):
+        _sweep(fake_client)
+        _sweep(fake_client)
+
+    _backdate_failure(fake_client, older, minutes=120)
+    _backdate_failure(fake_client, newer, minutes=60)
+    for collection in (older, newer):
+        _row(fake_client, collection["id"])["next_check_at"] = None
+
+    asked_in_order = []
+    with patch(_PAID, side_effect=lambda row: asked_in_order.append(row["id"]) or False):
+        _sweep(fake_client)
+        first_pass = list(asked_in_order)
+        _sweep(fake_client)
+
+    assert first_pass == [str(older["id"])], "the oldest due row goes first"
+    assert asked_in_order[1] != asked_in_order[0], (
+        "the second sweep re-asked the same collection — the queue is head-of-line blocked again"
+    )
+    assert asked_in_order[1] == str(newer["id"])
+
+    # The unpaid answer must leave a schedule behind; that write is what
+    # moves the row off the head of the queue.
+    assert _row(fake_client, older["id"])["next_check_at"] is not None
+
+
+def test_a_recheck_ladder_runs_out_so_a_row_stops_costing_provider_calls(fake_client, monkeypatch):
+    """The other half of draining: asking forever is as bad as never
+    advancing, because every question costs a slot out of
+    selcom_outbound_max_per_minute (60/min, shared platform-wide).
+
+    Once the ladder is exhausted the next check is parked past the row's
+    own grace window, so it ages out instead of being re-asked for 24h.
+    """
+    collection, _ = _seed_pending_collection(fake_client, monkeypatch)
+    _age(fake_client, collection, minutes=90)
+    with patch(_REFRESH, return_value={"status": "processing"}):
+        _sweep(fake_client)
+
+    # Expired long enough ago that every rung of the ladder is behind it.
+    _backdate_failure(fake_client, collection, minutes=20 * 60)
+    _row(fake_client, collection["id"])["next_check_at"] = None
+
+    with patch(_PAID, return_value=False) as asked:
+        _sweep(fake_client)
+    assert asked.called
+
+    scheduled = _row(fake_client, collection["id"])["next_check_at"]
+    failed_at = datetime.fromisoformat(_row(fake_client, collection["id"])["failed_at"])
+    grace_hours = 24
+    assert datetime.fromisoformat(scheduled) > failed_at + timedelta(hours=grace_hours), (
+        "an exhausted row must be parked past its grace window, not re-asked"
+    )
+
+    with patch(_PAID) as asked_again:
+        _sweep(fake_client)
+    asked_again.assert_not_called()
+
+
 def test_nothing_is_rechecked_once_the_grace_window_closes(fake_client, monkeypatch):
     """This is what bounds the polling cost — otherwise expiry would swap
     one unbounded sweep for another."""
