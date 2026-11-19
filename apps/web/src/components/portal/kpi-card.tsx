@@ -41,7 +41,7 @@ export function KpiCard({
   }
 
   return (
-    <div className="min-w-0 bg-surface text-on-surface rounded-xl p-4 border border-surface-container-highest/60 shadow-ambient">
+    <div className="app-panel min-w-0 bg-surface text-on-surface rounded-xl p-4 border border-surface-container-highest/60 shadow-ambient">
       <div className="flex items-center gap-2 text-on-surface-variant mb-2">
         <Icon name={icon} className={`text-[18px] ${iconClassName}`} />
         <span className="text-sm font-medium">{label}</span>

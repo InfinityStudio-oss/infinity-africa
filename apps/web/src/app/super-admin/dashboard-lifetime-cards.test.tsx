@@ -6,17 +6,44 @@ import type { AdminOverview } from "@/lib/admin/types";
 const getAdminOverview = vi.fn();
 const listAdminAuditLogs = vi.fn(async () => []);
 
+// The page reads the signed-in admin's name for its welcome header, and
+// both of those modules are `import "server-only"`. jsdom is a client
+// environment, so importing the page pulls server-only in and it throws
+// before a single assertion runs. Neither module has anything to do with
+// the lifetime totals this file is about.
+vi.mock("@/lib/auth/ui-preview", () => ({ uiPreviewEnabled: () => true }));
+vi.mock("@/lib/supabase/protected-route", () => ({ requireSuperAdmin: async () => null }));
+
 vi.mock("@/lib/admin/live-api", () => ({
   getAdminOverview: () => getAdminOverview(),
   listAdminAuditLogs: () => listAdminAuditLogs(),
+  // The dashboard now also counts active businesses and today's
+  // successful collections for its headline row. Neither is what this
+  // file is about, so both resolve to a fixed value and stay out of the
+  // way of the lifetime-total assertions below.
+  getAdminActiveMerchantCount: async () => 42,
+  getAdminSuccessfulCollectionsToday: async () => 7,
+  getAdminDailyCollectionCounts: async () => [],
+  getAdminCollectionStatusCounts: async () => [],
+  listAdminCollectionsResult: async () => ({ rows: [], failure: null }),
+  ADMIN_COLLECTION_STATUSES: [],
 }));
 
-/** The Command Center page is an async Server Component. Rendering it in
- * jsdom means awaiting it and handing React the resolved element. */
+/** Renders the cards the way the page does.
+ *
+ * MetricsSection rather than the page's default export: the page is now
+ * a synchronous shell of Suspense boundaries whose data is fetched by
+ * the async sections inside it, so  returns a tree with
+ * these cards still unresolved and every assertion below would pass
+ * vacuously against an empty render. Awaiting the section is what
+ * actually exercises the card markup.
+ *
+ * The section is still a real async Server Component, so this is the
+ * same shape of test as before. */
 async function renderDashboard(overview: AdminOverview | null) {
   getAdminOverview.mockResolvedValue(overview);
-  const { default: Page } = await import("./page");
-  render(await Page());
+  const { MetricsSection } = await import("./page");
+  render(await MetricsSection());
 }
 
 const overview: AdminOverview = {
@@ -71,15 +98,21 @@ describe("lifetime totals on the Command Center", () => {
   it("leaves every other card alone", async () => {
     await renderDashboard(overview);
 
+    // The redesign added a four-card headline row and moved the rest
+    // below it. Every metric that existed before is still here - this
+    // list is the proof, and is why the redesign is a rearrangement
+    // rather than a quiet deletion of figures someone relied on.
     for (const label of [
-      "Total Businesses",
-      "Collections Today",
-      "Withdrawals Today",
-      "Collections This Month",
-      "Revenue Today",
-      "Revenue This Month",
-      "Pending Onboarding",
+      "Collection Volume",
+      "Successful Transactions",
+      "Active Businesses",
       "Pending Withdrawals",
+      "Collections This Month",
+      "Revenue This Month",
+      "Revenue Today",
+      "Withdrawals Today",
+      "Pending Onboarding",
+      "Total Businesses",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }

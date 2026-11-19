@@ -214,9 +214,136 @@ body {
    --color-background fallback so a browser that ignores the gradient
    still gets readable paper rather than white. */
 .app-gradient-surface {
-  background-color: #24476e;
-  background-image: linear-gradient(135deg, #1e3a5f 0%, #24476e 40%, #2c5680 75%, #35648f 100%);
+  background-color: var(--app-page);
+  /* A broad, soft cyan glow behind the content, over a deep navy base.
+     Two layers, not one: the radial is the glow, the linear keeps the
+     far corners from going flat black.
+
+     The glow stops at 0.55 alpha and that number is measured, not
+     chosen. At full strength #087E8B gives white 4.81:1 and the muted
+     navigation ink 3.72:1 - the second fails body text outright. At
+     0.55 the brightest point composites to #08505e, where white is
+     9.05:1 and muted ink 7.00:1, so text stays readable even directly
+     over the centre of the glow. */
+  background-image:
+    radial-gradient(
+      120% 85% at 28% 0%,
+      color-mix(in srgb, var(--app-glow) 55%, transparent) 0%,
+      color-mix(in srgb, var(--app-glow) 26%, transparent) 38%,
+      transparent 72%
+    ),
+    linear-gradient(160deg, #0a2232 0%, var(--app-page) 55%, #061320 100%);
   background-attachment: fixed;
+}
+
+/* ---------------------------------------------------------------------
+   The dashboard theme, defined once for both portals.
+
+   Scoped to the two shells rather than :root so the public site and the
+   auth pages keep their own treatment, and so one definition drives
+   every panel in both portals at once. The Tailwind surface tokens are
+   REDEFINED here rather than replaced at 99 call sites: `bg-surface`,
+   `text-on-surface` and the container ramp already appear everywhere, so
+   pointing them at the new palette restyles the whole portal without
+   touching the components that use them.
+
+   Contrast, measured against the composited panel (the panel is
+   translucent, so its real colour depends on what is behind it):
+
+     panel over page base   #cfdade   ink #102A43  10.25:1
+     panel over the glow    #d0e8ec   ink #102A43  11.43:1
+     panel over sidebar     #d0dce1   ink #102A43  10.43:1
+
+   so panel ink clears AA everywhere by a wide margin, which is what
+   lets the panels be this pale without the numbers on them going soft.
+   --------------------------------------------------------------------- */
+.admin-shell-scope,
+.portal-shell-scope {
+  --app-page: #071826;
+  --app-glow: #087e8b;
+
+  /* The panel. `--panel-surface` is the translucent one actually used;
+     `--panel-surface-solid` is the fallback for a browser without
+     backdrop-filter, and is the same colour already composited over the
+     page base so it looks the same rather than merely similar. */
+  --panel-surface: rgba(240, 249, 252, 0.86);
+  --panel-surface-solid: #cfdade;
+  --panel-border: rgba(255, 255, 255, 0.38);
+  --panel-ink: #102a43;
+  --panel-radius: 12px;
+  --panel-blur: 14px;
+
+  /* Pointing the existing tokens at the new palette. */
+  --color-background: var(--app-page);
+  --color-surface: var(--panel-surface);
+  --color-surface-container-lowest: rgba(255, 255, 255, 0.92);
+  --color-surface-container-low: rgba(246, 252, 254, 0.88);
+  --color-surface-container: rgba(232, 243, 248, 0.9);
+  --color-surface-container-high: rgba(218, 234, 242, 0.92);
+  --color-surface-container-highest: rgba(199, 219, 229, 0.95);
+  --color-on-surface: var(--panel-ink);
+  --color-on-background: var(--panel-ink);
+  --color-on-surface-variant: #40607a;
+  --color-outline-variant: rgba(16, 42, 67, 0.16);
+
+  /* A compact dark teal sidebar, a step off the page base so its edge
+     reads without needing a border. */
+  --color-sidebar: #0b2738;
+  --color-sidebar-strong: #071d2b;
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-text-muted: #cfe6f0;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.07);
+  /* Full strength, not the 90% it started at. At 0.9 the highlight
+     composites to #087583, which separates from the sidebar by only
+     2.86:1 — under the 3:1 minimum for a non-text indicator, so the
+     active item was not reliably distinguishable. At full strength it is
+     3.21:1 against the sidebar while white sits on it at 4.81:1; a
+     brighter teal separates better but drops the label below AA, so this
+     is the point where both pass. */
+  --color-sidebar-active-bg: #087e8b;
+  --color-sidebar-active-text: #ffffff;
+
+  /* Restrained, as the reference is: the panels are separated by their
+     own brightness, not by a drop shadow. */
+  --shadow-ambient: 0 1px 2px rgba(3, 12, 20, 0.28), 0 8px 24px rgba(3, 12, 20, 0.22);
+}
+
+/* The frosted panel itself. A class rather than more token redefinition,
+   because translucency needs backdrop-filter and a rounded clip, and
+   neither is expressible as a colour. */
+.admin-shell-scope .app-panel,
+.portal-shell-scope .app-panel {
+  background-color: var(--panel-surface);
+  border-color: var(--panel-border);
+  border-radius: var(--panel-radius);
+  color: var(--panel-ink);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+}
+
+/* Firefox before 103, and anything else without backdrop-filter, gets
+   the already-composited solid instead of a see-through panel over a
+   dark page - which would otherwise render as dark ink on navy. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .admin-shell-scope .app-panel,
+  .portal-shell-scope .app-panel {
+    background-color: var(--panel-surface-solid);
+  }
+}
+
+/* Light ink for content sitting on the page rather than on a panel.
+   Redefined here because the page is darker than the old gradient, so
+   the muted step can afford to be dimmer and still clear AA: #cfe6f0 is
+   13.90:1 on the page base and 7.00:1 at the brightest point of the
+   glow. */
+.admin-shell-scope .on-gradient,
+.portal-shell-scope .on-gradient {
+  color: #ffffff;
+}
+
+.admin-shell-scope .on-gradient-muted,
+.portal-shell-scope .on-gradient-muted {
+  color: #cfe6f0;
 }
 
 /* Focus must stay obvious on every surface. The ring is deep blue on
@@ -244,9 +371,26 @@ body {
    Body copy further down the page keeps dark ink on light sections -
    marketing pages put long text directly on the background, and that is
    the shape that went invisible in the portal. */
+/* The public hero carries the same navy-and-cyan identity as the two
+   portals, so the site and the product look like one product.
+   Deliberately NOT the portal's `.app-gradient-surface`: that one is
+   `background-attachment: fixed` to sit still behind a scrolling
+   dashboard, which on a marketing page pins the hero's glow to the
+   viewport and makes it slide under the sections below it.
+
+   The glow peaks at the same measured 0.55 as the portals, so the white
+   hero copy stays at 9.05:1 and the muted sub-copy at 7.00:1 even
+   directly over its brightest point. */
 .hero-gradient-surface {
-  background-color: #1e3a5f;
-  background-image: linear-gradient(120deg, #1e3a5f 0%, #24476e 55%, #2c5680 100%);
+  background-color: #071826;
+  background-image:
+    radial-gradient(
+      100% 90% at 78% 8%,
+      color-mix(in srgb, #087e8b 55%, transparent) 0%,
+      color-mix(in srgb, #087e8b 24%, transparent) 42%,
+      transparent 74%
+    ),
+    linear-gradient(120deg, #0a2232 0%, #071826 58%, #061320 100%);
 }
 
 /* Anything painted a pale surface gets dark ink, whatever contains it.

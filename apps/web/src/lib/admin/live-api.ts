@@ -1,5 +1,6 @@
 import "server-only";
 
+import { darEsSalaamDayBounds, dayInDarEsSalaam, recentDays } from "@/lib/dates";
 import { getAccessToken } from "@/lib/supabase/session";
 
 import type {
@@ -132,6 +133,33 @@ async function apiGet<T>(path: string): Promise<T | null> {
 
 async function apiList<T>(path: string): Promise<T[]> {
   return (await apiGet<T[]>(path)) ?? [];
+}
+
+/** How many rows a filtered list has, without fetching any of them.
+ *
+ * Asks for a single row and reads `meta.total`, which the API computes
+ * over the whole filtered set rather than the page. That distinction is
+ * the entire point: the list reads here are capped at
+ * `page=1&page_size=100`, so counting what comes back would silently
+ * report 100 for every busy day. The platform takes several thousand
+ * collections a day, so a chart built that way would be a flat line of
+ * identical bars that happened to look plausible.
+ *
+ * Returns null when the request failed, which the caller must render as
+ * "unavailable" rather than as zero — a real zero is a quiet day and
+ * means something quite different.
+ */
+async function apiCount(path: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { headers: await authHeader(), cache: "no-store" });
+    if (!res.ok) return null;
+    const body: ApiEnvelope<unknown[]> = await res.json();
+    if (!body.success) return null;
+    const total = body.meta?.total;
+    return typeof total === "number" ? total : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A list read that says whether it failed, rather than looking empty.
@@ -287,6 +315,116 @@ async function apiWrite<T>(
 
 export async function getAdminOverview(): Promise<AdminOverview | null> {
   return apiGet<AdminOverview>("/v1/admin/overview");
+}
+
+/** Collection statuses as the platform actually stores them.
+ *
+ * The full declared vocabulary from `AdminCollectionRow["status"]`, not
+ * a subset chosen for the chart. Production currently only ever returns
+ * the first four, but asking for all six means a reversal starts
+ * appearing on the dashboard the day the first one happens, rather than
+ * being silently absent because this list was written from a snapshot.
+ * The doughnut drops any status whose count is zero, so the two that do
+ * not occur yet cost nothing. */
+export const ADMIN_COLLECTION_STATUSES = [
+  "successful",
+  "failed",
+  "pending",
+  "processing",
+  "reversed",
+  "pending_review",
+] as const;
+
+export type AdminCollectionStatus = (typeof ADMIN_COLLECTION_STATUSES)[number];
+
+/** One day of the collections chart. `count` is null when the request
+ * for that day failed, which must render as a gap rather than as a zero
+ * bar — a zero bar is a claim that nothing came in. */
+export interface AdminDailyCollectionPoint {
+  date: string;
+  count: number | null;
+}
+
+/**
+ * Collections per day for the last `days` Dar es Salaam days.
+ *
+ * **Counts, not amounts.** There is no admin endpoint that sums
+ * collection value per day, and the list endpoints are capped at 100
+ * rows per page, so a per-day total could only be produced by adding up
+ * a truncated page and presenting the result as money. The platform
+ * takes several thousand collections a day, so that number would be
+ * wrong on every busy day and wrong in the flattering direction.
+ *
+ * A count is a real figure this API can answer exactly, via `meta.total`
+ * over the whole filtered set. The chart says it is a count, and the
+ * summary records the missing per-day value aggregate as a gap.
+ *
+ * One request per day, fired together — each asks for a single row.
+ */
+export async function getAdminDailyCollectionCounts(days = 14): Promise<AdminDailyCollectionPoint[]> {
+  const wanted = recentDays(days);
+  return Promise.all(
+    wanted.map(async (date) => {
+      const { from, to } = darEsSalaamDayBounds(date);
+      const params = new URLSearchParams({
+        page: "1",
+        page_size: "1",
+        status: "successful",
+        date_from: from,
+        date_to: to,
+      });
+      return { date, count: await apiCount(`/v1/admin/collections?${params.toString()}`) };
+    }),
+  );
+}
+
+/**
+ * How many collections are in each status right now, platform-wide.
+ *
+ * Each entry is a real `meta.total` for that status, so the doughnut's
+ * segments and its centre total are the same numbers the Collections
+ * page would show under the same filter. A null means that one request
+ * failed and is rendered as unavailable rather than as zero.
+ */
+export async function getAdminCollectionStatusCounts(): Promise<
+  { status: AdminCollectionStatus; count: number | null }[]
+> {
+  return Promise.all(
+    ADMIN_COLLECTION_STATUSES.map(async (status) => {
+      const params = new URLSearchParams({ page: "1", page_size: "1", status });
+      return { status, count: await apiCount(`/v1/admin/collections?${params.toString()}`) };
+    }),
+  );
+}
+
+/** Successful collections today, as a count.
+ *
+ * `AdminOverview` carries today's collection *value* but no count of
+ * successful transactions, so this asks the collections list for the
+ * total under the same filter the Collections page would apply. Null
+ * means the request failed and must render as unavailable, not zero. */
+export async function getAdminSuccessfulCollectionsToday(): Promise<number | null> {
+  const { from, to } = darEsSalaamDayBounds(dayInDarEsSalaam());
+  const params = new URLSearchParams({
+    page: "1",
+    page_size: "1",
+    status: "successful",
+    date_from: from,
+    date_to: to,
+  });
+  return apiCount(`/v1/admin/collections?${params.toString()}`);
+}
+
+/** Businesses whose account is active, counted from the real list.
+ *
+ * `AdminOverview.total_merchants` counts every business including
+ * suspended and rejected ones, so it cannot answer "active merchants".
+ * The list is already fetched in full elsewhere on this portal and runs
+ * to a few hundred rows. */
+export async function getAdminActiveMerchantCount(): Promise<number | null> {
+  const merchants = await listAdminMerchants();
+  if (merchants.length === 0) return null;
+  return merchants.filter((merchant) => merchant.account_status === "active").length;
 }
 
 // --- Merchants -----------------------------------------------------------

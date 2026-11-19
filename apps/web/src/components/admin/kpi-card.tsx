@@ -73,7 +73,7 @@ export function AdminKpiCard({
   }
 
   return (
-    <div className="bg-surface rounded-lg p-4 border border-surface-container-highest/60 shadow-ambient flex flex-col justify-between hover:-translate-y-1 transition-transform duration-200">
+    <div className="app-panel bg-surface rounded-lg p-4 border border-surface-container-highest/60 shadow-ambient flex flex-col justify-between hover:-translate-y-1 transition-transform duration-200">
       <div className="flex justify-between items-start mb-2.5">
         <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">{label}</span>
         <Icon name={icon} className="text-[20px] text-primary/55 shrink-0" />

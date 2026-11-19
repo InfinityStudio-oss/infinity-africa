@@ -18,15 +18,22 @@ import type { CollectionsSeriesPoint } from "@/lib/portal/types";
  */
 
 // A lighter blue than the primary action colour, matching the
-// reference's bars. 3.29:1 against the card - above the 3:1 boundary
-// minimum, and deliberately not darker: a bar chart is a field of large
-// shapes, and a button-weight fill makes it shout.
-const BAR = "#5b89d6";
+// reference's bars. Deliberately not darker: a bar chart is a field of
+// large shapes, and a button-weight fill makes it shout.
+//
+// Re-measured for the frosted panel. These were #5b89d6/#dbe5f2 against
+// the old opaque #f4f8fd card; the panel is now a translucent pale blue
+// that composites to about #cfdade, where #5b89d6 falls to 2.46:1 and
+// drops below the 3:1 minimum for a large mark. #4474b4 is 3.35:1 on
+// that panel and 3.73:1 where the cyan glow sits behind it.
+const BAR = "#4474b4";
 // The most recent day, picked out the way the reference does. It is the
 // one bar a merchant looks for first, and a second weight says so
-// without needing a label.
+// without needing a label. 5.36:1 on the panel.
 const BAR_LATEST = "#2c5680";
-const GRID = "#dbe5f2";
+// Recessive by design, but the old near-white line was invisible on a
+// panel this pale. Tied to the panel ink so it stays a true tint of it.
+const GRID = "rgba(16, 42, 67, 0.14)";
 
 function shortDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
