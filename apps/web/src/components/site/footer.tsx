@@ -47,10 +47,7 @@ const DEVELOPER_LINKS = [
 const CONTACT_ROWS = [
   { icon: "mail", label: "info@infinitypay.me", href: "mailto:info@infinitypay.me" },
   { icon: "support_agent", label: "help@infinitypay.me", href: "mailto:help@infinitypay.me" },
-  { icon: "headset_mic", label: "support@infinitypay.me", href: "mailto:support@infinitypay.me" },
   { icon: "call", label: "+255 747 730 270", href: "https://wa.me/255747730270" },
-  { icon: "language", label: "infinitypay.me", href: "https://infinitypay.me" },
-  { icon: "location_on", label: "Mbezi Luis - Ubungo - Dar es Salaam", href: null },
 ];
 
 const linkClass = "text-base text-on-primary/80 hover:text-on-primary transition-colors";
@@ -93,13 +90,9 @@ export function Footer() {
             {CONTACT_ROWS.map((row) => (
               <li key={row.label} className="flex items-start gap-2.5">
                 <Icon name={row.icon} className="text-[18px] text-on-primary/70 mt-0.5 shrink-0" />
-                {row.href ? (
-                  <a className="text-sm text-on-primary/90 hover:text-on-primary transition-colors" href={row.href}>
-                    {row.label}
-                  </a>
-                ) : (
-                  <span className="text-sm text-on-primary/90">{row.label}</span>
-                )}
+                <a className="text-sm text-on-primary/90 hover:text-on-primary transition-colors" href={row.href}>
+                  {row.label}
+                </a>
               </li>
             ))}
           </ul>
