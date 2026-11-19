@@ -472,7 +472,40 @@ def update_policy(
                 "p_user_agent": user_agent,
             },
         ).execute()
-    except Exception as exc:  # narrowed below, re-raised otherwise
+    except Exception as exc:
+        # The comment here used to claim this was "narrowed below, re-raised
+        # otherwise". It never was: every cause — a PostgREST error, a
+        # constraint violation, a timeout, a transport failure — became the
+        # same one sentence, and nothing was written to the log.
+        #
+        # That is why this has been unexplainable rather than merely
+        # broken. A Super Admin saw "could not be saved", and there was
+        # no record anywhere of what the database actually said, so each
+        # report started from nothing. Everything about the call checks
+        # out on inspection — the function exists in production with a
+        # matching signature, the limits are within the stored
+        # constraints, the audit insert's foreign key resolves — so the
+        # answer was only ever going to be in the error this discarded.
+        #
+        # PostgREST errors carry code/message/details/hint. They can name
+        # columns and constraints, so they go to the log, never to the
+        # response.
+        detail = {
+            field: getattr(exc, field, None)
+            for field in ("code", "message", "details", "hint")
+            if getattr(exc, field, None)
+        }
+        logger.exception(
+            "withdrawal_policy_rpc_failed correlation_id=%s expected_version=%s enabled=%s "
+            "max_amount=%s rolling=%s confirmed=%s postgrest=%s",
+            correlation_id,
+            expected_version,
+            enabled,
+            max_amount_tzs,
+            merchant_rolling_24h_limit_tzs,
+            confirmed,
+            detail or type(exc).__name__,
+        )
         raise ConflictError(
             "The automation policy could not be saved. Nothing was changed. "
             "Reload the current settings and try again."
