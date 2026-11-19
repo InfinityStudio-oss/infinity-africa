@@ -136,8 +136,13 @@ export async function MetricsSection() {
         value={activeMerchants === null ? "Data unavailable" : activeMerchants.toLocaleString()}
         caption="As of now"
       />
+      {/* Brand, not tone="warning". The warning treatment is a pale
+          yellow card meant for a number that is actually alarming, and it
+          fired here unconditionally — so the usual reading, zero
+          withdrawals waiting, was dressed up as a problem and broke the
+          row it sits in. A queue of nothing is the good outcome. */}
       <AdminKpiCard
-        tone="warning"
+        variant="brand"
         icon="hourglass_empty"
         label="Pending Withdrawals"
         value={overview.pending_withdrawals.toLocaleString()}
