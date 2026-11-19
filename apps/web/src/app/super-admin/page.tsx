@@ -81,9 +81,7 @@ async function HeaderSection() {
         <h1 className="on-gradient text-3xl md:text-4xl font-semibold tracking-tight">
           {name ? `Welcome back, ${name}` : "Welcome back"}
         </h1>
-        <p className="on-gradient-muted mt-1 text-sm">
-          Platform operations and health · all figures in Africa/Dar_es_Salaam time.
-        </p>
+        <p className="on-gradient-muted mt-1 text-sm">Platform operations and health</p>
       </div>
       <Link
         href="/super-admin/collections"
