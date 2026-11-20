@@ -1,6 +1,11 @@
 export type FormState = {
   errors: Record<string, string[]>;
   formError?: string;
+  /** A way out, shown beside `formError` when the person can fix the
+   * problem themselves. An error that names a dead end ("this account
+   * already exists") is only half an answer; this carries the other
+   * half as a real link rather than prose telling them to go looking. */
+  formErrorAction?: { href: string; label: string };
   /** A non-error, informational message — e.g. "check your email to
    * verify your account". Rendered in a neutral/positive style, never the
    * red error style `formError` uses. */

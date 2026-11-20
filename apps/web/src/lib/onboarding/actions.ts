@@ -84,13 +84,41 @@ export async function submitOnboardingAction(_prevState: FormState, formData: Fo
     if (err instanceof OnboardingApiError && (err.code === "nida_required" || err.code === "nida_invalid")) {
       return { errors: { nidaNumber: [err.message] }, values };
     }
-    const formError =
-      err instanceof OnboardingApiError
-        ? err.code === "conflict"
-          ? "You already have a merchant account submitted for review."
-          : err.message
-        : "Couldn't reach InfinityPay. Check your connection and try again.";
-    return { errors: {}, formError, values };
+    // A conflict used to be rewritten to "You already have a merchant
+    // account submitted for review." That sentence threw away a better
+    // one and was usually false.
+    //
+    // The API sends something specific and accurate here — either "An
+    // account with this email already exists." or, for a repeat NIDA,
+    // duplicate_signup_message(), which names the masked address and the
+    // business code the application is on. Replacing both with "submitted
+    // for review" told an applicant whose account was already active and
+    // verified that it was queued, and gave them nothing to do about it.
+    //
+    // Production example: CHITE Wi-Fi signed up on 17 Nov, never opened
+    // the verification email, could not sign in, and tried to register
+    // again. They were told their account was awaiting review. It was
+    // live. The real problem — an unconfirmed address — was never
+    // mentioned, so it became a support ticket.
+    if (err instanceof OnboardingApiError) {
+      return {
+        errors: {},
+        formError: err.message,
+        // Offered only on a conflict, because this is the one failure
+        // here the person can resolve alone: the account exists, so the
+        // way in is a fresh verification link, not another account.
+        formErrorAction:
+          err.code === "conflict"
+            ? { href: "/dashboard/resend-verification", label: "Resend the verification email" }
+            : undefined,
+        values,
+      };
+    }
+    return {
+      errors: {},
+      formError: "Couldn't reach InfinityPay. Check your connection and try again.",
+      values,
+    };
   }
 
   redirect("/dashboard/overview");

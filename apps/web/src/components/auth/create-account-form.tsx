@@ -135,7 +135,28 @@ function CreateAccountFormInner() {
   return (
     <form action={action} className="mt-8 space-y-9">
       {state?.formError && (
-        <div className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">{state.formError}</div>
+        <div role="alert" className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">
+          <p>{state.formError}</p>
+          {state.formErrorAction && (
+            // The way out, as a link rather than a sentence telling them
+            // one exists. Someone who has just been refused an account
+            // will not go hunting through the site for the page that
+            // unblocks them.
+            <p className="mt-2">
+              <Link href={state.formErrorAction.href} className="font-semibold underline hover:no-underline">
+                {state.formErrorAction.label}
+              </Link>
+              <span className="font-normal">
+                {" "}
+                — or{" "}
+                <Link href="/dashboard/login" className="font-semibold underline hover:no-underline">
+                  sign in
+                </Link>{" "}
+                if you have already confirmed your email.
+              </span>
+            </p>
+          )}
+        </div>
       )}
 
       <fieldset className={fieldsetClass}>
