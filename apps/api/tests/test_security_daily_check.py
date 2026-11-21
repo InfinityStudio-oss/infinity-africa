@@ -113,7 +113,7 @@ def test_every_created_table_has_rls_enabled(check):
     )
 
 
-def test_the_deny_all_tables_are_the_expected_eighteen(check):
+def test_the_deny_all_tables_are_the_expected_nineteen(check):
     """RLS on with no policy denies every anon and authenticated request.
     That is the intended, stronger state for these - they are reached only
     by the service-role backend, which enforces merchant ownership in
@@ -155,6 +155,12 @@ def test_the_deny_all_tables_are_the_expected_eighteen(check):
         # list, which is worth nothing if the list is writable from a
         # browser.
         "payout_beneficiaries",
+        # Added 2026-11-21 with the platform payout tariff. Deny-all
+        # because this single row is the platform's own margin on every
+        # payout: a merchant who could read it would know exactly what
+        # the business charges and what it keeps, and one who could write
+        # it would set their own price.
+        "payout_platform_pricing",
         "payouts",
         "referral_commissions",
         "scheduler_leases",

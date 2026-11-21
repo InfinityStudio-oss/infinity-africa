@@ -18,12 +18,20 @@ What guards these routes:
   administrators working from the same page cannot silently overwrite one
   another. One wins; the other is told to re-read.
 
-**Sandbox and live are separate grants, and only the sandbox can be given
-here.** Turning live payouts on for a merchant is a commercial decision
-with a signed agreement behind it; it is not a switch for this screen
-while the product is in pilot. The write schema refuses `live_enabled`
-outright rather than accepting and ignoring it, so an operator who tries
-is told no instead of believing they succeeded.
+**Sandbox and live are separate grants, with separate routes.** Granting
+live is a different kind of act from switching the sandbox on - real
+money, sent by an API key, with nobody approving each request - so it
+has its own endpoint and its own body carrying an explicit
+acknowledgement, and it cannot happen as a side effect of a sandbox
+call.
+
+It was previously impossible here at all, on the reasoning that it is a
+commercial decision rather than a switch. That reasoning was right about
+the weight of the act and wrong about the remedy: it did not stop live
+being granted, it moved it to a hand-written database update with no
+validation, no audit entry, and no record of who did it. A deliberate
+route that leaves a trail is safer than a forbidden one people work
+around.
 
 Every write is audited with the before and after values, because
 "who turned this on, and when" is the first question asked after an
@@ -48,7 +56,11 @@ from app.schemas.common import APIResponse
 from app.schemas.payout_access import (
     MerchantPayoutAccessResponse,
     PayoutAccessUpdate,
+    PayoutFeeUpdate,
+    PayoutLiveAccessUpdate,
     PayoutPauseUpdate,
+    PlatformPayoutTariffResponse,
+    PlatformPayoutTariffUpdate,
 )
 from app.services.audit import write_audit_log
 from app.services.crud import execute_maybe_single, get_by_id
@@ -57,6 +69,11 @@ from app.services.ledger import get_payout_wallet_balances
 logger = logging.getLogger("infinity.admin.payout_access")
 
 router = APIRouter(prefix="/admin/payout-access", tags=["admin-payout-access"])
+
+# The tariff is platform-wide, not a property of any one merchant, so it
+# gets its own prefix rather than sitting under /{merchant_id}/. Same
+# guards: everything in this module is require_super_admin.
+tariff_router = APIRouter(prefix="/admin/payout-tariff", tags=["admin-payout-access"])
 
 # The columns an operator may change from this screen, and the ones they
 # may not. live_enabled is absent by design - see the module docstring.
@@ -359,3 +376,179 @@ def set_pause(
         action="payout_access.paused" if payload.paused else "payout_access.resumed",
     )
     return APIResponse(data=_response(client, after))
+
+
+@router.patch("/{merchant_id}/live", response_model=APIResponse[MerchantPayoutAccessResponse])
+def set_live_access(
+    merchant_id: uuid.UUID,
+    payload: PayoutLiveAccessUpdate,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    request: Request,
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_access_write", limit=20, window_seconds=60))
+    ],
+):
+    """Grant or withdraw LIVE payout access.
+
+    Its own route, because this is the one that lets an API key move real
+    money with nobody approving each request. The body must carry
+    `acknowledge` to turn it on, which means it cannot be done by
+    replaying the sandbox call with a value changed.
+
+    Granting live does not fund anything and does not lift the pause. The
+    ceiling on what a leaked key can cost is still the live payout
+    wallet's balance, which only the merchant can top up, from their
+    dashboard, behind their own second factor.
+    """
+    client = get_supabase_admin()
+    before = _load(client, merchant_id)
+
+    after = _write(
+        client,
+        merchant_id=merchant_id,
+        before=before,
+        changes={"live_enabled": payload.live_enabled},
+        expected_version=payload.version,
+        admin=admin,
+        request=request,
+        action="payout_access.live_enabled" if payload.live_enabled else "payout_access.live_disabled",
+    )
+    logger.warning(
+        "payout_live_access_changed merchant=%s live=%s admin=%s",
+        merchant_id,
+        payload.live_enabled,
+        admin.id,
+    )
+    return APIResponse(data=_response(client, after))
+
+
+@router.patch("/{merchant_id}/fee", response_model=APIResponse[MerchantPayoutAccessResponse])
+def set_payout_fee(
+    merchant_id: uuid.UUID,
+    payload: PayoutFeeUpdate,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    request: Request,
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_access_write", limit=20, window_seconds=60))
+    ],
+):
+    """Set or clear this merchant's negotiated payout fee.
+
+    Sending both fields null clears the negotiated rate and returns the
+    merchant to the platform tariff. That is a real instruction, not an
+    omission, which is why these fields are nullable rather than
+    "unchanged if absent": "charge them the standard rate" has to be
+    expressible, and it is the normal state for most merchants.
+    """
+    client = get_supabase_admin()
+    before = _load(client, merchant_id)
+
+    after = _write(
+        client,
+        merchant_id=merchant_id,
+        before=before,
+        changes={
+            "fee_flat_tzs": None if payload.fee_flat_tzs is None else str(payload.fee_flat_tzs),
+            "fee_percentage": None if payload.fee_percentage is None else str(payload.fee_percentage),
+        },
+        expected_version=payload.version,
+        admin=admin,
+        request=request,
+        action="payout_access.fee_updated",
+    )
+    return APIResponse(data=_response(client, after))
+
+
+# --- the platform tariff -----------------------------------------------------
+
+
+@tariff_router.get("", response_model=APIResponse[PlatformPayoutTariffResponse])
+def read_platform_tariff(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """What a merchant with no negotiated rate pays, on every payout, to
+    every destination - all mobile money networks, Selcom Pesa and all
+    banks alike."""
+    client = get_supabase_admin()
+    row = execute_maybe_single(
+        client.table("payout_platform_pricing").select("*").limit(1).maybe_single()
+    )
+    if not row:
+        raise NotFoundError("The payout tariff has not been set up yet.")
+    return APIResponse(
+        data=PlatformPayoutTariffResponse(
+            percentage_fee=row["percentage_fee"],
+            flat_fee=row["flat_fee"],
+            version=row["version"],
+            updated_at=row.get("updated_at"),
+        )
+    )
+
+
+@tariff_router.patch("", response_model=APIResponse[PlatformPayoutTariffResponse])
+def update_platform_tariff(
+    payload: PlatformPayoutTariffUpdate,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    request: Request,
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_access_write", limit=20, window_seconds=60))
+    ],
+):
+    """Change the tariff.
+
+    It applies to every merchant without a negotiated rate, immediately
+    and to payouts created from now on - priced at creation, so nothing
+    already queued or in flight re-prices under it.
+    """
+    client = get_supabase_admin()
+    before = execute_maybe_single(
+        client.table("payout_platform_pricing").select("*").limit(1).maybe_single()
+    )
+    if not before:
+        raise NotFoundError("The payout tariff has not been set up yet.")
+
+    result = (
+        client.table("payout_platform_pricing")
+        .update(
+            {
+                "percentage_fee": str(payload.percentage_fee),
+                "flat_fee": str(payload.flat_fee),
+                "version": payload.version + 1,
+                "updated_at": utc_now_iso(),
+                "updated_by": str(admin.id),
+            }
+        )
+        .eq("id", True)
+        .eq("version", payload.version)
+        .execute()
+    )
+    rows = result.data or []
+    if not rows:
+        raise ConflictError(
+            "The payout tariff was changed by someone else. Reload the page and apply "
+            "your change again."
+        )
+    after = rows[0]
+
+    write_audit_log(
+        client,
+        actor_id=admin.id,
+        actor_type="user",
+        merchant_id=None,
+        action="payout_tariff.updated",
+        resource_type="payout_platform_pricing",
+        resource_id=None,
+        ip_address=client_ip(request),
+        metadata={
+            "before": {"percentage_fee": str(before["percentage_fee"]), "flat_fee": str(before["flat_fee"])},
+            "after": {"percentage_fee": str(after["percentage_fee"]), "flat_fee": str(after["flat_fee"])},
+        },
+    )
+    return APIResponse(
+        data=PlatformPayoutTariffResponse(
+            percentage_fee=after["percentage_fee"],
+            flat_fee=after["flat_fee"],
+            version=after["version"],
+            updated_at=after.get("updated_at"),
+        )
+    )

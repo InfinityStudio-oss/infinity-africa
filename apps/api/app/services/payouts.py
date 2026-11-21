@@ -69,6 +69,37 @@ class PayoutSettings:
     daily_limit_tzs: Decimal | None
     fee_flat_tzs: Decimal
     fee_percentage: Decimal
+    # True when the two above came from the platform tariff rather than a
+    # rate negotiated with this merchant. Reported, not acted on: an
+    # operator looking at a fee needs to know whether they are seeing
+    # this merchant's deal or everybody's default.
+    fee_is_platform_default: bool = False
+
+
+# The tariff that applies to a merchant with no negotiated rate. One row,
+# covering every destination - all mobile money networks, Selcom Pesa and
+# all banks alike.
+_PLATFORM_TARIFF_FALLBACK = (Decimal(0), Decimal(1))
+
+
+def load_platform_payout_tariff(client: Client) -> tuple[Decimal, Decimal]:
+    """(flat, percentage) from payout_platform_pricing.
+
+    Falls back to 0 + 1% if the row is missing, which can only happen
+    between the migration landing and the seed - never in a deployed
+    database. Deliberately NOT a fallback of zero: a missing tariff row
+    silently making every payout free is the failure nobody notices
+    until the month's revenue is counted.
+    """
+    row = execute_maybe_single(
+        client.table("payout_platform_pricing").select("flat_fee, percentage_fee").limit(1).maybe_single()
+    )
+    if not row:
+        return _PLATFORM_TARIFF_FALLBACK
+    return (
+        Decimal(str(row.get("flat_fee") or 0)),
+        Decimal(str(row.get("percentage_fee") or 0)),
+    )
 
 
 def load_payout_settings(
@@ -92,14 +123,29 @@ def load_payout_settings(
         return None
 
     enabled = bool(row["live_enabled"] if environment == "live" else row["sandbox_enabled"])
+
+    # NULL is "no negotiated rate", which is not the same as zero. Read
+    # with `is None` rather than `or 0`, because `or` treats a deliberate
+    # 0 as absent and would quietly put a merchant priced at zero back
+    # onto the platform tariff.
+    flat = row.get("fee_flat_tzs")
+    pct = row.get("fee_percentage")
+    from_platform = flat is None and pct is None
+    if from_platform:
+        flat, pct = load_platform_payout_tariff(client)
+
     return PayoutSettings(
         enabled=enabled,
         paused=bool(row.get("paused")),
         paused_reason=row.get("paused_reason"),
         per_payout_limit_tzs=_money_or_none(row.get("per_payout_limit_tzs")),
         daily_limit_tzs=_money_or_none(row.get("daily_limit_tzs")),
-        fee_flat_tzs=Decimal(str(row.get("fee_flat_tzs") or 0)),
-        fee_percentage=Decimal(str(row.get("fee_percentage") or 0)),
+        # A half-set pair (one negotiated, one null) takes the negotiated
+        # side and zero for the other, rather than mixing one merchant's
+        # rate with the platform's.
+        fee_flat_tzs=Decimal(str(flat if flat is not None else 0)),
+        fee_percentage=Decimal(str(pct if pct is not None else 0)),
+        fee_is_platform_default=from_platform,
     )
 
 
