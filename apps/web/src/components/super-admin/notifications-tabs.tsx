@@ -29,9 +29,15 @@ export function NotificationsTabs() {
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
                 className={
+                  // Gradient ink. This row sits straight on the page, not
+                  // inside a Card, so the card tokens it used to wear were
+                  // measured at 1.56:1 for the active tab and 2.72:1 for
+                  // the rest - the selected tab was the LEAST readable
+                  // thing on the page, which is the opposite of its job.
+                  // White is 17.98:1 here and 9.05:1 over the glow.
                   active
-                    ? "inline-block px-4 py-2.5 text-sm font-semibold text-primary border-b-2 border-primary -mb-px"
-                    : "inline-block px-4 py-2.5 text-sm font-medium text-on-surface-variant border-b-2 border-transparent hover:text-on-background"
+                    ? "inline-block px-4 py-2.5 text-sm font-semibold text-white border-b-2 border-[#22b8cf] -mb-px"
+                    : "inline-block px-4 py-2.5 text-sm font-medium text-[#cfe6f0] border-b-2 border-transparent hover:text-white"
                 }
               >
                 {tab.label}

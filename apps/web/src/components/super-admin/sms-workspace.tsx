@@ -137,9 +137,17 @@ export function SmsWorkspace({
             type="button"
             onClick={() => setTab(t.id)}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              // Gradient ink, same reason as notifications-tabs.tsx:
+              // this row is on the page, not on a panel. `on-background`
+              // measured 1.23:1 against the page here, so the selected
+              // tab was effectively invisible while the unselected ones
+              // were merely faint. The underline is cyan rather than
+              // primary-container, which is 2.36:1 and misses the 3:1
+              // floor a non-text indicator needs; cyan is 7.56:1 on the
+              // page and 3.80:1 at the brightest point of the glow.
               tab === t.id
-                ? "border-primary-container text-on-background"
-                : "border-transparent text-on-surface-variant hover:text-on-background"
+                ? "border-[#22b8cf] text-white"
+                : "border-transparent text-[#cfe6f0] hover:text-white"
             }`}
           >
             {t.label}
