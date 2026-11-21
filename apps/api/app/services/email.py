@@ -176,6 +176,25 @@ def _mask_identifier(value: str) -> str:
 # --- shared branded template shell ------------------------------------------
 
 
+# Brand colours for every template below. They are written inline as
+# literal hexes rather than pulled from the app's CSS tokens because an
+# email client has no CSS variables and most strip <style> blocks
+# entirely, so the colour has to sit on each element.
+#
+# That is also how they went stale: when the app moved to the navy/teal
+# theme, the old brand green survived here in 16 separate literals and
+# the welcome email kept sending it for months. Nothing pointed at one
+# place and nothing checked. tests/test_email_brand_colours.py now fails
+# if a retired colour reappears anywhere in this file.
+#
+#   #1e3a5f  brand ink    header band, buttons, links, rules, amounts
+#   #6b7280  muted text   labels and secondary copy
+#
+# Retired, never to come back: #04332a and #5f6b68 (pre-theme green).
+_BRAND_INK = "#1e3a5f"
+_BRAND_MUTED = "#6b7280"
+
+
 def _email_shell(*, body_html: str) -> str:
     """Wraps `body_html` in the InfinityPay branded header/footer
     every transactional email shares — dark green header band (the
@@ -200,14 +219,14 @@ def _email_shell(*, body_html: str) -> str:
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;">
             <tr>
-              <td bgcolor="#04332a" style="background-color:#04332a;padding:24px 28px;">
+              <td bgcolor="{_BRAND_INK}" style="background-color:{_BRAND_INK};padding:24px 28px;">
                 <span style="font-size:18px;font-weight:700;color:#ffffff;vertical-align:middle;">InfinityPay</span>
               </td>
             </tr>
             <tr>
               <td style="padding:28px;">
                 {body_html}
-                <p style="margin:28px 0 0;font-size:13px;color:#6b7280;">Need help? Reach us at <a href="mailto:{settings.email_reply_to}" style="color:#04332a;">{settings.email_reply_to}</a>.</p>
+                <p style="margin:28px 0 0;font-size:13px;color:{_BRAND_MUTED};">Need help? Reach us at <a href="mailto:{settings.email_reply_to}" style="color:{_BRAND_INK};">{settings.email_reply_to}</a>.</p>
               </td>
             </tr>
             <tr>
@@ -229,11 +248,11 @@ def _cta_button(url: str, label: str) -> str:
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 8px;">
       <tr>
         <td align="center">
-          <a href="{url}" style="display:inline-block;background-color:#04332a;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">{label}</a>
+          <a href="{url}" style="display:inline-block;background-color:{_BRAND_INK};color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">{label}</a>
         </td>
       </tr>
     </table>
-    <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;text-align:center;word-break:break-all;">Or copy this link: <a href="{url}" style="color:#04332a;">{url}</a></p>
+    <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;text-align:center;word-break:break-all;">Or copy this link: <a href="{url}" style="color:{_BRAND_INK};">{url}</a></p>
     """
 
 
@@ -261,9 +280,9 @@ def _render_invoice_email_html(*, merchant: dict, invoice: dict, items: list[dic
         f"""
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
           <tr>
-            <th style="text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #04332a;">Description</th>
-            <th style="text-align:center;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #04332a;">Qty</th>
-            <th style="text-align:right;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #04332a;">Unit Price</th>
+            <th style="text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #1e3a5f;">Description</th>
+            <th style="text-align:center;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #1e3a5f;">Qty</th>
+            <th style="text-align:right;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;border-bottom:2px solid #1e3a5f;">Unit Price</th>
           </tr>
           {item_rows}
         </table>"""
@@ -289,7 +308,7 @@ def _render_invoice_email_html(*, merchant: dict, invoice: dict, items: list[dic
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 8px;">
       <tr>
         <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Amount due</td>
-        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#04332a;text-align:right;">{_money(total_amount, currency)}</td>
+        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#1e3a5f;text-align:right;">{_money(total_amount, currency)}</td>
       </tr>
       {due_date_row}
     </table>
@@ -671,7 +690,7 @@ def send_payment_receipt_email(client: Client, *, merchant: dict, transaction: d
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 16px;">
       <tr>
         <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Amount paid</td>
-        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#04332a;text-align:right;">{_money(amount, currency)}</td>
+        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#1e3a5f;text-align:right;">{_money(amount, currency)}</td>
       </tr>
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -834,7 +853,7 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 16px;">
           <tr>
             <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Your Merchant ID</td>
-            <td style="padding:6px 16px;font-size:16px;font-weight:700;color:#04332a;text-align:right;font-family:monospace;">{merchant_code}</td>
+            <td style="padding:6px 16px;font-size:16px;font-weight:700;color:#1e3a5f;text-align:right;font-family:monospace;">{merchant_code}</td>
           </tr>
         </table>"""
         if merchant_code
@@ -1363,7 +1382,7 @@ def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursemen
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 16px;">
       <tr>
         <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Amount</td>
-        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#04332a;text-align:right;">{_money(amount, currency)}</td>
+        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#1e3a5f;text-align:right;">{_money(amount, currency)}</td>
       </tr>
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1683,7 +1702,7 @@ def send_merchant_collection_notification_email(
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:16px;margin:0 0 16px;">
       <tr>
         <td style="padding:6px 16px;font-size:14px;color:#6b7280;">Gross amount</td>
-        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#04332a;text-align:right;">{_money(gross_amount, currency)}</td>
+        <td style="padding:6px 16px;font-size:20px;font-weight:700;color:#1e3a5f;text-align:right;">{_money(gross_amount, currency)}</td>
       </tr>
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -1778,7 +1797,7 @@ def send_withdrawal_otp_email(
     <h1 style="margin:0 0 20px;font-size:20px;color:#1f2937;">Verify your withdrawal request</h1>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;">Enter this code in the InfinityPay portal to submit the
     withdrawal request for {business_name}.</p>
-    <p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:6px;color:#04332a;">{code}</p>
+    <p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:6px;color:#1e3a5f;">{code}</p>
     <p style="margin:0 0 16px;font-size:14px;color:#374151;">The code expires in {expires_minutes} minutes and can
     only be used once.</p>
     <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Entering this code submits the request for approval — it
@@ -1858,19 +1877,19 @@ def send_report_email(
     filename, content = attachment
 
     summary_rows = "".join(
-        f'<tr><td style="padding:6px 16px 6px 0;color:#5f6b68;">{label}</td>'
-        f'<td style="padding:6px 0;font-weight:600;color:#04332a;">{value}</td></tr>'
+        f'<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">{label}</td>'
+        f'<td style="padding:6px 0;font-weight:600;color:#1e3a5f;">{value}</td></tr>'
         for label, value in totals
     )
     body = f"""
-      <h2 style="color:#04332a;margin:0 0 12px;">{report_title}</h2>
+      <h2 style="color:#1e3a5f;margin:0 0 12px;">{report_title}</h2>
       <p style="margin:0 0 4px;">{business_name}</p>
-      <p style="margin:0 0 20px;color:#5f6b68;">Period: {period}</p>
+      <p style="margin:0 0 20px;color:#6b7280;">Period: {period}</p>
       <table style="border-collapse:collapse;margin-bottom:20px;">{summary_rows}</table>
       <p style="margin:0 0 8px;">
         The full report is attached as <strong>{filename}</strong> ({row_count} row{"" if row_count == 1 else "s"}).
       </p>
-      <p style="margin:0;color:#5f6b68;font-size:13px;">
+      <p style="margin:0;color:#6b7280;font-size:13px;">
         Generated from your InfinityPay account. If you didn't request this report,
         please contact support.
       </p>
