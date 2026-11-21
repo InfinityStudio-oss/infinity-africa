@@ -47,6 +47,8 @@ class _MockProvider:
         self.raises = raises
         self.process_calls: list[str] = []
         self.query_calls: list[str] = []
+        # Which environment the code asked the factory for, in order.
+        self.asked_for_environments: list[str | None] = []
 
     async def process_transaction(self, *, trans_id, **_kwargs):
         self.process_calls.append(trans_id)
@@ -77,7 +79,11 @@ def provider(monkeypatch):
     out even if a setting were wrong."""
     holder = _MockProvider()
 
-    def _factory():
+    def _factory(environment=None):
+        # Records which environment dispatch asked for. The real factory
+        # uses it to choose between Selcom sandbox and Selcom production,
+        # so a stub that ignored it would hide the whole question.
+        holder.asked_for_environments.append(environment)
         return holder
 
     monkeypatch.setattr("app.services.payout_dispatch.get_selcom_business_client", _factory)

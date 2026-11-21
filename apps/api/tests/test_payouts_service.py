@@ -79,17 +79,20 @@ def _beneficiary(fake_client, merchant_id, environment="live", status="active"):
 
 
 def _fund(fake_client, merchant_id, amount, environment="live"):
-    # merchant_wallet is NOT environment-scoped - one per merchant, per
-    # the unique index on (merchant_id, purpose, currency, environment)
-    # where every wallet row is 'live'. Seeding a second one for a
-    # sandbox test would create a duplicate the real index forbids, and
-    # the next lookup would raise on two matching rows. Top the existing
-    # one up instead.
+    # One merchant_wallet PER ENVIRONMENT. The unique index is on
+    # (merchant_id, purpose, currency, environment), so a sandbox wallet
+    # is a distinct legal row, not the duplicate this helper used to
+    # assume - and it has to be, because funding now takes both legs from
+    # the same environment. Funding a sandbox payout wallet out of the
+    # live Collections balance was the bug: real settled money, moved
+    # into a wallet whose payouts are make-believe.
     existing = next(
         (
             a
             for a in fake_client.table("ledger_accounts")._table.rows
-            if a.get("merchant_id") == str(merchant_id) and a.get("purpose") == "merchant_wallet"
+            if a.get("merchant_id") == str(merchant_id)
+            and a.get("purpose") == "merchant_wallet"
+            and (a.get("environment") or "live") == environment
         ),
         None,
     )
@@ -104,6 +107,7 @@ def _fund(fake_client, merchant_id, amount, environment="live"):
                 "account_type": "liability",
                 "purpose": "merchant_wallet",
                 "currency": CUR,
+                "environment": environment,
                 "balance": str(amount),
             },
         )

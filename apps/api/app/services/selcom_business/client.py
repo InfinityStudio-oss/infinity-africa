@@ -21,12 +21,20 @@ returns:
                  sandbox round-trip has verified the request/response shapes
                  in app/services/selcom_business/signing.py and parsing.py.
 
-Only app/services/disbursements.py reaches this, and only through
-_reserve_and_run_disbursement_provider — either from a Super Admin's
-manual approval, or from execute_disbursement's auto-processing branch
-when withdrawal automation is enabled (off by default; see
-Settings.auto_withdrawals_enabled). Both go through that one function, so
-there is no second, less-tested payout path into this client.
+Two callers reach this.
+
+app/services/disbursements.py — withdrawals — calls it with no argument
+and follows SELCOM_BUSINESS_MODE as described above, either from a Super
+Admin's manual approval or from execute_disbursement's auto-processing
+branch when withdrawal automation is enabled (off by default; see
+Settings.auto_withdrawals_enabled).
+
+app/services/payout_dispatch.py — the Disbursement API — passes the
+payout's own `environment`, which OVERRIDES the mode. It has to: a
+deployment that pays real withdrawals necessarily runs this client in
+`live`, so following the global mode sent `sandbox` payouts to Selcom
+production and real money to a real phone number. A payout's environment
+is the only thing that may decide which Selcom it reaches.
 """
 
 from functools import lru_cache
@@ -71,11 +79,31 @@ class SelcomBusinessProvider(Protocol):
 
 
 @lru_cache
-def get_selcom_business_client() -> SelcomBusinessProvider:
+def get_selcom_business_client(environment: str | None = None) -> SelcomBusinessProvider:
     """Cached like get_selcom_client() — constructing either client is
     cheap and stateless; tests that flip SELCOM_BUSINESS_MODE between cases
-    must call get_selcom_business_client.cache_clear()."""
+    must call get_selcom_business_client.cache_clear().
+
+    `environment` is how a PAYOUT says which Selcom it means, and it wins
+    over SELCOM_BUSINESS_MODE.
+
+    Without it, a payout marked `sandbox` was dispatched to whatever the
+    global mode pointed at — and in production that is `live`, because
+    real withdrawals go through this same client. A sandbox payout
+    therefore sent real money to a real phone number. The environment
+    column was honoured by the ledger and by the enablement flags, and
+    ignored by the one step that actually moves money.
+
+    None keeps the original behaviour for withdrawals, which have no
+    environment of their own and have always followed the global mode.
+    """
     settings = get_settings()
+
+    if environment is not None and environment not in ("sandbox", "live"):
+        raise SelcomBusinessMisconfiguredError(
+            f"Unknown Selcom Business environment {environment!r} — refusing to guess "
+            "which Selcom to send real money to."
+        )
 
     if settings.selcom_business_mode == "mock":
         if settings.environment != "development":
@@ -93,11 +121,23 @@ def get_selcom_business_client() -> SelcomBusinessProvider:
 
     from app.services.selcom_business.live_client import SelcomBusinessClient
 
-    base_url = (
-        settings.selcom_business_production_base_url
-        if settings.selcom_business_mode == "live"
-        else settings.selcom_business_sandbox_base_url
-    )
+    if environment is None:
+        # Withdrawals. Unchanged: the deployment-wide mode decides.
+        base_url = (
+            settings.selcom_business_production_base_url
+            if settings.selcom_business_mode == "live"
+            else settings.selcom_business_sandbox_base_url
+        )
+    else:
+        # Payouts. The payout's own environment decides, so a sandbox
+        # payout cannot reach production however the deployment is
+        # configured, and a live payout cannot be quietly answered by a
+        # sandbox that reports COMPLETED for money nobody sent.
+        base_url = (
+            settings.selcom_business_production_base_url
+            if environment == "live"
+            else settings.selcom_business_sandbox_base_url
+        )
     return SelcomBusinessClient(
         base_url=base_url,
         api_key=settings.selcom_business_api_key,

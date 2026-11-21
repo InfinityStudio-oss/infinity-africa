@@ -37,7 +37,10 @@ from supabase import Client
 
 from app.services.crud import get_by_id
 from app.services.ledger import post_payout_release, post_payout_settlement
-from app.services.selcom_business.client import get_selcom_business_client
+from app.services.selcom_business.client import (
+    SelcomBusinessMisconfiguredError,
+    get_selcom_business_client,
+)
 from app.services.selcom_business.schemas import SelcomBusinessResult
 
 logger = logging.getLogger("infinity.payouts")
@@ -139,6 +142,25 @@ async def dispatch_payout(client: Client, payout: dict) -> str:
     """
     payout_id = uuid.UUID(payout["id"])
 
+    # Resolve the provider BEFORE claiming the row.
+    #
+    # This is what decides which Selcom the money goes to, and it is the
+    # payout's own environment that decides it - not SELCOM_BUSINESS_MODE,
+    # which in any deployment that pays real withdrawals is `live`.
+    # Resolving first means a misconfiguration leaves the payout exactly
+    # as it was, ready for a later attempt, instead of claiming it and
+    # then having to guess whether anything was sent.
+    try:
+        provider = get_selcom_business_client(payout.get("environment"))
+    except SelcomBusinessMisconfiguredError as exc:
+        logger.error(
+            "payout_dispatch_misconfigured id=%s environment=%s error=%s",
+            payout_id,
+            payout.get("environment"),
+            exc,
+        )
+        return payout.get("status", "unknown")
+
     claimed = _claim_for_dispatch(client, payout)
     if claimed is None:
         logger.info("payout_dispatch_skipped id=%s reason=already_claimed", payout_id)
@@ -157,7 +179,6 @@ async def dispatch_payout(client: Client, payout: dict) -> str:
             failure_reason="The beneficiary record could not be read.",
         )
 
-    provider = get_selcom_business_client()
     try:
         result: SelcomBusinessResult = await provider.process_transaction(
             trans_id=claimed["provider_reference"],
@@ -355,7 +376,19 @@ async def reconcile_payout(client: Client, payout: dict) -> str:
     is the one action that can actually pay twice.
     """
     payout_id = uuid.UUID(payout["id"])
-    provider = get_selcom_business_client()
+    # Same environment rule as dispatch. Asking the wrong Selcom about a
+    # reference it has never seen returns "not found", which this would
+    # read as a real answer about a payout that is in fact outstanding.
+    try:
+        provider = get_selcom_business_client(payout.get("environment"))
+    except SelcomBusinessMisconfiguredError as exc:
+        logger.error(
+            "payout_reconcile_misconfigured id=%s environment=%s error=%s",
+            payout_id,
+            payout.get("environment"),
+            exc,
+        )
+        return payout.get("status", "needs_reconciliation")
     try:
         result = await provider.query_transaction(trans_id=payout["provider_reference"])
     except Exception as exc:  # noqa: BLE001 - still unknown, so still held

@@ -816,6 +816,11 @@ def post_payout_wallet_funding(
 ) -> list[dict]:
     """Move settled funds from Collections into the Payout Wallet.
 
+    Both legs are in `environment`. A sandbox payout wallet is funded
+    from a sandbox Collections balance and a live one from the live
+    balance; the two never cross. See the note on the debit leg below for
+    what went wrong when only the credit carried the environment.
+
     Debit merchant_wallet, credit payout_available. Both are the
     merchant's own liability accounts, so this is a transfer between two
     of their pockets and the platform's position is unchanged - there is
@@ -835,6 +840,19 @@ def post_payout_wallet_funding(
         purpose="merchant_wallet",
         account_type="liability",
         currency=currency,
+        # Both legs, same environment. This argument was missing, so the
+        # credit went to the sandbox payout wallet while the debit fell
+        # through to the default and took the money out of the merchant's
+        # LIVE Collections balance - real settled shillings, moved into a
+        # wallet whose payouts are make-believe, with no route to move
+        # them back. A sandbox transfer must balance inside sandbox.
+        #
+        # Consequence worth knowing: a sandbox merchant_wallet starts at
+        # zero and nothing credits it today, so sandbox funding is now
+        # refused by the no-negative guard rather than silently taking
+        # live money. That refusal is the correct answer until there is a
+        # deliberate way to put play money into a sandbox balance.
+        environment=environment,
     )
     payout_account_id = _payout_account(
         client, merchant_id=merchant_id, purpose=PAYOUT_AVAILABLE, currency=currency, environment=environment
