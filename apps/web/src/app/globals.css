@@ -453,7 +453,28 @@ body {
   .bg-surface-container-low,
   .bg-surface-container,
   .bg-surface-container-high,
-  .bg-surface-container-highest
+  .bg-surface-container-highest,
+  /* Raw Tailwind pale panels - the status banners. Same problem as the
+     tokens above and it kept biting: the Payouts page's "Sandbox. These
+     payouts are simulated" notice rendered pale yellow on pale yellow,
+     because bg-amber-50 sets a near-white background and nothing set an
+     ink, so it inherited the light colour meant for the gradient. The
+     list above only ever covered the app's OWN surface tokens, and a
+     banner written straight from the Tailwind palette slipped past it.
+     Measured on the panel ink: 14.12:1 on amber-50, 13.38:1 on red-50,
+     13.90:1 on emerald-50, and nothing below 11.99:1 at the 100 step. */
+  .bg-amber-50,
+  .bg-amber-100,
+  .bg-red-50,
+  .bg-red-100,
+  .bg-emerald-50,
+  .bg-emerald-100,
+  .bg-green-50,
+  .bg-green-100,
+  .bg-blue-50,
+  .bg-blue-100,
+  .bg-yellow-50,
+  .bg-yellow-100
 ) {
   color: var(--color-on-surface);
 }
