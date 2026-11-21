@@ -974,3 +974,36 @@ export interface EffectiveSetting {
 export interface EffectiveSettingsReport {
   settings: Record<string, EffectiveSetting>;
 }
+
+/** One merchant's payout access, as Super Admin → Payouts shows it.
+ *
+ * `fee_percentage` null means no negotiated rate — this merchant pays
+ * the platform tariff. Reported as null rather than resolved to the
+ * tariff's number so the screen can say "standard" instead of showing a
+ * figure an operator would read as this merchant's own deal. */
+export interface AdminPayoutAccessRow {
+  merchant_id: string;
+  business_name: string | null;
+  merchant_code: string | null;
+  enabled: boolean;
+  sandbox_enabled: boolean;
+  live_enabled: boolean;
+  paused: boolean;
+  paused_reason: string | null;
+  per_payout_limit_tzs: string | null;
+  daily_limit_tzs: string | null;
+  fee_flat_tzs: string | null;
+  fee_percentage: string | null;
+  version: number;
+  updated_at: string | null;
+  wallet_available: string;
+  wallet_reserved: string;
+  wallet_environment: string;
+}
+
+export interface AdminPayoutTariff {
+  percentage_fee: string;
+  flat_fee: string;
+  version: number;
+  updated_at: string | null;
+}

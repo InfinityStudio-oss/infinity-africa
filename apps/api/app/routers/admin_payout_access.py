@@ -128,6 +128,8 @@ def _response(client, row: dict) -> MerchantPayoutAccessResponse:
         paused_reason=row.get("paused_reason"),
         per_payout_limit_tzs=row.get("per_payout_limit_tzs"),
         daily_limit_tzs=row.get("daily_limit_tzs"),
+        fee_flat_tzs=row.get("fee_flat_tzs"),
+        fee_percentage=row.get("fee_percentage"),
         version=int(row.get("version") or 1),
         updated_at=row.get("updated_at"),
         # Balances so an operator pausing an account can see what is

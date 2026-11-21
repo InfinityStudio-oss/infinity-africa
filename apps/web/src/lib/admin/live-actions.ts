@@ -19,6 +19,12 @@ import {
   refreshWithdrawalStatus,
   retryWithdrawalPayout,
   correctMerchantContactEmail,
+  createAdminPayoutAccess,
+  setAdminPayoutFee,
+  setAdminPayoutLive,
+  setAdminPayoutPause,
+  setAdminPayoutSandbox,
+  updateAdminPayoutTariff,
   createAdminSmsCampaign,
   deleteAdminSmsCampaign,
   dryRunAdminSms,
@@ -726,4 +732,95 @@ export async function setCollectionEmailsEnabledAction(
   revalidatePath("/super-admin/notifications/email");
   revalidatePath(`/super-admin/merchants/${merchantId}`);
   return { error: null };
+}
+
+// --- Super Admin payouts -----------------------------------------------
+
+export interface PayoutActionState {
+  error: string | null;
+}
+
+const PAYOUTS_PATH = "/super-admin/payouts";
+
+async function runPayoutAction(work: () => Promise<unknown>): Promise<PayoutActionState> {
+  try {
+    await work();
+  } catch (err) {
+    // The backend's own message, not a generic one. A 409 here means
+    // "someone else changed this, re-read" and a 422 means the
+    // acknowledgement was missing - both are things the operator needs
+    // to read rather than a flat "try again".
+    return { error: err instanceof Error ? err.message : "Couldn't apply that change. Try again." };
+  }
+  revalidatePath(PAYOUTS_PATH);
+  return { error: null };
+}
+
+export async function setPayoutSandboxAction(
+  merchantId: string,
+  enabled: boolean,
+  version: number,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() =>
+    setAdminPayoutSandbox(merchantId, { sandbox_enabled: enabled, version }),
+  );
+}
+
+/** Turning live ON sends `acknowledge: true`, which the backend demands.
+ * The acknowledgement the operator actually gives is the confirmation in
+ * the UI; this flag is what stops the request being forgeable by
+ * replaying the sandbox call. Turning live OFF sends nothing extra -
+ * withdrawing access must never be harder than granting it. */
+export async function setPayoutLiveAction(
+  merchantId: string,
+  enabled: boolean,
+  version: number,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() =>
+    setAdminPayoutLive(
+      merchantId,
+      enabled ? { live_enabled: true, version, acknowledge: true } : { live_enabled: false, version },
+    ),
+  );
+}
+
+export async function setPayoutPauseAction(
+  merchantId: string,
+  paused: boolean,
+  version: number,
+  reason: string | null,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() => setAdminPayoutPause(merchantId, { paused, version, reason }));
+}
+
+/** Both fields null is the instruction "charge them the platform
+ * tariff", not an omission - which is why this action takes them
+ * explicitly rather than skipping undefined values. */
+export async function setPayoutFeeAction(
+  merchantId: string,
+  version: number,
+  feePercentage: string | null,
+  feeFlat: string | null,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() =>
+    setAdminPayoutFee(merchantId, {
+      version,
+      fee_percentage: feePercentage,
+      fee_flat_tzs: feeFlat,
+    }),
+  );
+}
+
+export async function updatePayoutTariffAction(
+  percentage: string,
+  flat: string,
+  version: number,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() =>
+    updateAdminPayoutTariff({ percentage_fee: percentage, flat_fee: flat, version }),
+  );
+}
+
+export async function createPayoutAccessAction(merchantId: string): Promise<PayoutActionState> {
+  return runPayoutAction(() => createAdminPayoutAccess(merchantId));
 }

@@ -22,6 +22,8 @@ import type {
   AdminTeamMember,
   AdminNotificationSettingsRow,
   AdminNotificationSettingsListRow,
+  AdminPayoutAccessRow,
+  AdminPayoutTariff,
   AdminOverview,
   AdminPayByLinkListRow,
   AdminPayByLinkRow,
@@ -1096,4 +1098,70 @@ export async function listAdminTeam(): Promise<AdminTeamMember[] | null> {
  */
 export async function getEffectiveSettings(): Promise<EffectiveSettingsReport | null> {
   return apiGet<EffectiveSettingsReport>("/v1/admin/diagnostics/settings");
+}
+
+// --- Super Admin payouts -----------------------------------------------
+// Who may send money through the Disbursement API, within what limits,
+// at what price. Super Admin only on the backend, reads included.
+
+export async function listAdminPayoutAccess(options?: {
+  page?: number;
+}): Promise<{ rows: AdminPayoutAccessRow[]; totalPages: number }> {
+  const query = new URLSearchParams();
+  if (options?.page) query.set("page", String(options.page));
+  return apiPage<AdminPayoutAccessRow>(`/v1/admin/payout-access?${query.toString()}`);
+}
+
+/** Null when the tariff row is missing, which means the migration has
+ * not been applied yet. Distinguished from "0%" on purpose: the screen
+ * must not report free payouts because a table is absent. */
+export async function getAdminPayoutTariff(): Promise<AdminPayoutTariff | null> {
+  return apiGet<AdminPayoutTariff>("/v1/admin/payout-tariff");
+}
+
+export async function updateAdminPayoutTariff(input: {
+  percentage_fee: string;
+  flat_fee: string;
+  version: number;
+}): Promise<AdminPayoutTariff> {
+  return apiWrite<AdminPayoutTariff>("/v1/admin/payout-tariff", "PATCH", input);
+}
+
+export async function setAdminPayoutSandbox(
+  merchantId: string,
+  input: { sandbox_enabled: boolean; version: number },
+): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(
+    `/v1/admin/payout-access/${merchantId}/sandbox`,
+    "PATCH",
+    input,
+  );
+}
+
+/** `acknowledge` is required by the backend to turn live ON and ignored
+ * when turning it off. Passing it from here rather than defaulting it in
+ * the action keeps the deliberate step visible at the call site. */
+export async function setAdminPayoutLive(
+  merchantId: string,
+  input: { live_enabled: boolean; version: number; acknowledge?: boolean },
+): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(`/v1/admin/payout-access/${merchantId}/live`, "PATCH", input);
+}
+
+export async function setAdminPayoutPause(
+  merchantId: string,
+  input: { paused: boolean; version: number; reason?: string | null },
+): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(`/v1/admin/payout-access/${merchantId}/pause`, "PATCH", input);
+}
+
+export async function setAdminPayoutFee(
+  merchantId: string,
+  input: { version: number; fee_percentage: string | null; fee_flat_tzs: string | null },
+): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(`/v1/admin/payout-access/${merchantId}/fee`, "PATCH", input);
+}
+
+export async function createAdminPayoutAccess(merchantId: string): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(`/v1/admin/payout-access/${merchantId}`, "POST", {});
 }

@@ -84,6 +84,10 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { label: "Collections", href: "/super-admin/collections", icon: "payments" },
       { label: "Transactions", href: "/super-admin/transactions", icon: "list_alt" },
       { label: "Withdrawals", href: "/super-admin/withdrawals", icon: "receipt_long" },
+      // Money out by API key, which is a different question from a
+      // withdrawal a person approves - it sits beside Withdrawals
+      // because that is where an operator looks when money is leaving.
+      { label: "Payouts", href: "/super-admin/payouts", icon: "outbound" },
       { label: "Pay by Link", href: "/super-admin/pay-by-link", icon: "storefront" },
       { label: "Invoices", href: "/super-admin/invoices", icon: "receipt" },
     ],

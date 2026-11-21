@@ -147,6 +147,12 @@ class MerchantPayoutAccessResponse(BaseModel):
     paused_reason: str | None = None
     per_payout_limit_tzs: Decimal | None = None
     daily_limit_tzs: Decimal | None = None
+    # Null means no negotiated rate: this merchant pays the platform
+    # tariff. Reported as null rather than resolved to the tariff value,
+    # so the screen can show "standard" instead of a number an operator
+    # would read as this merchant's own deal.
+    fee_flat_tzs: Decimal | None = None
+    fee_percentage: Decimal | None = None
     version: int
     updated_at: datetime | None = None
     # What is still committed. Pausing does not recall an in-flight
