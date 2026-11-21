@@ -256,7 +256,7 @@ function CreateAccountFormInner() {
       <button
         type="submit"
         disabled={pending}
-        className="w-full inline-flex items-center justify-center gap-2 bg-primary-container text-on-primary text-sm font-medium px-8 py-3.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+        className="w-full inline-flex items-center justify-center gap-2 btn-brand text-sm font-medium px-8 py-3.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#087e8b] focus-visible:ring-offset-2"
       >
         {pending ? "Creating account…" : "Create Account"}
       </button>

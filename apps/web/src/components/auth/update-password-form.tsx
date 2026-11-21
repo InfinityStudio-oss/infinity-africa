@@ -132,7 +132,7 @@ export function UpdatePasswordForm({ email, source }: { email: string; source: "
           />
         </div>
         <button
-          className="bg-primary-container text-on-primary text-sm font-medium py-3 px-6 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+          className="btn-brand text-sm font-medium py-3 px-6 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#087e8b] focus-visible:ring-offset-2"
           type="submit"
           disabled={status === "loading"}
         >

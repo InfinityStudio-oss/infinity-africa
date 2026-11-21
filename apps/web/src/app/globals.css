@@ -393,6 +393,45 @@ body {
     linear-gradient(120deg, #0a2232 0%, #071826 58%, #061320 100%);
 }
 
+/* The primary call to action, wearing the hero's own gradient.
+   ---------------------------------------------------------------
+   The hero above is a dark navy washed with a teal glow, and that
+   navy-into-teal sweep is what reads as the brand. A button is far too
+   small to sample a full-bleed background, so the sweep is rebuilt at
+   button scale from the same two colours: #0a2232, the hero's linear
+   start, into #08505e, which is the glow colour #087e8b composited over
+   the page base at the same 55% the hero caps its glow at. Change the
+   hero and this should move with it.
+
+   Every stop is measured against white: 16.31:1 at the navy end, 9.05:1
+   at the teal end, 7.32:1 at the brightest point of hover. The floor
+   for button text is 4.5:1, so the whole sweep clears it with room.
+
+   background-color is not a decoration here - it is the fallback for
+   any client that drops the gradient, and it has to be the dark end so
+   the white label survives that too.
+
+   Disabled deliberately drops the gradient instead of fading it. The
+   usual opacity-60 composites the teal end against the pale auth page
+   and lands at 3.37:1, under the floor, in exactly the moment the label
+   reads "Signing in..." and the person is watching it. A flat muted
+   navy holds 7.24:1 instead. */
+.btn-brand {
+  background-color: #0a2232;
+  background-image: linear-gradient(100deg, #0a2232 0%, #08505e 100%);
+  color: #ffffff;
+}
+
+.btn-brand:hover:not(:disabled) {
+  background-image: linear-gradient(100deg, #0d2a3d 0%, #085f6d 100%);
+}
+
+.btn-brand:disabled {
+  background-image: none;
+  background-color: #3c5a73;
+  cursor: wait;
+}
+
 /* Anything painted a pale surface gets dark ink, whatever contains it.
    ---------------------------------------------------------------
    <main> defaults to light ink because it sits on the gradient, and
