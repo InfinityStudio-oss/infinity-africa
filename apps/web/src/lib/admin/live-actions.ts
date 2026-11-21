@@ -23,6 +23,7 @@ import {
   deleteAdminSmsCampaign,
   dryRunAdminSms,
   duplicateAdminSmsCampaign,
+  getAdminMerchantNotificationSettings,
   previewAdminSms,
   retryAdminSmsMessage,
   sendAdminSmsCampaign,
@@ -677,6 +678,52 @@ export async function updateAdminMerchantNotificationSettingsAction(
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save notification settings. Try again." };
   }
+  revalidatePath(`/super-admin/merchants/${merchantId}`);
+  return { error: null };
+}
+
+/** The Collection-emails switch in Super Admin → Notifications → Email.
+ *
+ * Deliberately narrow: it changes `collection_notifications_enabled` and
+ * nothing else.
+ *
+ * The two addresses are re-read here rather than posted from the
+ * browser. The PATCH body is a whole-record shape — an absent
+ * primary_notification_email is stored as NULL, it is not left alone —
+ * so a toggle that did not carry them would silently wipe a merchant's
+ * configured recipients. Reading them server-side also means a table the
+ * operator rendered ten minutes ago cannot overwrite an address someone
+ * changed in between, and that a tampered client cannot use this action
+ * to rewrite addresses it was never shown.
+ *
+ * Frequency and the SMS fields are omitted on purpose: the backend reads
+ * an absent field as "leave unchanged", so this switch can never move a
+ * merchant onto a daily digest or silence their SMS alerts as a side
+ * effect.
+ */
+export async function setCollectionEmailsEnabledAction(
+  merchantId: string,
+  enabled: boolean,
+): Promise<{ error: string | null }> {
+  try {
+    const current = await getAdminMerchantNotificationSettings(merchantId);
+    // Null here is a network/auth failure, not "never configured" — the
+    // backend creates a default row on read. Saving anyway would post
+    // two nulls over whatever is really stored.
+    if (!current) {
+      return { error: "Couldn't read this business's current settings, so nothing was changed. Try again." };
+    }
+    await updateAdminMerchantNotificationSettings(merchantId, {
+      primary_notification_email: current.primary_notification_email ?? null,
+      secondary_notification_email: current.secondary_notification_email ?? null,
+      collection_notifications_enabled: enabled,
+    });
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Couldn't change collection emails. Try again.",
+    };
+  }
+  revalidatePath("/super-admin/notifications/email");
   revalidatePath(`/super-admin/merchants/${merchantId}`);
   return { error: null };
 }

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import { tdClass, thClass } from "@/components/portal/card";
 import { Icon } from "@/components/portal/icon";
-import { StatusBadge } from "@/components/portal/status-badge";
 import { formatDateTime } from "@/lib/format";
+import { setCollectionEmailsEnabledAction } from "@/lib/admin/live-actions";
 import type { AdminNotificationSettingsListRow } from "@/lib/admin/types";
 
 /**
@@ -23,6 +23,149 @@ import type { AdminNotificationSettingsListRow } from "@/lib/admin/types";
  * with ?q= and ?page=, so a filtered view is a real URL somebody can
  * send to a colleague, and the browser never holds more than one page.
  */
+/**
+ * One row, switchable in place.
+ *
+ * The whole row is a component rather than the switch alone because two
+ * cells describe the same fact: the pill says Enabled/Disabled and
+ * "Receives" says either an address or "Nobody — switched off". Keeping
+ * one optimistic `enabled` for both means they can never contradict each
+ * other while the save is in flight, which is exactly the moment an
+ * operator is looking to see whether the click took.
+ *
+ * Optimistic, then reverted on failure. The alternative — wait for the
+ * round trip — leaves the pill reading "Enabled" after a deliberate
+ * click to disable, which reads as a dead control and invites a second
+ * click.
+ */
+function NotificationRow({ row }: { row: AdminNotificationSettingsListRow }) {
+  const [enabled, setEnabled] = useState(row.collection_notifications_enabled);
+  const [error, setError] = useState<string | null>(null);
+  // The value currently being written, or null when nothing is in
+  // flight. Kept separately from `enabled` on purpose: deriving the
+  // in-progress label from `enabled` means that the instant a failed
+  // save reverts it, the pill reads "Enabling…" — announcing the exact
+  // thing that just did not happen.
+  const [saving, setSaving] = useState<boolean | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function toggle() {
+    const next = !enabled;
+    setError(null);
+    setEnabled(next);
+    setSaving(next);
+    startTransition(async () => {
+      const result = await setCollectionEmailsEnabledAction(row.merchant_id, next);
+      if (result.error) {
+        // Nothing was saved, so the pill must go back to what the server
+        // still holds rather than leaving a lie on screen.
+        setEnabled(!next);
+        setError(result.error);
+      }
+      setSaving(null);
+    });
+  }
+
+  return (
+    <tr className="border-t border-surface-container-highest align-top">
+      <td className={tdClass}>
+        <div className="font-medium text-on-background">{row.merchant_name}</div>
+        {row.merchant_code && (
+          <div className="font-mono text-xs text-on-surface-variant">{row.merchant_code}</div>
+        )}
+      </td>
+      <td className={tdClass}>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={`Collection emails for ${row.merchant_name}`}
+          title={
+            enabled
+              ? "Click to stop sending collection emails to this business"
+              : "Click to start sending collection emails to this business"
+          }
+          disabled={pending || saving !== null}
+          onClick={toggle}
+          // Measured against the composited panel (#cfdade), not against
+          // the token: these backgrounds are translucent tints, so the
+          // real background has to be mixed before it can be judged.
+          // Enabled 7.07:1 at rest, 5.68:1 on hover; disabled 5.30:1 and
+          // 5.74:1. The darker ink on hover is not decoration — red-700
+          // on red-200 measures 4.47:1 and misses the 4.5 floor.
+          //
+          // Nothing is dimmed while saving. The usual disabled:opacity-60
+          // took the in-flight label to 2.86:1, i.e. the one moment the
+          // operator most wants to read it. The pulsing dot and the
+          // "Disabling…" label carry that state instead.
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-wait ${
+            enabled
+              ? "bg-primary-container/10 text-primary hover:bg-primary-container/25"
+              : "bg-red-100 text-red-700 hover:bg-red-200 hover:text-red-800"
+          }`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full bg-current ${saving !== null ? "animate-pulse" : ""}`} />
+          {saving !== null
+            ? saving
+              ? "Enabling…"
+              : "Disabling…"
+            : enabled
+              ? "Enabled"
+              : "Disabled"}
+        </button>
+        {/* Never configured is not the same as off, and reads like it
+            unless the table says so. Once the operator has switched the
+            row themselves it is no longer a default, whatever the
+            server-rendered prop still says. */}
+        {!row.configured && enabled === row.collection_notifications_enabled && (
+          <p className="text-[11px] text-outline mt-1">Default — never changed</p>
+        )}
+        {error && (
+          <p role="alert" className="text-[11px] text-red-700 mt-1 max-w-[14rem]">
+            {error}
+          </p>
+        )}
+      </td>
+      <td className={`${tdClass} text-on-surface-variant`}>
+        {enabled ? (
+          // effective_recipient is null whenever the server rendered this
+          // row as OFF, so straight after switching one back on there is
+          // no address to name yet — it arrives with the revalidated row
+          // a moment later. Printing the usual "—" in that gap would say
+          // "nobody is told", which is the opposite of what just
+          // happened.
+          row.effective_recipient ?? row.primary_notification_email ? (
+            <>
+              <span className="break-all">{row.effective_recipient ?? row.primary_notification_email}</span>
+              {row.uses_account_email_fallback && (
+                <p className="text-[11px] text-outline mt-0.5 flex items-center gap-1">
+                  <Icon name="info" className="text-[12px]" />
+                  Account email — no notification address set
+                </p>
+              )}
+            </>
+          ) : (
+            <span className="text-outline">Their account email</span>
+          )
+        ) : (
+          <span className="text-outline">Nobody — switched off</span>
+        )}
+      </td>
+      <td className={`${tdClass} text-on-surface-variant text-xs`}>
+        {row.updated_at ? formatDateTime(row.updated_at) : "—"}
+      </td>
+      <td className={`${tdClass} text-right`}>
+        <Link
+          href={`/super-admin/merchants/${row.merchant_id}`}
+          className="text-xs font-semibold text-primary-container hover:underline"
+        >
+          Edit
+        </Link>
+      </td>
+    </tr>
+  );
+}
+
 export function NotificationEmailTable({
   rows,
   search,
@@ -109,51 +252,7 @@ export function NotificationEmailTable({
             </thead>
             <tbody className="text-sm">
               {rows.map((row) => (
-                <tr key={row.merchant_id} className="border-t border-surface-container-highest align-top">
-                  <td className={tdClass}>
-                    <div className="font-medium text-on-background">{row.merchant_name}</div>
-                    {row.merchant_code && (
-                      <div className="font-mono text-xs text-on-surface-variant">{row.merchant_code}</div>
-                    )}
-                  </td>
-                  <td className={tdClass}>
-                    <StatusBadge
-                      label={row.collection_notifications_enabled ? "Enabled" : "Disabled"}
-                      tone={row.collection_notifications_enabled ? "positive" : "negative"}
-                    />
-                    {/* Never configured is not the same as off, and reads
-                        like it unless the table says so. */}
-                    {!row.configured && (
-                      <p className="text-[11px] text-outline mt-1">Default — never changed</p>
-                    )}
-                  </td>
-                  <td className={`${tdClass} text-on-surface-variant`}>
-                    {row.collection_notifications_enabled ? (
-                      <>
-                        <span className="break-all">{row.effective_recipient ?? "—"}</span>
-                        {row.uses_account_email_fallback && (
-                          <p className="text-[11px] text-outline mt-0.5 flex items-center gap-1">
-                            <Icon name="info" className="text-[12px]" />
-                            Account email — no notification address set
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-outline">Nobody — switched off</span>
-                    )}
-                  </td>
-                  <td className={`${tdClass} text-on-surface-variant text-xs`}>
-                    {row.updated_at ? formatDateTime(row.updated_at) : "—"}
-                  </td>
-                  <td className={`${tdClass} text-right`}>
-                    <Link
-                      href={`/super-admin/merchants/${row.merchant_id}`}
-                      className="text-xs font-semibold text-primary-container hover:underline"
-                    >
-                      Edit
-                    </Link>
-                  </td>
-                </tr>
+                <NotificationRow key={row.merchant_id} row={row} />
               ))}
             </tbody>
           </table>
