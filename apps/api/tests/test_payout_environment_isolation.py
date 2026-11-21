@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.ledger import post_payout_wallet_funding
+from app.services.ledger import post_payout_settlement, post_payout_wallet_funding
 from app.services.selcom_business.client import (
     SelcomBusinessMisconfiguredError,
     get_selcom_business_client,
@@ -102,9 +102,28 @@ def _accounts(fake, merchant_id):
     }
 
 
-def test_funding_a_sandbox_wallet_does_not_touch_the_live_balance(fake_client):
-    """The whole point. Before the fix this debited merchant_wallet in
-    `live` and the merchant's real settled money left their balance."""
+# --- the sandbox float ----------------------------------------------------
+
+
+def _txn(fake_client, merchant_id, amount="10000.00"):
+    return uuid.UUID(
+        fake_client.seed(
+            "transactions",
+            {
+                "merchant_id": str(merchant_id),
+                "type": "adjustment",
+                "status": "successful",
+                "currency": "TZS",
+                "gross_amount": amount,
+                "net_amount": amount,
+            },
+        )["id"]
+    )
+
+
+def test_sandbox_funding_mints_play_money_instead_of_spending_real_money(fake_client):
+    """The other half of the fix. Sandbox funding works again - but the
+    shillings come from the platform float, not from anyone's balance."""
     merchant_id = uuid.uuid4()
     fake_client.seed(
         "ledger_accounts",
@@ -115,40 +134,108 @@ def test_funding_a_sandbox_wallet_does_not_touch_the_live_balance(fake_client):
             "account_type": "liability",
             "currency": "TZS",
             "environment": "live",
-            "balance": "100000.00",
+            "balance": "105240.13",
         },
     )
 
-    # A real transactions row: ledger_entries has a foreign key to it, and
-    # without one this fails on the FK before it ever reaches the balance
-    # check the test is actually about.
-    transaction_id = uuid.UUID(
-        fake_client.seed(
-            "transactions",
-            {
-                "merchant_id": str(merchant_id),
-                "type": "adjustment",
-                "status": "successful",
-                "currency": "TZS",
-                "gross_amount": "10000.00",
-                "net_amount": "10000.00",
-            },
-        )["id"]
+    post_payout_wallet_funding(
+        fake_client,
+        transaction_id=_txn(fake_client, merchant_id),
+        merchant_id=merchant_id,
+        amount=Decimal("10000.00"),
+        currency="TZS",
+        environment="sandbox",
     )
 
-    with pytest.raises(Exception) as excinfo:
-        post_payout_wallet_funding(
-            fake_client,
-            transaction_id=transaction_id,
-            merchant_id=merchant_id,
-            amount=Decimal("10000.00"),
-            currency="TZS",
-            environment="sandbox",
-        )
+    accounts = _accounts(fake_client, merchant_id)
+    assert str(accounts[("merchant_wallet", "live")]["balance"]) == "105240.13", (
+        "the live Collections balance must not move when sandbox is funded"
+    )
+    assert Decimal(str(accounts[("payout_available", "sandbox")]["balance"])) == Decimal("10000.00")
 
-    # Refused, because the SANDBOX wallet holds nothing - not silently
-    # served from the live one.
-    assert "INSUFFICIENT_BALANCE" in str(excinfo.value).upper() or "BALANCE" in str(excinfo.value).upper()
+    # The counter-entry: a platform account, negative by exactly what was
+    # minted, in sandbox.
+    floats = [
+        a
+        for a in fake_client.table("ledger_accounts")._table.rows
+        if a.get("purpose") == "sandbox_float"
+    ]
+    assert len(floats) == 1
+    assert floats[0].get("merchant_id") is None
+    assert floats[0].get("environment") == "sandbox"
+    assert Decimal(str(floats[0]["balance"])) == Decimal("-10000.00")
 
-    live_wallet = _accounts(fake_client, merchant_id)[("merchant_wallet", "live")]
-    assert str(live_wallet["balance"]) == "100000.00", "the live balance must be untouched"
+
+def test_live_funding_still_comes_out_of_the_merchants_own_balance(fake_client):
+    """Unchanged, and it has to be: this is the real money path."""
+    merchant_id = uuid.uuid4()
+    fake_client.seed(
+        "ledger_accounts",
+        {
+            "merchant_id": str(merchant_id),
+            "name": "Merchant Wallet (test)",
+            "purpose": "merchant_wallet",
+            "account_type": "liability",
+            "currency": "TZS",
+            "environment": "live",
+            "balance": "50000.00",
+        },
+    )
+
+    post_payout_wallet_funding(
+        fake_client,
+        transaction_id=_txn(fake_client, merchant_id),
+        merchant_id=merchant_id,
+        amount=Decimal("10000.00"),
+        currency="TZS",
+        environment="live",
+    )
+
+    accounts = _accounts(fake_client, merchant_id)
+    assert Decimal(str(accounts[("merchant_wallet", "live")]["balance"])) == Decimal("40000.00")
+    assert Decimal(str(accounts[("payout_available", "live")]["balance"])) == Decimal("10000.00")
+    assert not [
+        a for a in fake_client.table("ledger_accounts")._table.rows if a.get("purpose") == "sandbox_float"
+    ], "a live transfer must never touch the sandbox float"
+
+
+def test_a_settled_sandbox_payout_books_no_live_revenue(fake_client):
+    """Play money must not reach the two accounts the business is read
+    from. Both platform legs were defaulting to live."""
+    merchant_id = uuid.uuid4()
+    fake_client.seed(
+        "ledger_accounts",
+        {
+            "merchant_id": str(merchant_id),
+            "name": "Payout Reserved (test)",
+            "purpose": "payout_reserved",
+            "account_type": "liability",
+            "currency": "TZS",
+            "environment": "sandbox",
+            "balance": "1030.00",
+        },
+    )
+
+    post_payout_settlement(
+        fake_client,
+        transaction_id=_txn(fake_client, merchant_id, "1030.00"),
+        merchant_id=merchant_id,
+        amount=Decimal("1000.00"),
+        fee_amount=Decimal("30.00"),
+        currency="TZS",
+        environment="sandbox",
+    )
+
+    platform = {
+        (a["purpose"], a.get("environment")): Decimal(str(a["balance"]))
+        for a in fake_client.table("ledger_accounts")._table.rows
+        if a.get("merchant_id") is None
+    }
+    assert platform.get(("platform_revenue", "sandbox")) == Decimal("30.00")
+    # settlement_clearing is an asset, and an asset decreases on a credit
+    # (post_ledger_entries: assets and expenses increase on debit). The
+    # sign is the existing convention and identical for a live payout;
+    # what this test is about is the environment it landed in.
+    assert platform.get(("settlement_clearing", "sandbox")) == Decimal("-1000.00")
+    assert ("platform_revenue", "live") not in platform, "a sandbox fee must not reach live revenue"
+    assert ("settlement_clearing", "live") not in platform

@@ -834,26 +834,38 @@ def post_payout_wallet_funding(
     is already spending: whichever posting reaches the row lock second
     sees the reduced balance and is rejected outright.
     """
-    wallet_account_id = _get_or_create_ledger_account(
-        client,
-        merchant_id=merchant_id,
-        purpose="merchant_wallet",
-        account_type="liability",
-        currency=currency,
-        # Both legs, same environment. This argument was missing, so the
-        # credit went to the sandbox payout wallet while the debit fell
-        # through to the default and took the money out of the merchant's
-        # LIVE Collections balance - real settled shillings, moved into a
-        # wallet whose payouts are make-believe, with no route to move
-        # them back. A sandbox transfer must balance inside sandbox.
+    if environment == "live":
+        # Real money: the merchant's own settled Collections balance, and
+        # the same locked no-negative check a withdrawal gets.
+        source_account_id = _get_or_create_ledger_account(
+            client,
+            merchant_id=merchant_id,
+            purpose="merchant_wallet",
+            account_type="liability",
+            currency=currency,
+            environment="live",
+        )
+    else:
+        # Play money, minted against the platform sandbox float.
         #
-        # Consequence worth knowing: a sandbox merchant_wallet starts at
-        # zero and nothing credits it today, so sandbox funding is now
-        # refused by the no-negative guard rather than silently taking
-        # live money. That refusal is the correct answer until there is a
-        # deliberate way to put play money into a sandbox balance.
-        environment=environment,
-    )
+        # This leg used to fall through to the live merchant_wallet,
+        # because it passed no environment and the default is 'live'. The
+        # credit went to the sandbox payout wallet and the debit came out
+        # of real settled shillings - money the merchant could no longer
+        # withdraw, moved into a wallet whose payouts are make-believe,
+        # with no route back.
+        #
+        # sandbox_float is not in the no-negative guard, by design: it
+        # goes more negative with every shilling of play money minted,
+        # and that balance is exactly how much sandbox money exists.
+        source_account_id = _get_or_create_ledger_account(
+            client,
+            merchant_id=None,
+            purpose="sandbox_float",
+            account_type="equity",
+            currency=currency,
+            environment=environment,
+        )
     payout_account_id = _payout_account(
         client, merchant_id=merchant_id, purpose=PAYOUT_AVAILABLE, currency=currency, environment=environment
     )
@@ -863,11 +875,15 @@ def post_payout_wallet_funding(
         [
             {
                 "transaction_id": str(transaction_id),
-                "ledger_account_id": str(wallet_account_id),
+                "ledger_account_id": str(source_account_id),
                 "direction": "debit",
                 "amount": str(amount),
                 "currency": currency,
-                "description": "Transferred to payout wallet",
+                "description": (
+                    "Transferred to payout wallet"
+                    if environment == "live"
+                    else "Sandbox payout wallet funded with test money"
+                ),
             },
             {
                 "transaction_id": str(transaction_id),
@@ -875,13 +891,23 @@ def post_payout_wallet_funding(
                 "direction": "credit",
                 "amount": str(amount),
                 "currency": currency,
-                "description": "Payout wallet funded from collections",
+                "description": (
+                    "Payout wallet funded from collections"
+                    if environment == "live"
+                    else "Sandbox payout wallet funded with test money"
+                ),
             },
         ],
     )
-    _record_wallet_snapshot(
-        client, transaction_id=transaction_id, wallet_account_id=wallet_account_id, posted_entries=posted
-    )
+    # Only a live transfer has a merchant-wallet leg to denormalize. In
+    # sandbox the debit is the platform float, which is nobody's balance
+    # and has no business appearing on a merchant's transaction row - the
+    # helper finds no matching leg and returns, which is the right
+    # outcome, but passing the float id would have been asking it to.
+    if environment == "live":
+        _record_wallet_snapshot(
+            client, transaction_id=transaction_id, wallet_account_id=source_account_id, posted_entries=posted
+        )
     _invalidate_display_after_ledger_write(merchant_id)
     return posted
 
@@ -1011,8 +1037,18 @@ def post_payout_settlement(
     reserved_id = _payout_account(
         client, merchant_id=merchant_id, purpose=PAYOUT_RESERVED, currency=currency, environment=environment
     )
+    # The platform legs carry the environment too. Without it they fell
+    # through to 'live', so a settled SANDBOX payout booked a fake fee
+    # into live platform revenue and a fake outflow into live settlement
+    # clearing - play money showing up in the real numbers, in the two
+    # accounts the business is actually read from.
     settlement_id = _get_or_create_ledger_account(
-        client, merchant_id=None, purpose="settlement_clearing", account_type="asset", currency=currency
+        client,
+        merchant_id=None,
+        purpose="settlement_clearing",
+        account_type="asset",
+        currency=currency,
+        environment=environment,
     )
 
     entries = [
@@ -1035,7 +1071,12 @@ def post_payout_settlement(
     ]
     if fee_amount > 0:
         revenue_id = _get_or_create_ledger_account(
-            client, merchant_id=None, purpose="platform_revenue", account_type="revenue", currency=currency
+            client,
+            merchant_id=None,
+            purpose="platform_revenue",
+            account_type="revenue",
+            currency=currency,
+            environment=environment,
         )
         entries.append(
             {
