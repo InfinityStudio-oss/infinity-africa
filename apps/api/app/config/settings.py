@@ -532,6 +532,22 @@ class Settings(BaseSettings):
     # and a sweep that cannot deduplicate must not run at all.
     daily_summary_interval_seconds: int = 0
 
+    # How often the payout worker sends authorised payouts and chases
+    # unresolved ones.
+    #
+    # 0 disables it, which is the default and is what every deployment
+    # had implicitly until now: sweep_payouts was written with the
+    # Disbursement API and never called, so a payout reached
+    # `processing` - funds reserved - and stayed there forever.
+    #
+    # Set it low. A payout sitting in `processing` is money already taken
+    # out of the merchant's available balance and not yet sent, so the
+    # gap between authorising and dispatching is a window where the
+    # merchant can see neither the money nor the payment. 15 seconds is
+    # the intended production value; the per-tick limit of 50 and the
+    # lease are what keep that safe with more than one API instance.
+    payout_dispatch_interval_seconds: int = 0
+
     # The documented account-wide limit is 300 send requests/minute, with a
     # separate per-IP guard of 600. 240 leaves a fifth of the account's
     # capacity for anything else sharing these credentials - the brief

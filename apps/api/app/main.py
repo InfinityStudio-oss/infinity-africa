@@ -54,6 +54,7 @@ from app.services.checkout_reconciliation import reconcile_pending_checkout_coll
 from app.services.collection_expiry import expire_stale_pushes
 from app.services.daily_notification_summary import send_daily_collection_summaries
 from app.services.disbursements import reconcile_pending_disbursements
+from app.services.payout_dispatch import sweep_payouts
 from app.services.referral_commissions import recalculate_open_referrals
 from app.services.scheduler_lease import acquire_lease, release_lease
 from app.services.sms_dispatch import dispatch_pending_sms
@@ -423,6 +424,49 @@ def _start_sms_dispatch_task() -> asyncio.Task | None:
     return asyncio.create_task(_sms_dispatch_loop(interval))
 
 
+async def _payout_dispatch_loop(interval_seconds: float) -> None:
+    """Sends authorised payouts and chases unresolved ones.
+
+    sweep_payouts has existed since the Disbursement API was written and
+    nothing ever called it. A payout therefore reached `processing` -
+    funds reserved, money committed - and stopped there forever: the
+    first sandbox payout sat untouched with dispatch_attempts=0 while
+    TZS 1,010 stayed reserved against it.
+
+    Leased like every other sweep, so two API instances cannot both
+    dispatch the same payout. That matters more here than anywhere else
+    in this file: the lease and the `processing` claim inside
+    dispatch_payout are what stand between one payout and two payments.
+    """
+    logger.info("payout_dispatch_loop_running interval_seconds=%s", interval_seconds)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            client = get_supabase_admin()
+            if not await asyncio.to_thread(acquire_lease, client, "payout_dispatch"):
+                continue
+            try:
+                summary = await sweep_payouts(client)
+            finally:
+                await asyncio.to_thread(release_lease, client, "payout_dispatch")
+            if any(summary.values()):
+                logger.info("scheduled_payout_dispatch %s", summary)
+        except Exception as exc:
+            logger.exception("scheduled_payout_dispatch_failed")
+            capture_exception(exc)
+
+
+def _start_payout_dispatch_task() -> asyncio.Task | None:
+    """Opt-in by interval, the same shape as the other sweeps, so a test
+    run or local dev never dispatches a payout in the background."""
+    interval = settings.payout_dispatch_interval_seconds
+    if interval <= 0:
+        logger.info("payout_dispatch_scheduler_disabled interval_seconds=%s", interval)
+        return None
+    logger.info("payout_dispatch_scheduler_started interval_seconds=%s", interval)
+    return asyncio.create_task(_payout_dispatch_loop(interval))
+
+
 async def _referral_recalculation_loop(interval_seconds: float) -> None:
     """Revalues open referral commissions on a timer.
 
@@ -492,6 +536,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             _start_referral_recalculation_task(),
             _start_sms_dispatch_task(),
             _start_daily_summary_task(),
+            _start_payout_dispatch_task(),
         )
         if task is not None
     ]

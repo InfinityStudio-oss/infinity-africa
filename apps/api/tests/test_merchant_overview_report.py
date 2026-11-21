@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
+from app.core.time import dar_es_salaam_date
 from app.main import app
 from app.services.merchant_overview import get_merchant_overview_report
 from tests.factories import (
@@ -77,7 +78,16 @@ def _collection(
 
 
 def _report(fake_client, merchant_id, *, days=7):
-    today = datetime.now(timezone.utc).date()
+    # The Dar es Salaam day, not the UTC one.
+    #
+    # The report buckets by Africa/Dar_es_Salaam calendar days while this
+    # helper windowed by the UTC date, and the two disagree for the three
+    # hours after 21:00 UTC - when it is already tomorrow in Dar. Every
+    # row seeded at "now" then landed a day outside the window and all
+    # fourteen of these tests failed, every night, on a clock rather than
+    # on a change. Caught at 22:00 UTC; it had been latent since the file
+    # was written.
+    today = dar_es_salaam_date(datetime.now(timezone.utc))
     return get_merchant_overview_report(
         fake_client,
         merchant_id=merchant_id,
