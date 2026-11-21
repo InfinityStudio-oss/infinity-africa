@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
+import { CopyButton } from "@/components/portal/copy-button";
 import { Icon } from "@/components/portal/icon";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatDateTime } from "@/lib/format";
@@ -140,16 +141,26 @@ export function PayoutKeysView() {
               This is the only time it is shown. We store a hash, so it cannot be looked up later —
               if you lose it, rotate the key.
             </p>
-            <code className="block px-3 py-2 rounded-lg bg-surface-container-highest font-mono text-xs break-all">
+            <code
+              id="copyable-payout-key"
+              className="block px-3 py-2 rounded-lg bg-surface-container-highest font-mono text-xs break-all"
+            >
               {issued.plaintext}
             </code>
-            <button
-              type="button"
-              onClick={() => setIssued(null)}
-              className="text-sm font-medium text-primary"
-            >
-              I have copied it
-            </button>
+            {/* There was no copy button here at all - the key was shown
+                once, and the only way to take it was to select it by
+                hand. "I have copied it" then dismissed the one copy that
+                will ever exist. */}
+            <div className="flex items-center gap-3 pt-1">
+              <CopyButton value={issued.plaintext} describes="payout key" />
+              <button
+                type="button"
+                onClick={() => setIssued(null)}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                I have copied it
+              </button>
+            </div>
           </div>
         </Card>
       )}
