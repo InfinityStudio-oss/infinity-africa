@@ -345,9 +345,16 @@ export function ApiKeysView() {
         }
       />
 
+      {/* On the gradient, not in a Card, so it needs light ink. It wore
+          text-on-background, which inside the portal shell resolves to
+          the PANEL ink (#102a43) - 1.08:1 on this banner's composited
+          background, with the warning icon at 1.47:1. The whole notice
+          was invisible: the one telling a merchant not to leak their
+          secret key. White measures 16.92:1 here and amber 10.14:1,
+          which also makes it read as a warning rather than a tip. */}
       <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary-container/10 px-4 py-3.5">
-        <Icon name="warning" className="text-[20px] text-primary shrink-0 mt-0.5" />
-        <p className="text-sm text-on-background">
+        <Icon name="warning" className="text-[20px] text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-sm text-white">
           <span className="font-semibold">Use secret keys only on your backend.</span> Never expose them in
           frontend or mobile apps — anyone who sees your source code, a browser DevTools request, or an
           unpacked app bundle can read a key embedded there. Have your client app call your own backend, and
@@ -355,10 +362,15 @@ export function ApiKeysView() {
         </p>
       </div>
 
+      {/* Same fault as the notice above: on the gradient, wearing ink
+          meant for a pale error panel. on-error-container measured
+          1.17:1 here and the icon 1.19:1, so an account whose API access
+          had been suspended was told so invisibly. White is 7.78:1 and
+          red-200 is 5.38:1. */}
       {apiSuspended && (
         <div className="flex items-start gap-3 rounded-lg border border-error/30 bg-error-container/30 px-4 py-3.5">
-          <Icon name="block" className="text-[20px] text-error shrink-0 mt-0.5" />
-          <p className="text-sm text-on-error-container">
+          <Icon name="block" className="text-[20px] text-red-200 shrink-0 mt-0.5" />
+          <p className="text-sm text-white">
             <span className="font-semibold">API access is currently suspended</span> for this account. Existing and
             new keys will not authenticate. Contact InfinityPay support.
           </p>
