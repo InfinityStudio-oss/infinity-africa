@@ -3,14 +3,26 @@ import { Card, tdClass, thClass } from "@/components/portal/card";
 import { PageHeader } from "@/components/portal/page-header";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatDateTime } from "@/lib/format";
+import { PayByLinkFilters } from "@/components/super-admin/pay-by-link-filters";
 import { listAdminPayByLinks } from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Pay by Link | InfinityPay Super Admin",
 };
 
-export default async function SuperAdminPayByLinkPage() {
-  const pages = await listAdminPayByLinks();
+interface SuperAdminPayByLinkPageProps {
+  searchParams: Promise<{ search?: string; state?: string }>;
+}
+
+export default async function SuperAdminPayByLinkPage({ searchParams }: SuperAdminPayByLinkPageProps) {
+  const filters = await searchParams;
+  const anyFilter = Boolean(filters.search || filters.state);
+  // "" and "active"/"disabled" are three different things. Undefined
+  // means no filter; sending false for "All" would hide every working
+  // page on the platform.
+  const isActive =
+    filters.state === "active" ? true : filters.state === "disabled" ? false : undefined;
+  const pages = await listAdminPayByLinks({ search: filters.search, isActive });
   const active = pages.filter((p) => p.is_active).length;
   const disabled = pages.length - active;
   const everUsed = pages.filter((p) => p.last_used_at).length;
@@ -29,26 +41,23 @@ export default async function SuperAdminPayByLinkPage() {
         <AdminKpiCard variant="brand" icon="check_circle" label="Ever Used" value={everUsed.toLocaleString()} />
       </div>
 
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <input
-            className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm"
-            placeholder="Slug or business"
-          />
-          <select className="px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
-            <option>All Statuses</option>
-            <option>Active</option>
-            <option>Disabled</option>
-          </select>
-        </div>
-      </Card>
+      <PayByLinkFilters initial={{ search: filters.search, state: filters.state }} />
 
       <Card padded={false}>
         <div className="p-5 pb-3">
-          <h3 className="text-2xl font-semibold text-on-background">All Pay by Link Pages</h3>
+          <h3 className="text-2xl font-semibold text-on-background">
+            {anyFilter ? "Matching Pay by Link Pages" : "All Pay by Link Pages"}
+          </h3>
         </div>
         {pages.length === 0 ? (
-          <p className="p-6 text-sm text-on-surface-variant">No merchant has created a Pay by Link page yet.</p>
+          <p className="p-6 text-sm text-on-surface-variant">
+            {/* Distinguished on purpose: "nobody has created one" is a
+              * statement about the platform, and saying it while a
+              * filter is hiding 27 pages would be false. */}
+            {anyFilter
+              ? "No Pay by Link pages match these filters."
+              : "No merchant has created a Pay by Link page yet."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[860px]">

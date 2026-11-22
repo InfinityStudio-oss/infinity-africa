@@ -692,16 +692,27 @@ export async function listAdminPaymentLinks(filters?: { merchantId?: string }): 
 export async function listAdminPayByLinks(filters?: {
   merchantId?: string;
   isActive?: boolean;
+  search?: string;
 }): Promise<AdminPayByLinkListRow[]> {
   const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
   if (filters?.isActive !== undefined) params.set("is_active", String(filters.isActive));
+  if (filters?.search) params.set("search", filters.search);
   return apiListAll<AdminPayByLinkListRow>("/v1/admin/pay-by-link", params);
 }
 
-export async function listAdminInvoices(filters?: { merchantId?: string }): Promise<AdminInvoiceRow[]> {
+export async function listAdminInvoices(filters?: {
+  merchantId?: string;
+  search?: string;
+  status?: string;
+  /** A Tanzanian calendar date, YYYY-MM-DD. Invoices due on or before it. */
+  dueBefore?: string;
+}): Promise<AdminInvoiceRow[]> {
   const params = new URLSearchParams();
   if (filters?.merchantId) params.set("merchant_id", filters.merchantId);
+  if (filters?.search) params.set("search", filters.search);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.dueBefore) params.set("due_before", filters.dueBefore);
   return apiListAll<AdminInvoiceRow>("/v1/admin/invoices", params);
 }
 

@@ -4,6 +4,7 @@ import { Icon } from "@/components/portal/icon";
 import { PageHeader } from "@/components/portal/page-header";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { InvoicesFilters } from "@/components/super-admin/invoices-filters";
 import { getAdminOverview, listAdminInvoices } from "@/lib/admin/live-api";
 import { adminInvoiceBadge } from "@/lib/admin/status-tones";
 
@@ -11,8 +12,23 @@ export const metadata = {
   title: "Invoices | InfinityPay Super Admin",
 };
 
-export default async function SuperAdminInvoicesPage() {
-  const [invoices, overview] = await Promise.all([listAdminInvoices(), getAdminOverview()]);
+interface SuperAdminInvoicesPageProps {
+  searchParams: Promise<{ search?: string; status?: string; due_before?: string }>;
+}
+
+export default async function SuperAdminInvoicesPage({ searchParams }: SuperAdminInvoicesPageProps) {
+  const filters = await searchParams;
+  const anyFilter = Boolean(filters.search || filters.status || filters.due_before);
+  const [invoices, overview] = await Promise.all([
+    listAdminInvoices({
+      search: filters.search,
+      status: filters.status,
+      dueBefore: filters.due_before,
+    }),
+    getAdminOverview(),
+  ]);
+  // These count the rows actually listed, so under a filter they
+  // describe the filtered set - which is why the heading below says so.
   const paidToday = invoices.filter((i) => i.status === "PAID").length;
   const overdue = invoices.filter((i) => i.status === "OVERDUE").length;
 
@@ -27,28 +43,28 @@ export default async function SuperAdminInvoicesPage() {
         <AdminKpiCard variant="brand" icon="payments" label="Value Outstanding" value={overview ? formatCurrency(overview.outstanding_invoice_value, "TZS") : "—"} />
       </div>
 
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <input className="sm:col-span-2 px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" placeholder="Invoice number, business, or customer" />
-          <select className="px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
-            <option>All Statuses</option>
-            <option>Draft</option>
-            <option>Sent</option>
-            <option>Paid</option>
-            <option>Partially Paid</option>
-            <option>Overdue</option>
-            <option>Cancelled</option>
-          </select>
-          <input className="px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" type="date" />
-        </div>
-      </Card>
+      <InvoicesFilters
+        initial={{
+          search: filters.search,
+          status: filters.status,
+          dueBefore: filters.due_before,
+        }}
+      />
 
       <Card padded={false}>
         <div className="p-5 pb-3">
-          <h3 className="text-2xl font-semibold text-on-background">All Invoices</h3>
+          <h3 className="text-2xl font-semibold text-on-background">
+            {anyFilter ? "Matching Invoices" : "All Invoices"}
+          </h3>
         </div>
         {invoices.length === 0 ? (
-          <p className="p-6 text-sm text-on-surface-variant">No invoices have been issued yet.</p>
+          <p className="p-6 text-sm text-on-surface-variant">
+            {/* "None issued yet" when a filter is hiding them would tell
+              * an operator the business has never invoiced anyone. */}
+            {anyFilter
+              ? "No invoices match these filters."
+              : "No invoices have been issued yet."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[1020px]">

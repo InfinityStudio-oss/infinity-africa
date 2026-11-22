@@ -21,6 +21,7 @@ routers/admin_onboarding.py, not here — untouched by this router.
 """
 
 import uuid
+from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
@@ -56,6 +57,7 @@ from app.schemas.api_keys import ApiKeyResponse
 from app.schemas.api_logs import AdminApiRequestLogResponse
 from app.schemas.auth import AuthenticatedUser
 from app.schemas.common import APIResponse
+from app.schemas.enums import InvoiceStatus
 from app.schemas.ip_allowlist import AdminIpAllowlistResponse
 from app.schemas.merchant_notifications import (
     AdminMerchantNotificationSettingsResponse,
@@ -74,6 +76,7 @@ from app.services.admin_directory import (
     merchants_with_live_keys,
 )
 from app.services.admin_overview import get_admin_overview
+from app.services.admin_search import apply_one_box_search, or_search_term
 from app.services.api_access import (
     is_production_api_access_allowed,
     merchants_with_production_api_access,
@@ -460,6 +463,9 @@ def list_admin_pay_by_links(
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
     is_active: Annotated[bool | None, Query()] = None,
+    search: Annotated[
+        str | None, Query(max_length=100, description="Slug, display name, or business name/code")
+    ] = None,
 ):
     """Platform-wide view of every merchant's permanent Pay by Link page —
     separate from GET /payment-links above (which lists the payments
@@ -472,6 +478,13 @@ def list_admin_pay_by_links(
         query = query.eq("merchant_id", str(merchant_id))
     if is_active is not None:
         query = query.eq("is_active", is_active)
+    # The slug is what an operator is given ("they sent me /pay/abc"),
+    # the display name is what the customer saw, and the business is
+    # neither - it lives on merchants. The search box promised all
+    # three and was wired to nothing.
+    query, _ = apply_one_box_search(
+        query, client, search, columns=["slug", "display_name"]
+    )
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
     rows = result.data or []
     merchant_names = batch_merchant_names(client, {r["merchant_id"] for r in rows})
@@ -676,10 +689,15 @@ def list_admin_notification_settings(
         "id, business_name, merchant_code, contact_email", count=LIST_COUNT
     )
     if search and search.strip():
-        term = search.strip().replace(",", " ")
         # Business name or merchant code — the two things an operator has
         # in front of them when someone calls about notifications.
-        query = query.or_(f"business_name.ilike.%{term}%,merchant_code.ilike.%{term}%")
+        #
+        # Shared sanitiser rather than a local replace(",", " "), which
+        # left a double space behind: "Kilimanjaro, Cafe" then failed to
+        # match the business called "Kilimanjaro Cafe Ltd".
+        term = or_search_term(search)
+        if term:
+            query = query.or_(f"business_name.ilike.%{term}%,merchant_code.ilike.%{term}%")
 
     result = query.order("business_name").range(pagination.start, pagination.end).execute()
     merchants = result.data or []
@@ -901,11 +919,46 @@ def list_admin_invoices(
     _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
     merchant_id: Annotated[uuid.UUID | None, Query()] = None,
+    search: Annotated[
+        str | None,
+        Query(max_length=100, description="Invoice number, business name or code, or customer"),
+    ] = None,
+    status: Annotated[InvoiceStatus | None, Query(description="Invoice lifecycle status")] = None,
+    due_before: Annotated[
+        date | None, Query(description="Invoices due on or before this date (YYYY-MM-DD)")
+    ] = None,
 ):
+    """`search`, `status` and `due_before` are filtered server-side.
+
+    They were a search box, a dropdown and a date input on the Super
+    Admin screen with no handler attached to any of them - the page
+    looked filterable and was not.
+
+    Server-side because the list is paginated: narrowing the page the
+    browser already holds would report "no such invoice" for one sitting
+    on page two.
+
+    `due_before` needs none of the timezone care the created_at filters
+    on this router do, because invoices.due_date is a DATE, not a
+    timestamp. A date has no time to be three hours out by, so the
+    comparison is exact and the parameter is simply a date - which also
+    makes a mistyped one a 422 for free.
+    """
     client = get_supabase_admin()
     query = client.table("invoices").select("*", count=LIST_COUNT)
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
+    # Invoice number, customer name or phone, or the business - which is
+    # not a column here, so it resolves through merchants first.
+    query, _ = apply_one_box_search(
+        query, client, search, columns=["invoice_number", "customer_name", "customer_phone"]
+    )
+    if status is not None:
+        query = query.eq("status", status.value)
+    if due_before is not None:
+        # Inclusive, matching the label on the screen ("Due on or
+        # before"). due_date is indexed (invoices_due_date_idx).
+        query = query.lte("due_date", due_before.isoformat())
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
     rows = result.data or []
     merchant_names = batch_merchant_names(client, {r["merchant_id"] for r in rows})
