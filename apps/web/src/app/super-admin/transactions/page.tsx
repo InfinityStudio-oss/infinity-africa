@@ -24,6 +24,17 @@ interface SuperAdminTransactionsPageProps {
 export default async function SuperAdminTransactionsPage({ searchParams }: SuperAdminTransactionsPageProps) {
   const filters = await searchParams;
 
+  const anyFilter = Boolean(
+    filters.merchant_id ||
+      filters.type ||
+      filters.status ||
+      filters.provider_reference ||
+      filters.transaction_id ||
+      filters.customer_phone ||
+      filters.date_from ||
+      filters.date_to,
+  );
+
   const [transactions, merchants] = await Promise.all([
     listAdminTransactions({
       merchantId: filters.merchant_id,
@@ -60,7 +71,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
         }}
       />
 
-      <TransactionsTable transactions={transactions} />
+      <TransactionsTable transactions={transactions} filtered={anyFilter} />
     </div>
   );
 }

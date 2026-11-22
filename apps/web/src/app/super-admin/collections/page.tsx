@@ -38,6 +38,15 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
     listAdminMerchantOptions(),
   ]);
   const { rows: collections, failure: loadFailure } = collectionsResult;
+  const anyFilter = Boolean(
+    filters.merchant_id ||
+      filters.source ||
+      filters.method ||
+      filters.status ||
+      filters.customer_phone ||
+      filters.date_from ||
+      filters.date_to,
+  );
   const loadFailed = loadFailure !== null;
   const successful = collections.filter((c) => c.status === "successful").length;
   const pending = collections.filter((c) => c.status === "pending" || c.status === "processing").length;
@@ -72,7 +81,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
         }}
       />
 
-      <CollectionsTable collections={collections} loadFailure={loadFailure} />
+      <CollectionsTable collections={collections} loadFailure={loadFailure} filtered={anyFilter} />
     </div>
   );
 }

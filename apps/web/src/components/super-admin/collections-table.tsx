@@ -38,8 +38,17 @@ function deliveryCell(row: AdminCollectionRow) {
 export function CollectionsTable({
   collections: initialCollections,
   loadFailure = null,
+  filtered = false,
 }: {
   collections: AdminCollectionRow[];
+  /** Whether a filter is narrowing this list.
+   *
+   * Only affects wording, but the wording is the whole problem it
+   * solves: headed "All Collections" with a platform-wide "Collections
+   * Today" figure above it, a correctly filtered page looks like a
+   * page that ignored the filter. That was reported as "the filter is
+   * not working" when it was working exactly as asked. */
+  filtered?: boolean;
   /** Why the request did not come back, as opposed to coming back
    * empty — an HTTP status, an API error message, or a thrown fetch.
    * null means it succeeded. Defaults null so a caller that cannot tell
@@ -57,7 +66,17 @@ export function CollectionsTable({
   return (
     <Card padded={false}>
       <div className="p-5 pb-3">
-        <h3 className="text-2xl font-semibold text-on-background">All Collections</h3>
+        <h3 className="text-2xl font-semibold text-on-background">
+          {filtered
+            ? `Matching Collections (${initialCollections.length.toLocaleString()})`
+            : "All Collections"}
+        </h3>
+        {filtered && (
+          <p className="text-sm text-on-surface-variant mt-1">
+            Filtered. The tiles above count these rows; “Collections Today” is platform-wide and
+            does not change.
+          </p>
+        )}
       </div>
       {collections.length === 0 && loadFailed ? (
         <div className="p-6 space-y-1">
@@ -72,7 +91,13 @@ export function CollectionsTable({
           <p className="pt-1 font-mono text-xs text-on-surface-variant break-all">{loadFailure}</p>
         </div>
       ) : collections.length === 0 ? (
-        <p className="p-6 text-sm text-on-surface-variant">No collections have been recorded yet.</p>
+        <p className="p-6 text-sm text-on-surface-variant">
+          {/* "None recorded yet" while a filter hides 149,000 of them
+              would be a flat untruth. */}
+          {filtered
+            ? "No collections match these filters."
+            : "No collections have been recorded yet."}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[1500px]">

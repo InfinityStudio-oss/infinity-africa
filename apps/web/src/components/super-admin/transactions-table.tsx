@@ -28,11 +28,25 @@ function money(value: string | null, currency: string): string {
   return value === null ? "Not available" : formatCurrency(value, currency);
 }
 
-export function TransactionsTable({ transactions }: { transactions: AdminTransactionRow[] }) {
+export function TransactionsTable({
+  transactions,
+  filtered = false,
+}: {
+  transactions: AdminTransactionRow[];
+  /** Whether a filter is narrowing this list. Wording only, but a
+   * correctly filtered page headed "All Transactions" reads as one
+   * that ignored the filter - which was reported as a broken filter
+   * on the Collections screen. */
+  filtered?: boolean;
+}) {
   return (
     <Card padded={false}>
       <div className="p-5 pb-3">
-        <h3 className="text-2xl font-semibold text-on-background">All Transactions</h3>
+        <h3 className="text-2xl font-semibold text-on-background">
+          {filtered
+            ? `Matching Transactions (${transactions.length.toLocaleString()})`
+            : "All Transactions"}
+        </h3>
       </div>
       {transactions.length === 0 ? (
         <p className="p-6 text-sm text-on-surface-variant">No transactions match these filters.</p>

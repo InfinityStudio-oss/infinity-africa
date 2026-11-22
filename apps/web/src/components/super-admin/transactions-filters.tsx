@@ -65,6 +65,21 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
 
   return (
     <Card>
+      {Object.values(values).some(Boolean) && (
+        <div className="flex justify-end mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              setValues({});
+              setPhoneDraft("");
+              router.push("/super-admin/transactions");
+            }}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
         <select
           className={inputClass}
