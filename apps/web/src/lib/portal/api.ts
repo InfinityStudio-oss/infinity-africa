@@ -260,8 +260,16 @@ const COLLECTION_METHOD_PATHS: Record<Collection["method"], string> = {
   HOSTED_CHECKOUT: "hosted-checkout",
 };
 
-export async function listCollections(): Promise<Collection[]> {
-  return (await apiGet<Collection[]>("/v1/merchant/collections")) ?? [];
+export async function listCollections(search?: string): Promise<Collection[]> {
+  // Filtered server-side, for the same reason listTransactions is: this
+  // endpoint is paginated, so narrowing the page already fetched would
+  // report "not found" for a payment sitting on page two - the worst
+  // possible answer to "did my customer pay?".
+  const term = search?.trim();
+  const path = term
+    ? `/v1/merchant/collections?search=${encodeURIComponent(term)}`
+    : "/v1/merchant/collections";
+  return (await apiGet<Collection[]>(path)) ?? [];
 }
 
 /** Manual Selcom Checkout order-status reconciliation for a collection

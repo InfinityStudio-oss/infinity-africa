@@ -319,6 +319,12 @@ class AdminTransactionResponse(BaseModel):
     balance_before: Decimal | None = None
     balance_after: Decimal | None = None
     direction: str | None = None
+    # Read from the collection this transaction belongs to - transactions
+    # carry no phone of their own. Present so an operator who searched by
+    # phone can SEE the number on each row and confirm it is the one they
+    # were given. A search whose results cannot be checked against what
+    # was typed is how the wrong payment gets reported as the right one.
+    customer_phone: str | None = None
     created_at: datetime
 
 

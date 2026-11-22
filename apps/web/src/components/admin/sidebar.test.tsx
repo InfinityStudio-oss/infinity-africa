@@ -92,6 +92,7 @@ describe("AdminSidebar grouping", () => {
       "Audit Logs": "/super-admin/audit-logs",
       "API Keys": "/super-admin/api-keys",
       "Webhooks & Reconciliation": "/super-admin/webhooks",
+      Payouts: "/super-admin/payouts",
       "Pricing Rules": "/super-admin/pricing-rules",
       Notifications: "/super-admin/notifications",
       // Still under /admin, not /super-admin. Deliberate: this was a

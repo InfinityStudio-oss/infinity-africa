@@ -15,6 +15,7 @@ interface SuperAdminCollectionsPageProps {
     source?: string;
     method?: string;
     status?: string;
+    customer_phone?: string;
     date_from?: string;
     date_to?: string;
   }>;
@@ -29,6 +30,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
       source: filters.source,
       method: filters.method,
       status: filters.status,
+      customerPhone: filters.customer_phone,
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
     }),
@@ -64,6 +66,7 @@ export default async function SuperAdminCollectionsPage({ searchParams }: SuperA
           source: filters.source,
           method: filters.method,
           status: filters.status,
+          customerPhone: filters.customer_phone,
           dateFrom: filters.date_from,
           dateTo: filters.date_to,
         }}

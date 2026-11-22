@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Card } from "@/components/portal/card";
 import type { MerchantOption } from "@/lib/admin/types";
@@ -14,6 +14,7 @@ export interface TransactionsFilterValues {
   status?: string;
   providerReference?: string;
   transactionId?: string;
+  customerPhone?: string;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -21,6 +22,23 @@ export interface TransactionsFilterValues {
 export function TransactionsFilters({ merchants, initial }: { merchants: MerchantOption[]; initial: TransactionsFilterValues }) {
   const router = useRouter();
   const [values, setValues] = useState<TransactionsFilterValues>(initial);
+
+  // The phone field keeps its own draft and only searches when the
+  // operator is finished - Enter, or leaving the field.
+  //
+  // Every other control here navigates on change, which is right for a
+  // dropdown and wrong for a phone number: a 12-digit number typed into
+  // an onChange field is 12 server round trips, each one a trigram scan
+  // across every collection on the platform, and the operator watches
+  // the page reload under them as they type.
+  const [phoneDraft, setPhoneDraft] = useState(initial.customerPhone ?? "");
+
+  // Keep the draft honest when the URL changes under us - back/forward,
+  // or a cleared filter - so the box never shows a number that is not
+  // the one being searched.
+  useEffect(() => {
+    setPhoneDraft(initial.customerPhone ?? "");
+  }, [initial.customerPhone]);
 
   function apply(next: TransactionsFilterValues) {
     setValues(next);
@@ -30,10 +48,19 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
     if (next.status) params.set("status", next.status);
     if (next.providerReference) params.set("provider_reference", next.providerReference);
     if (next.transactionId) params.set("transaction_id", next.transactionId);
+    if (next.customerPhone) params.set("customer_phone", next.customerPhone);
     if (next.dateFrom) params.set("date_from", next.dateFrom);
     if (next.dateTo) params.set("date_to", next.dateTo);
     const query = params.toString();
     router.push(query ? `/super-admin/transactions?${query}` : "/super-admin/transactions");
+  }
+
+  function applyPhone() {
+    const trimmed = phoneDraft.trim();
+    // Nothing to do if it has not actually changed - a blur on an
+    // untouched field should not reload the page.
+    if (trimmed === (values.customerPhone ?? "")) return;
+    apply({ ...values, customerPhone: trimmed || undefined });
   }
 
   return (
@@ -88,6 +115,22 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
           placeholder="Transaction ID"
           value={values.transactionId ?? ""}
           onChange={(event) => apply({ ...values, transactionId: event.target.value || undefined })}
+        />
+        <input
+          className={inputClass}
+          type="tel"
+          inputMode="tel"
+          placeholder="Customer phone — or last 6 digits"
+          aria-label="Customer phone number"
+          value={phoneDraft}
+          onChange={(event) => setPhoneDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              applyPhone();
+            }
+          }}
+          onBlur={applyPhone}
         />
         <input
           className={inputClass}

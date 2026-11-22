@@ -549,6 +549,10 @@ export interface AdminTransactionRow {
   balance_before: string | null;
   balance_after: string | null;
   direction: "debit" | "credit" | null;
+  /** The paying customer's number, read from the collection this
+   * transaction belongs to. Null for anything that is not a collection,
+   * and for a collection with no number recorded. */
+  customer_phone: string | null;
   created_at: string;
 }
 

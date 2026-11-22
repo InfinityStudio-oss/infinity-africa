@@ -9,8 +9,14 @@ const listMyRiskAlerts = vi.fn();
 // The page reads ?search= so the topbar's search box can narrow the
 // list server-side.
 const searchParams = new URLSearchParams();
+const push = vi.fn();
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
+  // The page pushes the search term to the URL rather than holding it,
+  // so the page's own box and the topbar box cannot disagree about what
+  // is being searched.
+  useRouter: () => ({ push, replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
 }));
 
 vi.mock("@/lib/portal/api", () => ({

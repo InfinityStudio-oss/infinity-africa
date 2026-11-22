@@ -55,10 +55,29 @@ export default function CollectionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [lastRequest, setLastRequest] = useState<PaymentLink | null>(null);
   const [copied, setCopied] = useState(false);
+  // `query` is what is being searched; `searchDraft` is what is being
+  // typed. Separating them means the list reloads when the merchant is
+  // finished, not on every keystroke.
+  const [searchDraft, setSearchDraft] = useState("");
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listCollections().then(setCollections);
-  }, []);
+    let current = true;
+    setLoading(true);
+    listCollections(query)
+      .then((rows) => {
+        // A result that arrived after a newer search started would show
+        // the wrong customer's payments under the new number.
+        if (current) setCollections(rows);
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [query]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -240,8 +259,37 @@ export default function CollectionsPage() {
       </Card>
 
       <Card padded={false}>
-        <div className="p-5 pb-3">
-          <h3 className="text-2xl font-semibold text-on-background">Recent Collections</h3>
+        <div className="p-5 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-2xl font-semibold text-on-background">
+            {query ? "Search Results" : "Recent Collections"}
+          </h3>
+          <form
+            role="search"
+            className="relative w-full sm:w-80"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setQuery(searchDraft.trim());
+            }}
+          >
+            <Icon
+              name="search"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none"
+            />
+            <input
+              className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface placeholder-outline"
+              type="search"
+              placeholder="Customer phone or your reference"
+              aria-label="Search collections by customer phone or your reference"
+              value={searchDraft}
+              onChange={(event) => {
+                setSearchDraft(event.target.value);
+                // Clearing the box goes straight back to the full list.
+                // Making someone press Enter to undo a search reads as
+                // a broken page.
+                if (event.target.value.trim() === "") setQuery("");
+              }}
+            />
+          </form>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[760px]">
@@ -256,6 +304,23 @@ export default function CollectionsPage() {
               </tr>
             </thead>
             <tbody>
+              {/* An empty table is the ANSWER here, not a blank page.
+                * "Did my customer pay?" is answered by no rows, so this
+                * says which of three things happened - still loading,
+                * this number paid nothing, or nothing collected yet -
+                * instead of leaving a silent gap that reads as broken
+                * and invites the merchant to assume the worst. */}
+              {collections.length === 0 && (
+                <tr className="border-t border-surface-container-highest">
+                  <td className={`${tdClass} text-center text-on-surface-variant`} colSpan={6}>
+                    {loading
+                      ? "Loading…"
+                      : query
+                        ? `No collections for “${query}”. Check the number, or try just the last 6 digits.`
+                        : "No collections yet."}
+                  </td>
+                </tr>
+              )}
               {collections.map((collection) => {
                 const badge = collectionBadge(collection.status);
                 const needsRefresh = collection.status === "processing" || refreshedIds.has(collection.id);

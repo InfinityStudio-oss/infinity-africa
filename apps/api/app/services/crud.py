@@ -30,6 +30,8 @@ def list_for_merchant(
     ascending: bool = False,
     filters: dict[str, Any] | None = None,
     search: tuple[str, str] | None = None,
+    search_pattern: tuple[str, str] | None = None,
+    id_in: list[str] | None = None,
 ) -> tuple[list[dict], int]:
     """`search` is an optional (column, term) pair matched case-insensitively
     as a substring. Deliberately one column rather than an OR across
@@ -37,6 +39,13 @@ def list_for_merchant(
     not model, and a search that passes its tests while behaving
     differently against the real database is worse than a narrower one
     that does not.
+
+    `search_pattern` is the same thing with the wildcards left to the
+    caller, for when a substring match is too loose. A phone-number tail
+    needs to be ANCHORED: `%878545%` also matches 255878545XXX, where
+    those digits sit in the middle of a different number, so the same
+    typed number would mean one thing on the merchant's screen and
+    another on Super Admin's. The caller passes `%878545` instead.
 
     Applied before the range, so paging reflects the filtered total rather
     than the filtered slice of one page."""
@@ -46,6 +55,17 @@ def list_for_merchant(
     if search:
         column, term = search
         query = query.ilike(column, f"%{term}%")
+    if search_pattern:
+        column, pattern = search_pattern
+        query = query.ilike(column, pattern)
+    if id_in is not None:
+        # An explicit, possibly EMPTY, set of ids to restrict to - how a
+        # phone-number search narrows transactions to the collections
+        # that number paid for. Empty means "nothing matched", and it
+        # must filter to nothing rather than be skipped: showing every
+        # transaction because a phone matched none of them would let an
+        # operator conclude the wrong payment was the customer's.
+        query = query.in_("id", id_in or ["00000000-0000-0000-0000-000000000000"])
     query = query.order(order_by, desc=not ascending).range(pagination.start, pagination.end)
 
     result = query.execute()

@@ -48,6 +48,7 @@ export function TransactionsTable({ transactions }: { transactions: AdminTransac
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Provider Reference</th>
                 <th className={thClass}>Method</th>
+                <th className={thClass}>Customer Phone</th>
                 <th className={thClass}>Opening Balance</th>
                 <th className={thClass}>Amount</th>
                 <th className={thClass}>Charge</th>
@@ -80,6 +81,13 @@ export function TransactionsTable({ transactions }: { transactions: AdminTransac
                     {transaction.provider_reference ?? "—"}
                   </td>
                   <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>{transaction.method}</td>
+                  {/* Shown so a phone search can be CHECKED against the
+                    * number the operator was given. An em dash where
+                    * there is no number, never a blank cell that could
+                    * be mistaken for a match. */}
+                  <td className={`${tdClass} font-mono text-xs text-on-surface-variant whitespace-nowrap`}>
+                    {transaction.customer_phone ?? "—"}
+                  </td>
                   <td className={`${tdClass} text-on-surface-variant whitespace-nowrap`}>
                     {money(transaction.balance_before, transaction.currency)}
                   </td>

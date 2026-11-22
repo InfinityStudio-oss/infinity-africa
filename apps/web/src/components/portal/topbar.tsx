@@ -77,10 +77,12 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface placeholder-outline transition-all"
             // Names only what it actually searches. It previously
             // promised invoices and payment links too, and searched
-            // nothing at all — the input had no handler.
-            placeholder="Search transactions by reference..."
+            // nothing at all — the input had no handler. It now takes a
+            // customer phone number as well, so it says so: a promise
+            // this box does not keep is the whole reason for this note.
+            placeholder="Search by customer phone or reference..."
             type="search"
-            aria-label="Search transactions by reference"
+            aria-label="Search transactions by customer phone or reference"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />

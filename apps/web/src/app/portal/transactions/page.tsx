@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
@@ -79,9 +79,21 @@ export default function TransactionsPage() {
   // rather than filtering rows this page already holds — the endpoint is
   // paginated, so that would miss anything past the first page.
   const search = useSearchParams().get("search") ?? "";
+  const router = useRouter();
+  // The URL stays the single source of truth, so this box and the
+  // topbar box cannot disagree about what is being searched.
+  const [searchDraft, setSearchDraft] = useState(search);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listTransactions(search).then(setTransactions);
+    setSearchDraft(search);
+  }, [search]);
+
+  useEffect(() => {
+    setLoading(true);
+    listTransactions(search)
+      .then(setTransactions)
+      .finally(() => setLoading(false));
     listMyRiskAlerts().then((alerts) => {
       setFlaggedTransactionIds(
         new Set(alerts.filter((a) => a.transaction_id && OPEN_ALERT_STATUSES.has(a.status)).map((a) => a.transaction_id as string)),
@@ -135,6 +147,43 @@ export default function TransactionsPage() {
       )}
 
       <Card>
+        <form
+          role="search"
+          className="mb-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const term = searchDraft.trim();
+            // Pushed to the URL rather than held here, so a found
+            // payment can be linked to or reloaded, and so the topbar
+            // box shows the same thing.
+            router.push(term ? `/portal/transactions?search=${encodeURIComponent(term)}` : "/portal/transactions");
+          }}
+        >
+          <label className="block text-sm font-medium text-on-surface-variant mb-1.5" htmlFor="transaction-search">
+            Find a payment
+          </label>
+          <div className="relative">
+            <Icon
+              name="search"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none"
+            />
+            <input
+              id="transaction-search"
+              className="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface placeholder-outline"
+              type="search"
+              placeholder="Customer phone, or the last 6 digits — or a reference"
+              aria-label="Search transactions by customer phone or reference"
+              value={searchDraft}
+              onChange={(event) => {
+                setSearchDraft(event.target.value);
+                // Emptying the box restores the full ledger without
+                // needing Enter; anything else waits, because a phone
+                // search per keystroke is a dozen needless lookups.
+                if (event.target.value.trim() === "" && search !== "") router.push("/portal/transactions");
+              }}
+            />
+          </div>
+        </form>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Type</label>
@@ -167,7 +216,9 @@ export default function TransactionsPage() {
 
       <Card padded={false}>
         <div className="p-5 pb-3">
-          <h3 className="text-2xl font-semibold text-on-background">All Transactions</h3>
+          <h3 className="text-2xl font-semibold text-on-background">
+            {search ? "Search Results" : "All Transactions"}
+          </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[1590px]">
@@ -189,6 +240,21 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody className="text-sm">
+              {/* No rows is the answer to "did my customer pay?", so it
+                * has to say which answer it is. A silent gap reads as a
+                * broken page, and a merchant who thinks the page is
+                * broken has learned nothing about their money. */}
+              {transactions.length === 0 && (
+                <tr className="border-t border-surface-container-highest">
+                  <td className={`${tdClass} text-center text-on-surface-variant`} colSpan={13}>
+                    {loading
+                      ? "Loading…"
+                      : search
+                        ? `Nothing found for “${search}”. Check the number, or try just the last 6 digits.`
+                        : "No transactions yet."}
+                  </td>
+                </tr>
+              )}
               {transactions.map((transaction) => {
                 const typeBadge = transactionTypeBadge(transaction.type);
                 const statusBadge = transactionStatusBadge(transaction.status);

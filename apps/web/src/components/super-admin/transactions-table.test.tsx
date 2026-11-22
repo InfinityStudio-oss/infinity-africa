@@ -15,6 +15,7 @@ function row(overrides: Partial<AdminTransactionRow> = {}): AdminTransactionRow 
     reference: "TXN-1",
     provider_reference: "SELCOM-REF-1",
     method: "USSD_PUSH",
+    customer_phone: "255762474101",
     gross_amount: "10000.00",
     fee_amount: "200.00",
     net_amount: "9800.00",

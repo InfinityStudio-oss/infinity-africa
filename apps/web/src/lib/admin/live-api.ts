@@ -975,6 +975,7 @@ export async function listAdminTransactions(filters?: {
   status?: string;
   providerReference?: string;
   transactionId?: string;
+  customerPhone?: string;
   dateFrom?: string;
   dateTo?: string;
 }): Promise<AdminTransactionRow[]> {
@@ -984,6 +985,7 @@ export async function listAdminTransactions(filters?: {
   if (filters?.status) params.set("status", filters.status);
   if (filters?.providerReference) params.set("provider_reference", filters.providerReference);
   if (filters?.transactionId) params.set("transaction_id", filters.transactionId);
+  if (filters?.customerPhone) params.set("customer_phone", filters.customerPhone);
   if (filters?.dateFrom) params.set("date_from", filters.dateFrom);
   if (filters?.dateTo) params.set("date_to", filters.dateTo);
   return apiList<AdminTransactionRow>(`/v1/admin/transactions?${params.toString()}`);

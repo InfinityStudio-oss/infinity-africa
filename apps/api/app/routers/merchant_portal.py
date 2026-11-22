@@ -139,6 +139,7 @@ from app.services.checkout_reconciliation import refresh_checkout_collection_sta
 from app.services.collections import initiate_collection, initiate_dynamic_qr_collection
 from app.services.crud import (
     execute_maybe_single,
+    fetch_in_chunks,
     get_by_id,
     get_for_merchant,
     insert_row,
@@ -187,6 +188,11 @@ from app.services.payouts import (
     PayoutSettings,
     assert_payout_allowed,
     load_payout_settings,
+)
+from app.services.phone_search import (
+    canonical_or_suffix,
+    collection_ids_for_phone,
+    looks_like_phone,
 )
 from app.services.referrals import issue_referral_code, merchant_referral_summary
 from app.services.report_rendering import render_report
@@ -721,9 +727,49 @@ _METHOD_PATHS: dict[CollectionMethod, str] = {
 def list_my_collections(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    search: Annotated[str | None, Query(max_length=100)] = None,
 ):
+    """`search` is the customer's phone when it is digits - 0762474101,
+    255762474101, +255 762 474 101, or just the last six - and the
+    merchant reference otherwise.
+
+    The phone case is why this exists: a customer says they paid, and
+    their number is the only thing to hand. Numbers are stored
+    canonically as 255… and typed however they were read out, so the
+    term is normalised before matching rather than compared as text.
+    """
     client = get_supabase_admin()
-    rows, total = list_for_merchant(client, "collections", merchant_id=membership.merchant_id, pagination=pagination)
+    term = (search or "").strip()
+
+    search_pair = None
+    phone_pattern = None
+    if term:
+        if looks_like_phone(term):
+            exact, suffix = canonical_or_suffix(term)
+            # Matched here rather than through collection_ids_for_phone:
+            # this IS the collections table, so a second round trip to
+            # find its own ids would be wasted - and filtering in the
+            # database keeps paging honest for a number with more
+            # collections than that helper's cap.
+            #
+            # Anchored, not a substring. A whole number is the entire
+            # value; a tail must match only at the END, because
+            # `%878545%` also matches 255878545XXX - a different number
+            # that merely contains those digits. Super Admin anchors it
+            # the same way, so one typed number means one thing on both
+            # screens.
+            phone_pattern = ("customer_phone", f"%{exact or suffix or term}")
+        else:
+            search_pair = ("merchant_reference", term)
+
+    rows, total = list_for_merchant(
+        client,
+        "collections",
+        merchant_id=membership.merchant_id,
+        pagination=pagination,
+        search=search_pair,
+        search_pattern=phone_pattern,
+    )
     data = [CollectionResponse(**row) for row in rows]
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
 
@@ -1483,25 +1529,77 @@ async def resend_my_withdrawal_otp(
 # --- Transactions ---------------------------------------------------------
 
 
+def _transaction_ids_for_collections(
+    client, merchant_id: uuid.UUID, collection_ids: list[str]
+) -> list[str]:
+    """Transaction ids for a set of collections, scoped to one merchant.
+
+    A separate hop because transactions carry no phone of their own -
+    the number lives on the collection - and because `collection_id` is
+    not something list_for_merchant can filter on without this.
+
+    Scoped by merchant_id as well as by collection, belt and braces: the
+    collection ids were already fetched for this merchant, and a filter
+    that depends on an earlier query having been scoped correctly is one
+    refactor away from leaking another merchant's payments.
+    """
+    if not collection_ids:
+        return []
+    rows = fetch_in_chunks(
+        lambda chunk: client.table("transactions")
+        .select("id")
+        .eq("merchant_id", str(merchant_id))
+        .in_("collection_id", chunk),
+        collection_ids,
+    )
+    return [row["id"] for row in rows]
+
+
 @router.get("/transactions", response_model=APIResponse[list[TransactionResponse]])
 def list_my_transactions(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
     search: Annotated[str | None, Query(max_length=100)] = None,
 ):
-    """`search` matches the transaction reference, case-insensitively, as
-    a substring — the portal's search box. Filtered server-side on
-    purpose: this endpoint is paginated, so filtering the page the client
-    already holds would report "not found" for a transaction that exists
-    on page two."""
+    """One box, two kinds of answer.
+
+    A term that is digits - 0762474101, 255762474101, +255 762 474 101,
+    or just the last six - is treated as the CUSTOMER'S PHONE and
+    matched through the collection each transaction belongs to.
+    Anything else matches the transaction reference as a substring.
+
+    The phone case is the one support actually needs: somebody says
+    they paid and the only thing to hand is their number. Matching the
+    typed text directly would find nothing, because numbers are stored
+    canonically as 255… and typed however they were read out.
+
+    Filtered server-side on purpose: this endpoint is paginated, so
+    filtering the page the client already holds would report "not
+    found" for a transaction that exists on page two."""
     client = get_supabase_admin()
     term = (search or "").strip()
+
+    search_pair = None
+    id_in = None
+    if term:
+        if looks_like_phone(term):
+            collection_ids = collection_ids_for_phone(
+                client, term=term, merchant_id=membership.merchant_id
+            )
+            # [] is a real answer - this number paid for nothing here -
+            # and list_for_merchant turns it into zero rows rather than
+            # dropping the filter.
+            id_in = _transaction_ids_for_collections(client, membership.merchant_id, collection_ids)
+        else:
+            search_pair = ("reference", term)
+
     rows, total = list_for_merchant(
         client,
         "transactions",
         merchant_id=membership.merchant_id,
         pagination=pagination,
-        search=("reference", term) if term else None,
+        search=search_pair,
+        id_in=id_in,
     )
     # One batched lookup for the whole page, not one per row.
     phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})

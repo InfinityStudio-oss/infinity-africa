@@ -86,6 +86,7 @@ from app.services.crud import (
     get_by_id,
     update_row,
 )
+from app.services.customer_lookup import customer_phones_for_collections
 from app.services.duplicate_signup import mask_email
 from app.services.email import batch_latest_email_deliveries
 from app.services.ledger import get_wallet_balance
@@ -98,6 +99,7 @@ from app.services.merchant_notifications import (
 )
 from app.services.pay_by_link import get_own_pay_link
 from app.services.payment_links import build_public_url
+from app.services.phone_search import canonical_or_suffix, collection_ids_for_phone
 from app.services.webhook_status import admin_batch_collection_webhook_status
 from app.services.webhooks import last_webhook_delivery
 
@@ -971,7 +973,28 @@ def list_admin_collections(
     if date_to is not None:
         query = query.lte("created_at", date_to)
     if customer_phone is not None:
-        query = query.eq("customer_phone", customer_phone)
+        # Normalised, not compared as text. Numbers are stored
+        # canonically as 255… and typed however they were read out, so
+        # an exact match on "0762474101" found nothing and told the
+        # operator the payment did not exist - a confident wrong answer
+        # about somebody's money.
+        exact, suffix = canonical_or_suffix(customer_phone)
+        if exact:
+            query = query.eq("customer_phone", exact)
+        elif suffix:
+            query = query.ilike("customer_phone", f"%{suffix}")
+        else:
+            # Too short to mean anything. Match nothing rather than
+            # silently dropping the filter and showing every payment.
+            #
+            # A hyphen, not the NUL sentinel this first used. The NUL
+            # was checked against production and does work - PostgREST
+            # answers 200 with [] - so this is not a bug fix. It is a
+            # readability fix: a NUL byte smuggled through a URL is an
+            # odd thing to find in a query, and it reads like a mistake.
+            # A phone is digits, so "-" can never be one, and it says
+            # plainly what it is for.
+            query = query.eq("customer_phone", "-")
     if merchant_reference is not None:
         query = query.eq("merchant_reference", merchant_reference)
     if api_key_id is not None:
@@ -1185,11 +1208,26 @@ def list_admin_transactions(
     status: Annotated[str | None, Query()] = None,
     provider_reference: Annotated[str | None, Query()] = None,
     transaction_id: Annotated[uuid.UUID | None, Query(description="Exact transactions.id")] = None,
+    customer_phone: Annotated[
+        str | None,
+        Query(description="Customer phone in any format: 0762474101, 255762474101, +255 762 474 101, or the last 6 digits"),
+    ] = None,
     date_from: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
     date_to: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
 ):
     client = get_supabase_admin()
     query = client.table("transactions").select("*", count=LIST_COUNT)
+    if customer_phone is not None:
+        # Transactions carry no phone of their own - the number is on
+        # the collection - so this resolves the collections that number
+        # paid for and restricts to their transactions. An unmatched
+        # number must filter to NOTHING, never to "no filter": showing
+        # every transaction on the platform would let an operator
+        # conclude the wrong one was the customer's.
+        collection_ids = collection_ids_for_phone(client, term=customer_phone)
+        query = query.in_(
+            "collection_id", collection_ids or ["00000000-0000-0000-0000-000000000000"]
+        )
     if merchant_id is not None:
         query = query.eq("merchant_id", str(merchant_id))
     if merchant_code is not None:
@@ -1215,6 +1253,8 @@ def list_admin_transactions(
     rows = result.data or []
     merchant_names = batch_merchant_names(client, {r["merchant_id"] for r in rows})
     merchant_codes = batch_merchant_codes(client, {r["merchant_id"] for r in rows})
+    # One batched lookup for the whole page, not one per row.
+    phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})
 
     data = [
         AdminTransactionResponse(
@@ -1234,6 +1274,7 @@ def list_admin_transactions(
             balance_before=row.get("balance_before"),
             balance_after=row.get("balance_after"),
             direction=row.get("direction"),
+            customer_phone=phones.get(str(row.get("collection_id"))),
             created_at=row["created_at"],
         )
         for row in rows
