@@ -20,6 +20,7 @@ import {
   retryWithdrawalPayout,
   correctMerchantContactEmail,
   createAdminPayoutAccess,
+  releaseAdminPayout,
   setAdminPayoutFee,
   setAdminPayoutLive,
   setAdminPayoutPause,
@@ -823,4 +824,18 @@ export async function updatePayoutTariffAction(
 
 export async function createPayoutAccessAction(merchantId: string): Promise<PayoutActionState> {
   return runPayoutAction(() => createAdminPayoutAccess(merchantId));
+}
+
+/** Hands a stuck payout's reserve back to the merchant.
+ *
+ * `acknowledge` is sent from here because the acknowledgement the
+ * operator actually gives is the confirmation in the UI; the flag is
+ * what stops the request being forgeable. The backend refuses outright
+ * unless the payout is parked AND the provider never acknowledged it,
+ * so a wrong click cannot release money that may already have gone. */
+export async function releasePayoutAction(
+  payoutId: string,
+  reason: string,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() => releaseAdminPayout(payoutId, { reason, acknowledge: true }));
 }

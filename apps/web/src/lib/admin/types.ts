@@ -1007,3 +1007,30 @@ export interface AdminPayoutTariff {
   version: number;
   updated_at: string | null;
 }
+
+export interface AdminPayoutRow {
+  id: string;
+  merchant_id: string;
+  business_name: string | null;
+  merchant_code: string | null;
+  environment: string;
+  status: string;
+  amount: string;
+  fee_amount: string;
+  total_debit: string;
+  currency: string;
+  failure_code: string | null;
+  failure_reason: string | null;
+  /** The provider took it, so it may have been paid. Releasing is refused. */
+  provider_acknowledged: boolean;
+  dispatch_attempts: number;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface AdminProviderHealth {
+  environment: string;
+  reachable: boolean;
+  detail: string;
+  checked_at: string;
+}

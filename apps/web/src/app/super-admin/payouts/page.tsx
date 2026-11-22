@@ -2,7 +2,14 @@ import { Card } from "@/components/portal/card";
 import { PageHeader } from "@/components/portal/page-header";
 import { PayoutAccessTable } from "@/components/super-admin/payout-access-table";
 import { PayoutTariffCard } from "@/components/super-admin/payout-tariff-card";
-import { getAdminPayoutTariff, listAdminPayoutAccess } from "@/lib/admin/live-api";
+import { ProviderHealthCard } from "@/components/super-admin/provider-health-card";
+import { StuckPayoutsTable } from "@/components/super-admin/stuck-payouts-table";
+import {
+  getAdminPayoutTariff,
+  getAdminProviderHealth,
+  listAdminPayoutAccess,
+  listAdminPayouts,
+} from "@/lib/admin/live-api";
 
 export const metadata = {
   title: "Payouts | InfinityPay Super Admin",
@@ -15,9 +22,14 @@ export default async function SuperAdminPayoutsPage(props: PageProps<"/super-adm
   // Two independent reads. The tariff is null when its migration has
   // not been applied, which the card says in words - a missing table
   // must not render as "0%" on the screen that sets the price.
-  const [{ rows }, tariff] = await Promise.all([
+  const [{ rows }, tariff, stuck, sandboxHealth, liveHealth] = await Promise.all([
     listAdminPayoutAccess({ page }),
     getAdminPayoutTariff(),
+    // Defaults to needs_reconciliation: money held with no answer from
+    // the provider, and the only status an operator must act on.
+    listAdminPayouts(),
+    getAdminProviderHealth("sandbox"),
+    getAdminProviderHealth("live"),
   ]);
 
   return (
@@ -36,9 +48,30 @@ export default async function SuperAdminPayoutsPage(props: PageProps<"/super-adm
         </p>
       </Card>
 
+      <ProviderHealthCard
+        health={[
+          { environment: "sandbox", result: sandboxHealth },
+          { environment: "live", result: liveHealth },
+        ]}
+      />
+
       <PayoutTariffCard tariff={tariff} />
 
-      <PayoutAccessTable rows={rows} />
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-on-background">Needs a decision</h2>
+          <p className="text-sm text-on-surface-variant max-w-2xl">
+            Payouts parked in reconciliation. The money is held and the provider has not told us
+            what happened — releasing it is a judgement that it was never paid.
+          </p>
+        </div>
+        <StuckPayoutsTable rows={stuck.rows} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-on-background">Access</h2>
+        <PayoutAccessTable rows={rows} />
+      </section>
     </div>
   );
 }

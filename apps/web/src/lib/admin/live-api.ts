@@ -23,6 +23,8 @@ import type {
   AdminNotificationSettingsRow,
   AdminNotificationSettingsListRow,
   AdminPayoutAccessRow,
+  AdminPayoutRow,
+  AdminProviderHealth,
   AdminPayoutTariff,
   AdminOverview,
   AdminPayByLinkListRow,
@@ -1164,4 +1166,29 @@ export async function setAdminPayoutFee(
 
 export async function createAdminPayoutAccess(merchantId: string): Promise<AdminPayoutAccessRow> {
   return apiWrite<AdminPayoutAccessRow>(`/v1/admin/payout-access/${merchantId}`, "POST", {});
+}
+
+/** Defaults to payouts parked in reconciliation — the only status that
+ * needs a human. Those are money held with no answer from the provider. */
+export async function listAdminPayouts(options?: {
+  status?: string;
+  environment?: string;
+}): Promise<{ rows: AdminPayoutRow[]; totalPages: number }> {
+  const query = new URLSearchParams();
+  if (options?.status) query.set("status_filter", options.status);
+  if (options?.environment) query.set("environment", options.environment);
+  return apiPage<AdminPayoutRow>(`/v1/admin/payouts?${query.toString()}`);
+}
+
+/** Null on a network/auth failure — distinct from a reachable:false
+ * answer, which is the provider genuinely being unreachable. */
+export async function getAdminProviderHealth(environment: string): Promise<AdminProviderHealth | null> {
+  return apiGet<AdminProviderHealth>(`/v1/admin/payouts/provider-health?environment=${environment}`);
+}
+
+export async function releaseAdminPayout(
+  payoutId: string,
+  input: { reason: string; acknowledge: boolean },
+): Promise<unknown> {
+  return apiWrite(`/v1/admin/payouts/${payoutId}/release`, "POST", input);
 }

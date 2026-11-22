@@ -40,12 +40,14 @@ incident, and a flag with no history cannot answer it.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
 from app.auth import require_super_admin
-from app.core.errors import ConflictError, NotFoundError
+from app.config import get_settings
+from app.core.errors import ConflictError, NotFoundError, ValidationAPIError
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.rate_limit import rate_limit
 from app.core.request_ip import client_ip
@@ -54,6 +56,7 @@ from app.database.session import get_supabase_admin
 from app.schemas.auth import AuthenticatedUser
 from app.schemas.common import APIResponse
 from app.schemas.payout_access import (
+    AdminPayoutRow,
     MerchantPayoutAccessResponse,
     PayoutAccessUpdate,
     PayoutFeeUpdate,
@@ -62,11 +65,13 @@ from app.schemas.payout_access import (
     PayoutReleaseRequest,
     PlatformPayoutTariffResponse,
     PlatformPayoutTariffUpdate,
+    ProviderHealthResponse,
 )
 from app.services.audit import write_audit_log
 from app.services.crud import execute_maybe_single, get_by_id
 from app.services.ledger import get_payout_wallet_balances
 from app.services.payout_dispatch import release_parked_payout
+from app.services.selcom_business.client import get_selcom_business_client
 
 logger = logging.getLogger("infinity.admin.payout_access")
 
@@ -596,4 +601,129 @@ def release_payout_reserve(
             "released": str(row["total_debit"]),
             "currency": row["currency"],
         }
+    )
+
+
+@payouts_router.get("", response_model=APIResponse[list[AdminPayoutRow]])
+def list_payouts_for_admin(
+    pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    status_filter: str | None = None,
+    environment: str | None = None,
+):
+    """Payouts across every merchant, newest first.
+
+    Defaults to the ones that need a human: `needs_reconciliation` is
+    money held with no answer from the provider, and it is the only
+    status an operator has to do anything about. Pass status=all for
+    everything.
+    """
+    client = get_supabase_admin()
+    query = client.table("payouts").select("*", count="exact")
+
+    if status_filter is None:
+        query = query.eq("status", "needs_reconciliation")
+    elif status_filter != "all":
+        query = query.eq("status", status_filter)
+    if environment:
+        query = query.eq("environment", environment)
+
+    result = (
+        query.order("created_at", desc=True)
+        .range(pagination.offset, pagination.offset + pagination.page_size - 1)
+        .execute()
+    )
+    rows = result.data or []
+
+    # One lookup per merchant, not one per payout: a busy day's list is
+    # mostly the same handful of merchants.
+    merchants: dict[str, dict] = {}
+    for row in rows:
+        mid = row["merchant_id"]
+        if mid not in merchants:
+            merchants[mid] = get_by_id(client, "merchants", uuid.UUID(mid)) or {}
+
+    data = [
+        AdminPayoutRow(
+            id=row["id"],
+            merchant_id=row["merchant_id"],
+            business_name=merchants[row["merchant_id"]].get("business_name"),
+            merchant_code=merchants[row["merchant_id"]].get("merchant_code"),
+            environment=row["environment"],
+            status=row["status"],
+            amount=row["amount"],
+            fee_amount=row["fee_amount"],
+            total_debit=row["total_debit"],
+            currency=row["currency"],
+            failure_code=row.get("failure_code"),
+            failure_reason=row.get("failure_reason"),
+            provider_acknowledged=bool(row.get("provider_transid") or row.get("provider_raw_response")),
+            dispatch_attempts=int(row.get("dispatch_attempts") or 0),
+            created_at=row["created_at"],
+            completed_at=row.get("completed_at"),
+        )
+        for row in rows
+    ]
+    return APIResponse(data=data, meta=build_page_meta(pagination, getattr(result, "count", None) or 0))
+
+
+@payouts_router.get("/provider-health", response_model=APIResponse[ProviderHealthResponse])
+async def check_provider_health(
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_health", limit=10, window_seconds=60))
+    ],
+    environment: str = "sandbox",
+):
+    """Can we actually reach the payout provider for this environment?
+
+    A real signed call - `balance` - not a ping. Reaching the host
+    proves nothing: the Selcom Business sandbox base URL answers, and
+    answers 404, which is exactly how the first sandbox payout failed
+    while looking like a provider timeout. Only a genuine request
+    exercises the URL, the credentials and the signing together.
+
+    Read-only: balance moves no money and creates nothing.
+    """
+    if environment not in ("sandbox", "live"):
+        raise ValidationAPIError("environment must be 'sandbox' or 'live'.")
+
+    settings = get_settings()
+    account = settings.selcom_business_account_number
+    checked_at = datetime.now(timezone.utc)
+
+    if not account:
+        return APIResponse(
+            data=ProviderHealthResponse(
+                environment=environment,
+                reachable=False,
+                detail="No SELCOM_BUSINESS_ACCOUNT_NUMBER is configured, so the provider cannot be checked.",
+                checked_at=checked_at,
+            )
+        )
+
+    try:
+        provider = get_selcom_business_client(environment)
+        await provider.balance(account_number=account)
+    except Exception as exc:  # noqa: BLE001 - every failure is the answer here
+        # The exception type and message, not a generic "unavailable":
+        # a 404 from a wrong base URL and a signature rejection are
+        # different problems with different fixes, and the operator
+        # needs to be able to tell them apart.
+        return APIResponse(
+            data=ProviderHealthResponse(
+                environment=environment,
+                reachable=False,
+                detail=f"{type(exc).__name__}: {str(exc)[:200]}",
+                checked_at=checked_at,
+            )
+        )
+
+    return APIResponse(
+        data=ProviderHealthResponse(
+            environment=environment,
+            reachable=True,
+            detail="A signed balance request succeeded.",
+            checked_at=checked_at,
+        )
     )

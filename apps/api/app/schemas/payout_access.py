@@ -190,3 +190,44 @@ class PayoutReleaseRequest(BaseModel):
                 "Releasing a reserve needs acknowledge=true. If the provider did pay, this "
                 "returns money that already left and the platform covers the difference."
             )
+
+
+class AdminPayoutRow(BaseModel):
+    """One payout, as Super Admin sees it — with the merchant named,
+    which the partner-facing shape has no reason to carry."""
+
+    id: uuid.UUID
+    merchant_id: uuid.UUID
+    business_name: str | None = None
+    merchant_code: str | None = None
+    environment: str
+    status: str
+    amount: Decimal
+    fee_amount: Decimal
+    total_debit: Decimal
+    currency: str
+    failure_code: str | None = None
+    failure_reason: str | None = None
+    # Why the release button is or is not offered. A payout the provider
+    # acknowledged must be settled by asking them, never by assuming,
+    # so the screen has to know the difference.
+    provider_acknowledged: bool = False
+    dispatch_attempts: int = 0
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class ProviderHealthResponse(BaseModel):
+    """Whether the payout provider is actually reachable, per environment.
+
+    Worth its own endpoint because the first sandbox payout failed at
+    exactly this point and the only symptom was a payout silently
+    parking: the Selcom Business sandbox base URL answers 404, and
+    nothing in the product said so. A deployment that cannot reach its
+    provider should be able to say that out loud.
+    """
+
+    environment: str
+    reachable: bool
+    detail: str
+    checked_at: datetime
