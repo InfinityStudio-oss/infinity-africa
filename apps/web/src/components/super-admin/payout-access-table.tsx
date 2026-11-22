@@ -140,12 +140,24 @@ function PayoutRow({ row }: { row: AdminPayoutAccessRow }) {
           aria-label={`Sandbox payouts for ${name}`}
           disabled={pending}
           onClick={() => run(() => setPayoutSandboxAction(row.merchant_id, !row.sandbox_enabled, row.version))}
-          className={`rounded-full px-2.5 py-1 text-xs font-semibold cursor-pointer disabled:cursor-wait ${
+          title={
             row.sandbox_enabled
-              ? "bg-primary-container/10 text-primary hover:bg-primary-container/25"
-              : "bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-high"
+              ? "Click to switch sandbox payouts off"
+              : "Click to switch sandbox payouts on"
+          }
+          // A border and a dot, because the off state used to be a grey
+          // pill that read as a status label - the operator could not
+          // tell there was anything to click, and asked where the
+          // enable button was.
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer transition-colors disabled:cursor-wait ${
+            row.sandbox_enabled
+              ? "border-primary/40 bg-primary-container/10 text-primary hover:bg-primary-container/25"
+              : "border-outline-variant bg-surface text-on-surface-variant hover:bg-surface-container-low hover:border-primary/40"
           }`}
         >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${row.sandbox_enabled ? "bg-current" : "bg-outline"}`}
+          />
           {row.sandbox_enabled ? "On" : "Off"}
         </button>
       </td>
@@ -192,12 +204,20 @@ function PayoutRow({ row }: { row: AdminPayoutAccessRow }) {
                 ? run(() => setPayoutLiveAction(row.merchant_id, false, row.version))
                 : setConfirmingLive(true)
             }
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold cursor-pointer disabled:cursor-wait ${
+            title={
               row.live_enabled
-                ? "bg-red-100 text-red-800 hover:bg-red-200"
-                : "bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-high"
+                ? "Click to withdraw live payout access"
+                : "Click to grant live payout access — real money"
+            }
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer transition-colors disabled:cursor-wait ${
+              row.live_enabled
+                ? "border-red-300 bg-red-100 text-red-800 hover:bg-red-200"
+                : "border-outline-variant bg-surface text-on-surface-variant hover:bg-surface-container-low hover:border-red-300"
             }`}
           >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${row.live_enabled ? "bg-current" : "bg-outline"}`}
+            />
             {row.live_enabled ? "LIVE" : "Off"}
           </button>
         )}

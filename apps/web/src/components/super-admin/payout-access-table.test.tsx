@@ -40,7 +40,22 @@ function row(overrides: Partial<AdminPayoutAccessRow> = {}): AdminPayoutAccessRo
 }
 
 describe("Super Admin payout access", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // clearAllMocks drops the implementation too, so an unstubbed call
+    // resolves to undefined and the component throws on result.error.
+    // That surfaces as an unhandled rejection which can mask a real
+    // failure - vitest reported exactly that on this file.
+    const actions = await import("@/lib/admin/live-actions");
+    for (const fn of [
+      actions.setPayoutSandboxAction,
+      actions.setPayoutLiveAction,
+      actions.setPayoutPauseAction,
+      actions.setPayoutFeeAction,
+    ]) {
+      vi.mocked(fn).mockResolvedValue({ error: null });
+    }
+  });
 
   it("switches the sandbox in one click — it only spends play money", async () => {
     const { setPayoutSandboxAction } = await import("@/lib/admin/live-actions");
