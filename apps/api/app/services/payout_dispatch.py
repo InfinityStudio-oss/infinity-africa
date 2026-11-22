@@ -189,7 +189,23 @@ async def dispatch_payout(client: Client, payout: dict) -> str:
             recipient_account=beneficiary["destination_identifier"],
             recipient_name=beneficiary["name"],
             amount=str(claimed["amount"]),
-            purpose="payout",
+            # "FT" (Funds transfer), NOT "payout".
+            #
+            # Selcom's live API validates purpose against a fixed
+            # enumerated list and answers error_code 651, "The selected
+            # purpose is invalid", for anything else. Their sandbox
+            # accepts arbitrary free text, so nothing catches this until
+            # a real call.
+            #
+            # This exact mistake has now been made twice. Withdrawals
+            # shipped with purpose="withdrawal" and failed on their first
+            # production call; the comment recording that sits in
+            # disbursements.py, and this module was written with
+            # purpose="payout" anyway. The first live payout - TZS 1,000
+            # of real money - failed on it, and so did every sandbox
+            # attempt before it, which is why the sandbox endpoint looked
+            # like the culprit.
+            purpose="FT",
             remarks=f"InfinityPay payout {claimed['provider_reference']}",
         )
     except Exception as exc:  # noqa: BLE001 - any provider error is "unknown", never "failed"
