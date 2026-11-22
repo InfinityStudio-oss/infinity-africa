@@ -59,8 +59,14 @@ export default async function SuperAdminPayoutsPage(props: PageProps<"/super-adm
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-base font-semibold text-on-background">Needs a decision</h2>
-          <p className="text-sm text-on-surface-variant max-w-2xl">
+          {/* on-gradient, not on-background. Inside the admin shell
+              --color-on-background resolves to the PANEL ink, so a
+              heading sitting directly on the gradient measured 1.07:1
+              and the body under it 2.64:1 - the section title was
+              invisible and its explanation nearly so. The Card below
+              keeps panel ink because it really is on a panel. */}
+          <h2 className="text-base font-semibold on-gradient">Needs a decision</h2>
+          <p className="text-sm on-gradient-muted max-w-2xl">
             Payouts parked in reconciliation. The money is held and the provider has not told us
             what happened — releasing it is a judgement that it was never paid.
           </p>
@@ -69,7 +75,7 @@ export default async function SuperAdminPayoutsPage(props: PageProps<"/super-adm
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-on-background">Access</h2>
+        <h2 className="text-base font-semibold on-gradient">Access</h2>
         <PayoutAccessTable rows={rows} />
       </section>
     </div>
