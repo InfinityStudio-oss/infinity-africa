@@ -35,8 +35,7 @@ export function PayoutFundingCode({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setError(null);
     setBusy(true);
     try {
@@ -51,7 +50,14 @@ export function PayoutFundingCode({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-lg border border-outline-variant bg-surface-container-low p-4 space-y-3">
+    // A <div>, NOT a <form>. This renders inside the funding form, and
+    // nested forms are invalid HTML: the browser drops the inner one, so
+    // an inner type="submit" button submits the OUTER form instead. That
+    // is not theoretical - it shipped, and every click of "Confirm and
+    // move funds" silently re-ran "request a code". Three codes were
+    // issued, none was ever verified, and the merchant was left staring
+    // at a zero balance.
+    <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4 space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-on-background">Confirm with the code we emailed</h3>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -72,6 +78,15 @@ export function PayoutFundingCode({
           maxLength={6}
           value={code}
           onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+          onKeyDown={(event) => {
+            // Enter used to work for free via form submit. It has to be
+            // explicit now, and it matters: typing a 6-digit code and
+            // pressing Enter is what people do.
+            if (event.key === "Enter" && code.length === 6 && !busy) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
           className="w-40 px-3 py-2 rounded-lg border border-surface-container-highest bg-surface text-sm font-mono tracking-widest"
         />
       </div>
@@ -84,7 +99,8 @@ export function PayoutFundingCode({
 
       <div className="flex items-center gap-3">
         <button
-          type="submit"
+          type="button"
+          onClick={submit}
           disabled={busy || code.length !== 6}
           className="btn-brand px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -98,6 +114,6 @@ export function PayoutFundingCode({
           Cancel
         </button>
       </div>
-    </form>
+    </div>
   );
 }
