@@ -79,4 +79,26 @@ describe("Payouts API documentation", () => {
   it("says a sandbox payout reaches no real recipient", () => {
     expect(pageText()).toContain("no real money moves and no real recipient is paid");
   });
+
+  it("tells Collections integrators there are no payout webhooks", () => {
+    // Collections notify by webhook; payouts do not. Someone who has
+    // integrated Collections will assume they do and wait for a
+    // callback that never arrives.
+    const text = pageText();
+    expect(text).toContain("There are no payout webhooks");
+    expect(text).toContain("has to poll");
+  });
+
+  it("says a payout cannot be cancelled once created", () => {
+    expect(pageText()).toContain("A payout cannot be cancelled once created");
+  });
+
+  it("contains no real account identifiers", () => {
+    // The first draft pasted a live beneficiary id, payout id and
+    // reference straight out of the pilot account into a public page.
+    const text = pageText();
+    for (const leaked of ["05104c2f", "81a04fe6", "3D20F0D3"]) {
+      expect(text).not.toContain(leaked);
+    }
+  });
 });

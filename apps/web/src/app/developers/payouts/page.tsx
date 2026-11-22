@@ -210,7 +210,7 @@ export default function PayoutsApiPage() {
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: payout-2026-11-21-0001" \\
   -d '{
-    "beneficiary_id": "05104c2f-9261-48e5-82a8-f6f37fa825f0",
+    "beneficiary_id": "11111111-2222-3333-4444-555555555555",
     "amount": "1000.00",
     "currency": "TZS"
   }'`}</CodeBlock>
@@ -247,15 +247,15 @@ export default function PayoutsApiPage() {
       <CodeBlock language="json">{`{
   "success": true,
   "data": {
-    "id": "81a04fe6-8c70-4095-81a7-88e85b6fad9b",
+    "id": "99999999-8888-7777-6666-555555555555",
     "status": "processing",
     "amount": "1000.0",
     "fee_amount": "10.0",
     "total_debit": "1010.0",
     "currency": "TZS",
     "environment": "sandbox",
-    "beneficiary_id": "05104c2f-9261-48e5-82a8-f6f37fa825f0",
-    "reference": "PO-3D20F0D34650447AA096",
+    "beneficiary_id": "11111111-2222-3333-4444-555555555555",
+    "reference": "PO-EXAMPLEREFERENCE0001",
     "failure_code": null,
     "failure_reason": null,
     "created_at": "2026-11-21T21:37:00.345948Z",
@@ -274,10 +274,18 @@ export default function PayoutsApiPage() {
       <div className="mt-3">
         <EndpointRow method="GET" path="/v1/payouts/{payout_id}" description="Fetch one payout and its current status." auth="Payout key" />
       </div>
-      <p className="text-on-surface-variant mt-6 mb-6 max-w-2xl">
+      <p className="text-on-surface-variant mt-6 mb-4 max-w-2xl">
         The list is paginated and newest first. Both are scoped to your account and your key&apos;s
         environment.
       </p>
+
+      <Callout tone="warning" title="There are no payout webhooks. Poll.">
+        Collections notify you by webhook; <strong>payouts do not</strong>. Nothing is sent when a
+        payout settles or fails, so your integration has to poll{" "}
+        <Code>GET /v1/payouts/{"{payout_id}"}</Code> until it reaches a terminal status. If you
+        have integrated Collections, this is the assumption most likely to cost you a day — we
+        would rather say so here than have you wait for a callback that is never coming.
+      </Callout>
 
       {/* --- lifecycle ------------------------------------------------- */}
 
@@ -307,12 +315,21 @@ export default function PayoutsApiPage() {
         </table>
       </div>
 
-      <Callout tone="warning" title="needs_reconciliation is not a failure">
-        It means we asked the provider and did not get a usable answer — a timeout, a dropped
-        connection. The money stays reserved and we keep asking, because releasing funds on a slow
-        response is exactly how a payout gets paid twice. Do not retry it and do not refund against
-        it.
+      <Callout tone="warning" title="A payout cannot be cancelled once created">
+        There is no cancel endpoint, and that is deliberate: by the time a payout exists its funds
+        are committed, and the only safe way out is the provider telling us what happened. A payout
+        stuck in <Code>needs_reconciliation</Code> holds its funds until that answer arrives —
+        contact InfinityPay support if one is still held after a few hours.
       </Callout>
+
+      <div className="mt-4">
+        <Callout tone="warning" title="needs_reconciliation is not a failure">
+          It means we asked the provider and did not get a usable answer — a timeout, a dropped
+        connection. The money stays reserved and we keep asking, because releasing funds on a slow
+          response is exactly how a payout gets paid twice. Do not retry it and do not refund
+          against it.
+        </Callout>
+      </div>
 
       <h3 className="text-lg font-semibold text-on-surface mt-8 mb-3">Failure codes</h3>
       <div className="overflow-x-auto mb-8">
