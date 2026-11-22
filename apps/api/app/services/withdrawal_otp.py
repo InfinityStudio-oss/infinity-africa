@@ -42,6 +42,11 @@ logger = logging.getLogger("infinity.withdrawal_otp")
 # guessing run has got.
 _GENERIC_FAILURE = "That code isn't valid. Request a new one and try again."
 
+# What a code authorises. One OTP mechanism, two decisions - a second
+# implementation of a security control is a second one to get wrong.
+WITHDRAWAL = "withdrawal"
+PAYOUT_FUNDING = "payout_funding"
+
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -101,6 +106,7 @@ def create_challenge(
     merchant_id: uuid.UUID,
     requested_by: uuid.UUID,
     payload: dict[str, Any],
+    purpose: str = WITHDRAWAL,
 ) -> tuple[dict, str]:
     """Writes a challenge and returns (row, plaintext_otp).
 
@@ -113,7 +119,7 @@ def create_challenge(
     settings = get_settings()
     now = datetime.now(timezone.utc)
 
-    _supersede_active(client, merchant_id=merchant_id, at=now)
+    _supersede_active(client, merchant_id=merchant_id, at=now, purpose=purpose)
 
     otp = generate_otp()
     row = insert_row(
@@ -122,6 +128,7 @@ def create_challenge(
         {
             "merchant_id": str(merchant_id),
             "requested_by": str(requested_by),
+            "purpose": purpose,
             "withdrawal_payload": payload,
             "payload_hash": canonical_payload_hash(payload),
             "otp_hash": _hash(otp),
@@ -133,13 +140,20 @@ def create_challenge(
     return row, otp
 
 
-def _supersede_active(client: Client, *, merchant_id: uuid.UUID, at: datetime) -> None:
-    """Locks every live challenge for this merchant. Called before issuing a
-    new one so exactly one code is ever valid at a time."""
+def _supersede_active(
+    client: Client, *, merchant_id: uuid.UUID, at: datetime, purpose: str = WITHDRAWAL
+) -> None:
+    """Locks every live challenge for this merchant AND purpose. Called
+    before issuing a new one so exactly one code is ever valid at a time.
+
+    Scoped by purpose deliberately: asking to fund a payout wallet must
+    not silently invalidate a withdrawal code the merchant is halfway
+    through typing. They are separate decisions about separate money."""
     rows = (
         client.table("merchant_withdrawal_otp_challenges")
         .select("id")
         .eq("merchant_id", str(merchant_id))
+        .eq("purpose", purpose)
         .is_("used_at", None)
         .is_("locked_at", None)
         .execute()

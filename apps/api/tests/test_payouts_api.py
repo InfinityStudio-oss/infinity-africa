@@ -18,6 +18,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
+import resend
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
@@ -38,9 +39,30 @@ CUR = "TZS"
 @pytest.fixture(autouse=True)
 def _configure_settings(monkeypatch):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", TEST_JWT_SECRET)
+    # Funding now emails a code, and that send RAISES on failure by
+    # design - the merchant must never be shown a code box for a code
+    # that was never delivered. So these tests need a configured mailer.
+    monkeypatch.setenv("RESEND_API_KEY", "test-resend-key-do-not-use-in-production")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+class _FakeResend:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def send(self, params: dict) -> dict:
+        self.calls.append(params)
+        return {"id": "resend-test-message-id"}
+
+
+@pytest.fixture(autouse=True)
+def fake_resend(monkeypatch):
+    """Nothing in this file may reach a real mail provider."""
+    fake = _FakeResend()
+    monkeypatch.setattr(resend.Emails, "send", fake.send)
+    return fake
 
 
 def _idem() -> str:
@@ -130,6 +152,36 @@ def _ready(fake_client, *, funded="100000.00"):
 
 
 # --- creating a payout -------------------------------------------------------
+
+
+def _fund_with_otp(fake_client, user_id, amount, *, idem=None):
+    """Start funding, read the emailed code out of the challenge row, and
+    verify it. Mirrors what the merchant does.
+
+    The code is never stored in plaintext, so the test cannot read it
+    back - it submits a known code by writing that code's hash onto the
+    challenge, which is the same thing verify_otp will compare against.
+    """
+    import hashlib
+
+    start = client.post(
+        "/v1/merchant/payout-wallet/fund",
+        headers=auth_headers(user_id),
+        json={"amount": amount},
+    )
+    assert start.status_code == 202, start.text
+    challenge_id = start.json()["data"]["challenge_id"]
+
+    code = "123456"
+    fake_client.table("merchant_withdrawal_otp_challenges").update(
+        {"otp_hash": hashlib.sha256(code.encode()).hexdigest()}
+    ).eq("id", challenge_id).execute()
+
+    return client.post(
+        f"/v1/merchant/payout-wallet/fund/{challenge_id}/verify",
+        headers={**auth_headers(user_id), "Idempotency-Key": idem or _idem()},
+        json={"code": code},
+    )
 
 
 def test_a_payout_key_can_create_a_payout(fake_client):
@@ -366,22 +418,15 @@ def test_listing_is_scoped_to_the_callers_environment(fake_client):
 # --- the dashboard-only funding endpoint -------------------------------------
 
 
-def test_funding_requires_step_up_mfa(fake_client):
+def test_funding_emails_a_code_and_moves_nothing_yet(fake_client):
     """This is the act that sets the ceiling on everything an API key can
-    spend, so a live session alone is not enough."""
-    _merchant_id, user_id, _beneficiary_id = _ready(fake_client)
+    spend, so a live session alone is not enough.
 
-    response = client.post(
-        "/v1/merchant/payout-wallet/fund",
-        headers={**auth_headers(user_id), "Idempotency-Key": _idem()},
-        json={"amount": "10000.00"},
-    )
-
-    assert response.status_code == 403, response.text
-    assert "two-factor" in response.json()["error"]["message"].lower()
-
-
-def test_funding_with_mfa_moves_money_out_of_collections(fake_client):
+    The second factor is the emailed OTP, not Supabase step-up MFA: this
+    route used to demand aal2, which no merchant can reach because
+    enrolment exists only for Super Admins. Every merchant was told to
+    complete a challenge that does not exist for them.
+    """
     merchant_id, user_id, _beneficiary_id = _ready(fake_client, funded="0")
     fake_client.seed(
         "ledger_accounts",
@@ -397,9 +442,67 @@ def test_funding_with_mfa_moves_money_out_of_collections(fake_client):
 
     response = client.post(
         "/v1/merchant/payout-wallet/fund",
-        headers={**auth_headers(user_id, aal="aal2"), "Idempotency-Key": _idem()},
-        json={"amount": "30000.00"},
+        headers=auth_headers(user_id),
+        json={"amount": "10000.00"},
     )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["challenge_id"]
+    # Nothing has moved. The code has only been sent.
+    balances = {
+        r["purpose"]: Decimal(str(r["balance"]))
+        for r in fake_client.table("ledger_accounts")._table.rows
+        if r["merchant_id"] == str(merchant_id)
+    }
+    assert balances["merchant_wallet"] == Decimal("80000.00")
+
+
+def test_a_withdrawal_code_cannot_fund_a_payout_wallet(fake_client):
+    """Same table, different decision. A code issued for a withdrawal
+    must not be spendable here."""
+    import hashlib
+    import uuid as _uuid
+
+    merchant_id, user_id, _beneficiary_id = _ready(fake_client, funded="0")
+    code = "123456"
+    challenge = fake_client.seed(
+        "merchant_withdrawal_otp_challenges",
+        {
+            "merchant_id": str(merchant_id),
+            "requested_by": str(user_id),
+            "purpose": "withdrawal",
+            "withdrawal_payload": {"amount": "10000.00", "currency": CUR},
+            "payload_hash": "x",
+            "otp_hash": hashlib.sha256(code.encode()).hexdigest(),
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "max_attempts": 5,
+        },
+    )
+
+    response = client.post(
+        f"/v1/merchant/payout-wallet/fund/{challenge['id']}/verify",
+        headers={**auth_headers(user_id), "Idempotency-Key": str(_uuid.uuid4())},
+        json={"code": code},
+    )
+
+    assert response.status_code == 404, response.text
+
+
+def test_funding_after_the_code_moves_money_out_of_collections(fake_client):
+    merchant_id, user_id, _beneficiary_id = _ready(fake_client, funded="0")
+    fake_client.seed(
+        "ledger_accounts",
+        {
+            "merchant_id": str(merchant_id),
+            "name": "Collections",
+            "account_type": "liability",
+            "purpose": "merchant_wallet",
+            "currency": CUR,
+            "balance": "80000.00",
+        },
+    )
+
+    response = _fund_with_otp(fake_client, user_id, "30000.00")
 
     assert response.status_code == 200, response.text
     body = response.json()["data"]
@@ -430,11 +533,12 @@ def test_funding_more_than_collections_holds_is_refused(fake_client):
         },
     )
 
-    response = client.post(
-        "/v1/merchant/payout-wallet/fund",
-        headers={**auth_headers(user_id, aal="aal2"), "Idempotency-Key": _idem()},
-        json={"amount": "5000.00"},
-    )
+    # Through the OTP, because that is where the money moves now. The
+    # refusal still comes from the ledger at the moment of posting, not
+    # from a friendly pre-check when the code was requested - which is
+    # the point: a concurrent withdrawal between the two cannot slip
+    # through.
+    response = _fund_with_otp(fake_client, user_id, "5000.00")
 
     assert response.status_code >= 400, response.text
     accounts = {
@@ -475,10 +579,11 @@ def test_funding_is_idempotent(fake_client):
         },
     )
     key = _idem()
-    headers = {**auth_headers(user_id, aal="aal2"), "Idempotency-Key": key}
 
-    client.post("/v1/merchant/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
-    client.post("/v1/merchant/payout-wallet/fund", headers=headers, json={"amount": "10000.00"})
+    # Two verifications of two codes, replaying ONE idempotency key: the
+    # shape of a double-submitted form.
+    _fund_with_otp(fake_client, user_id, "10000.00", idem=key)
+    _fund_with_otp(fake_client, user_id, "10000.00", idem=key)
 
     accounts = {
         r["purpose"]: Decimal(str(r["balance"]))

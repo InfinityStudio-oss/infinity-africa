@@ -1055,10 +1055,30 @@ export async function requestPayoutAccess(): Promise<PayoutAccessRequestResult> 
   return apiWrite<PayoutAccessRequestResult>("/v1/merchant/payout-access-request", "POST", {});
 }
 
-export async function fundPayoutWallet(input: FundPayoutWalletInput): Promise<PayoutWallet> {
-  return apiWrite<PayoutWallet>("/v1/merchant/payout-wallet/fund", "POST", input, {
-    idempotent: true,
-  });
+/** Starts funding: emails a 6-digit code and moves NOTHING. The money
+ * only moves in verifyPayoutWalletFunding, from the amount stored on
+ * the challenge.
+ *
+ * Funding used to require Supabase step-up MFA, which no merchant could
+ * ever reach - enrolment exists only for Super Admins - so this was a
+ * dead end for everyone. It now uses the same emailed OTP as a
+ * withdrawal. */
+export async function startPayoutWalletFunding(
+  input: FundPayoutWalletInput,
+): Promise<WithdrawalOtpChallenge> {
+  return apiWrite<WithdrawalOtpChallenge>("/v1/merchant/payout-wallet/fund", "POST", input);
+}
+
+export async function verifyPayoutWalletFunding(
+  challengeId: string,
+  code: string,
+): Promise<PayoutWallet> {
+  return apiWrite<PayoutWallet>(
+    `/v1/merchant/payout-wallet/fund/${challengeId}/verify`,
+    "POST",
+    { code },
+    { idempotent: true },
+  );
 }
 
 

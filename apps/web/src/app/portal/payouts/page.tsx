@@ -10,7 +10,14 @@ import { PageHeader } from "@/components/portal/page-header";
 import { StatusBadge } from "@/components/portal/status-badge";
 import type { BadgeTone } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { fundPayoutWallet, getPayoutWallet, listPayouts } from "@/lib/portal/api";
+import { PayoutFundingCode } from "@/components/merchant/payout-funding-code";
+import type { WithdrawalOtpChallenge } from "@/lib/portal/api";
+import {
+  getPayoutWallet,
+  listPayouts,
+  startPayoutWalletFunding,
+  verifyPayoutWalletFunding,
+} from "@/lib/portal/api";
 import type { Payout, PayoutStatus, PayoutWallet } from "@/lib/portal/types";
 
 /**
@@ -52,6 +59,9 @@ export default function PayoutsPage() {
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
   const [fundSuccess, setFundSuccess] = useState<string | null>(null);
+  // Set once a code has been emailed. Its presence is what shows the
+  // code box; the money has not moved while it is set.
+  const [fundChallenge, setFundChallenge] = useState<WithdrawalOtpChallenge | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,24 +95,35 @@ export default function PayoutsPage() {
     setFundSuccess(null);
     setFunding(true);
     try {
-      const updated = await fundPayoutWallet({
+      // Emails a code and moves nothing. The transfer happens in
+      // confirmFunding, from the amount stored on the challenge - so a
+      // code can never be applied to a different amount than the one
+      // the merchant was emailed about.
+      const challenge = await startPayoutWalletFunding({
         amount: fundAmount,
         currency: wallet?.currency ?? "TZS",
         environment: wallet?.environment ?? "sandbox",
       });
-      setWallet(updated);
-      setFundSuccess(`Moved ${formatCurrency(fundAmount, updated.currency)} into your payout wallet.`);
-      setFundAmount("");
-      setFundOpen(false);
+      setFundChallenge(challenge);
     } catch (error) {
       // The backend's own message, not a generic one: it is the
-      // difference between "complete two-factor authentication",
-      // "payouts are paused" and "your Collections balance cannot cover
+      // difference between "payouts are paused", "this account has no
+      // contact email" and "your Collections balance cannot cover
       // this", and the merchant needs to know which.
       setFundError(error instanceof Error ? error.message : "Funding failed.");
     } finally {
       setFunding(false);
     }
+  }
+
+  async function confirmFunding(code: string) {
+    if (!fundChallenge) return;
+    const updated = await verifyPayoutWalletFunding(fundChallenge.challenge_id, code);
+    setWallet(updated);
+    setFundSuccess(`Moved ${formatCurrency(fundAmount, updated.currency)} into your payout wallet.`);
+    setFundAmount("");
+    setFundOpen(false);
+    setFundChallenge(null);
   }
 
   if (loading) {
@@ -236,7 +257,17 @@ export default function PayoutsPage() {
               />
             </div>
             {fundError && <p className="text-sm text-red-700 font-medium">{fundError}</p>}
-            <div className="flex items-center gap-2">
+            {/* Once a code is out, the amount box and Move funds button
+                are no longer the thing to act on - the code is. */}
+            {fundChallenge && (
+              <PayoutFundingCode
+                challenge={fundChallenge}
+                amountLabel={formatCurrency(fundAmount, currency)}
+                onConfirm={confirmFunding}
+                onCancel={() => setFundChallenge(null)}
+              />
+            )}
+            <div className={`flex items-center gap-2 ${fundChallenge ? "hidden" : ""}`}>
               <button
                 type="submit"
                 disabled={funding || wallet.paused}

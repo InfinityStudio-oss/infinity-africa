@@ -47,7 +47,6 @@ from app.core.cache import cache_get, cache_set, merchant_key
 from app.core.errors import (
     APIError,
     ConflictError,
-    MfaRequiredError,
     NotFoundError,
     ValidationAPIError,
 )
@@ -195,6 +194,7 @@ from app.services.reports import build_report
 from app.services.wallet_ledger_export import build_wallet_ledger_workbook
 from app.services.wallet_push import execute_wallet_push_collection
 from app.services.withdrawal_otp import (
+    PAYOUT_FUNDING,
     create_challenge,
     get_own_challenge,
     mask_destination,
@@ -2915,41 +2915,23 @@ def read_my_payout(
     return APIResponse(data=PayoutResponse.from_row(row))
 
 
-@router.post("/payout-wallet/fund", response_model=APIResponse[MerchantPayoutWalletResponse])
-async def fund_my_payout_wallet(
-    payload: PayoutWalletFundRequest,
-    # Declared first so it answers first. Behind the membership dependency
-    # an API-key caller would be told "Missing bearer token", which sends
-    # a partner looking for a token they are not supposed to have.
-    _no_api_keys: Annotated[None, Depends(reject_api_keys("Funding the payout wallet"))],
-    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-):
-    """Move settled funds from Collections into the Payout Wallet.
+async def _move_into_payout_wallet(
+    client,
+    *,
+    membership: MerchantMembership,
+    amount: Decimal,
+    currency: str,
+    environment: str,
+    settings,
+    idempotency_key: str,
+) -> dict:
+    """The transfer itself, shared by nothing else on purpose.
 
-    This lives on /v1/merchant/* and not beside /v1/payouts, because the
-    prefix is how you know which credential a route takes. A payout key
-    that could top up the pot it draws on would be self-replenishing, and
-    the wallet balance would stop being the ceiling on what a leaked key
-    can cost - which is the entire reason the Disbursement API can run
-    without a person approving each call.
-
-    Step-up MFA on top of the session, because this is the act that sets
-    that ceiling. Everything downstream - the balance check, the rolling
-    limit, the reservation - only constrains money that came through here.
+    Split out of the route so the money moves in exactly one place, from
+    arguments the caller has already verified. The verify route passes
+    the amount stored on the OTP challenge, never anything re-sent at
+    verification time.
     """
-    if user.assurance_level != "aal2":
-        raise MfaRequiredError(
-            "Funding the payout wallet requires two-factor authentication. "
-            "Complete the MFA challenge and try again."
-        )
-
-    client = get_supabase_admin()
-    resolved, settings = _resolve_payout_environment(
-        client, merchant_id=membership.merchant_id, requested=payload.environment
-    )
-    assert_payout_allowed(settings, environment=resolved)
 
     async def _handler() -> tuple[int, dict]:
         transaction = insert_row(
@@ -2962,10 +2944,10 @@ async def fund_my_payout_wallet(
                 # two of one merchant's own accounts.
                 "type": "adjustment",
                 "method": "MOBILE_MONEY",
-                "gross_amount": str(payload.amount),
+                "gross_amount": str(amount),
                 "fee_amount": "0",
-                "net_amount": str(payload.amount),
-                "currency": payload.currency,
+                "net_amount": str(amount),
+                "currency": currency,
                 "status": "successful",
             },
         )
@@ -2973,9 +2955,9 @@ async def fund_my_payout_wallet(
             client,
             transaction_id=uuid.UUID(transaction["id"]),
             merchant_id=membership.merchant_id,
-            amount=payload.amount,
-            currency=payload.currency,
-            environment=resolved,
+            amount=amount,
+            currency=currency,
+            environment=environment,
         )
         write_audit_log(
             client,
@@ -2986,22 +2968,23 @@ async def fund_my_payout_wallet(
             resource_type="transaction",
             resource_id=uuid.UUID(transaction["id"]),
             metadata={
-                "amount": str(payload.amount),
-                "currency": payload.currency,
-                "environment": resolved,
+                "amount": str(amount),
+                "currency": currency,
+                "environment": environment,
+                "second_factor": "email_otp",
             },
         )
         available, reserved = get_payout_wallet_balances(
             client,
             merchant_id=membership.merchant_id,
-            currency=payload.currency,
-            environment=resolved,
+            currency=currency,
+            environment=environment,
         )
         return status.HTTP_200_OK, MerchantPayoutWalletResponse(
             available=available,
             reserved=reserved,
-            currency=payload.currency,
-            environment=resolved,
+            currency=currency,
+            environment=environment,
             paused=settings.paused if settings else True,
             paused_reason=settings.paused_reason if settings else None,
             per_payout_limit_tzs=settings.per_payout_limit_tzs if settings else None,
@@ -3014,11 +2997,165 @@ async def fund_my_payout_wallet(
         merchant_id=membership.merchant_id,
         endpoint="POST /v1/merchant/payout-wallet/fund",
         idempotency_key=idempotency_key,
-        request_payload=payload.model_dump(mode="json"),
+        request_payload={
+            "amount": str(amount),
+            "currency": currency,
+            "environment": environment,
+        },
         handler=_handler,
     )
-    return APIResponse(data=MerchantPayoutWalletResponse(**body))
+    return body
 
+
+@router.post(
+    "/payout-wallet/fund",
+    response_model=APIResponse[WithdrawalOtpChallengeResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_payout_wallet_funding(
+    payload: PayoutWalletFundRequest,
+    # Declared first so it answers first. Behind the membership dependency
+    # an API-key caller would be told "Missing bearer token", which sends
+    # a partner looking for a token they are not supposed to have.
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Funding the payout wallet"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="payout_funding_otp", limit=5, window_seconds=300))
+    ],
+):
+    """Start funding the payout wallet: emails a code, moves nothing.
+
+    This lives on /v1/merchant/* and not beside /v1/payouts, because the
+    prefix is how you know which credential a route takes. A payout key
+    that could top up the pot it draws on would be self-replenishing, and
+    the wallet balance would stop being the ceiling on what a leaked key
+    can cost - which is the entire reason the Disbursement API can run
+    without a person approving each call.
+
+    A second factor, because this is the act that sets that ceiling.
+    Everything downstream - the balance check, the rolling limit, the
+    reservation - only constrains money that came through here.
+
+    That factor is the emailed OTP, the same one withdrawals use, NOT
+    Supabase step-up MFA. This route used to demand assurance_level
+    'aal2' and no merchant could ever reach it: enrolment exists only
+    under /admin-mfa, for Super Admins, and the portal has no enrolment
+    and no challenge of its own. The error told every merchant to
+    complete something that does not exist for them, so nobody could
+    fund a payout wallet at all.
+    """
+    client = get_supabase_admin()
+    resolved, settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=payload.environment
+    )
+    # Refuse before emailing anything. A code for a transfer that would
+    # be rejected anyway is a code the merchant wastes a minute on.
+    assert_payout_allowed(settings, environment=resolved)
+
+    merchant = get_by_id(client, "merchants", membership.merchant_id) or {}
+    recipient_email = (merchant.get("contact_email") or "").strip()
+    if not recipient_email:
+        raise ValidationAPIError(
+            "This account has no contact email, so a verification code cannot be sent. "
+            "Add one in Settings first."
+        )
+
+    challenge, code = create_challenge(
+        client,
+        merchant_id=membership.merchant_id,
+        requested_by=membership.user_id,
+        payload={
+            "amount": str(payload.amount),
+            "currency": payload.currency,
+            "environment": resolved,
+        },
+        purpose=PAYOUT_FUNDING,
+    )
+
+    # Raises if it cannot send. The merchant must never be shown a code
+    # entry box for a code that was never delivered.
+    send_withdrawal_otp_email(
+        client,
+        merchant=merchant,
+        recipient_email=recipient_email,
+        code=code,
+        expires_minutes=get_settings().withdrawal_otp_expires_minutes,
+    )
+
+    write_audit_log(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="payout_wallet.funding_otp_requested",
+        resource_type="withdrawal_otp_challenge",
+        resource_id=uuid.UUID(challenge["id"]),
+        # Amount and environment only - never the code.
+        metadata={"amount": str(payload.amount), "environment": resolved},
+    )
+
+    app_settings = get_settings()
+    return APIResponse(
+        data=WithdrawalOtpChallengeResponse(
+            challenge_id=uuid.UUID(challenge["id"]),
+            masked_email=mask_email(recipient_email),
+            expires_at=challenge["expires_at"],
+            resend_cooldown_seconds=app_settings.withdrawal_otp_resend_cooldown_seconds,
+            max_attempts=app_settings.withdrawal_otp_max_attempts,
+        )
+    )
+
+
+@router.post(
+    "/payout-wallet/fund/{challenge_id}/verify",
+    response_model=APIResponse[MerchantPayoutWalletResponse],
+)
+async def verify_payout_wallet_funding(
+    challenge_id: uuid.UUID,
+    payload: WithdrawalOtpVerify,
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Funding the payout wallet"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="payout_funding_otp_verify", limit=10, window_seconds=300))
+    ],
+):
+    """Verifies the emailed code and, only then, moves the money.
+
+    The amount, currency and environment all come from the challenge,
+    never from anything re-sent now - so the transfer that happens is
+    exactly the one that was verified and emailed about. There is no
+    window in which a correct code could be applied to a larger amount.
+    """
+    client = get_supabase_admin()
+    challenge = get_own_challenge(
+        client, challenge_id=challenge_id, merchant_id=membership.merchant_id
+    )
+    if challenge.get("purpose") != PAYOUT_FUNDING:
+        # A withdrawal code must not fund a payout wallet. Same table,
+        # different decision.
+        raise NotFoundError("Challenge not found")
+
+    verified = verify_otp(client, challenge=challenge, submitted_code=payload.code)
+    stored = verified.get("withdrawal_payload") or {}
+
+    resolved, settings = _resolve_payout_environment(
+        client, merchant_id=membership.merchant_id, requested=stored.get("environment")
+    )
+    # Re-checked at verification: access can have been paused between
+    # the code being sent and the code being typed.
+    assert_payout_allowed(settings, environment=resolved)
+
+    body = await _move_into_payout_wallet(
+        client,
+        membership=membership,
+        amount=Decimal(str(stored.get("amount"))),
+        currency=str(stored.get("currency") or "TZS"),
+        environment=resolved,
+        settings=settings,
+        idempotency_key=idempotency_key,
+    )
+    return APIResponse(data=MerchantPayoutWalletResponse(**body))
 
 
 @router.get("/overview-report", response_model=APIResponse[MerchantOverviewReportResponse])
