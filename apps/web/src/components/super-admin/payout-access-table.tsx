@@ -38,6 +38,11 @@ import type { AdminPayoutAccessRow } from "@/lib/admin/types";
  * and keep it while changing the tariff for everyone else.
  */
 
+/** Asked, and still waiting on an answer. */
+function waiting(row: AdminPayoutAccessRow): boolean {
+  return Boolean(row.access_requested_at) && !row.sandbox_enabled && !row.live_enabled;
+}
+
 function money(value: string | null): string {
   if (value === null) return "—";
   return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2 }).format(Number(value));
@@ -71,9 +76,14 @@ export function PayoutAccessTable({ rows }: { rows: AdminPayoutAccessRow[] }) {
           </tr>
         </thead>
         <tbody className="text-sm">
-          {rows.map((row) => (
-            <PayoutRow key={row.merchant_id} row={row} />
-          ))}
+          {/* Anyone waiting goes first. A request nobody can see is the
+              same as no request, and this list grows with every merchant
+              ever granted access. */}
+          {[...rows]
+            .sort((a, b) => Number(waiting(b)) - Number(waiting(a)))
+            .map((row) => (
+              <PayoutRow key={row.merchant_id} row={row} />
+            ))}
         </tbody>
       </table>
     </div>
@@ -106,6 +116,14 @@ function PayoutRow({ row }: { row: AdminPayoutAccessRow }) {
         <div className="font-medium text-on-background">{name}</div>
         {row.merchant_code && (
           <div className="font-mono text-xs text-on-surface-variant">{row.merchant_code}</div>
+        )}
+        {/* Someone asked and is waiting. Shown only while nothing is
+            granted: once they are switched on the request is history,
+            and leaving the badge up would make the queue unreadable. */}
+        {row.access_requested_at && !row.sandbox_enabled && !row.live_enabled && (
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+            Requested {formatDateTime(row.access_requested_at)}
+          </span>
         )}
         {error && (
           <p role="alert" className="text-[11px] text-red-700 mt-1 max-w-[16rem]">

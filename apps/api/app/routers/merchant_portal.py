@@ -3051,3 +3051,81 @@ def read_my_overview_report(
         end_date=end_date,
     )
     return APIResponse(data=MerchantOverviewReportResponse(**report))
+
+
+@router.post("/payout-access-request", response_model=APIResponse[dict])
+def request_payout_access(
+    # Declared first so it answers first, same reason as the funding
+    # route: an API-key caller told "Missing bearer token" goes looking
+    # for a token they are not supposed to have.
+    _no_api_keys: Annotated[None, Depends(reject_api_keys("Requesting payout access"))],
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_ONLY))],
+):
+    """Ask for access to the Disbursement API.
+
+    This grants nothing. It creates the merchant's settings row with
+    every flag off - which is what makes them visible on the Super Admin
+    payouts screen - and stamps who asked and when. Granting is still a
+    deliberate act by a Super Admin, one environment at a time.
+
+    Open to any merchant admin on purpose: the request costs nothing and
+    the answer is a human's. What it replaces is a page that said
+    "contact InfinityPay support" and gave no way to do so, so the only
+    merchants who ever asked were the ones who already knew somebody.
+    """
+    client = get_supabase_admin()
+    existing = execute_maybe_single(
+        client.table("merchant_payout_settings")
+        .select("*")
+        .eq("merchant_id", str(membership.merchant_id))
+        .maybe_single()
+    )
+
+    if existing and (existing.get("sandbox_enabled") or existing.get("live_enabled")):
+        # Already granted. Not an error worth a 409 - the merchant's page
+        # will simply show them the feature - but say so plainly rather
+        # than recording a request nobody needs to action.
+        return APIResponse(data={"status": "already_enabled", "requested_at": None})
+
+    now = utc_now_iso()
+    if existing:
+        if existing.get("access_requested_at"):
+            # Asking twice is not an error. Keep the FIRST timestamp:
+            # how long someone has been waiting is the useful fact, and
+            # refreshing it on every click would hide exactly that.
+            return APIResponse(
+                data={"status": "already_requested", "requested_at": existing["access_requested_at"]}
+            )
+        client.table("merchant_payout_settings").update(
+            {
+                "access_requested_at": now,
+                "access_requested_by": str(membership.user_id),
+                "updated_at": now,
+            }
+        ).eq("merchant_id", str(membership.merchant_id)).execute()
+    else:
+        insert_row(
+            client,
+            "merchant_payout_settings",
+            {
+                "merchant_id": str(membership.merchant_id),
+                "sandbox_enabled": False,
+                "live_enabled": False,
+                "paused": False,
+                "version": 1,
+                "access_requested_at": now,
+                "access_requested_by": str(membership.user_id),
+            },
+        )
+
+    write_audit_log(
+        client,
+        actor_id=membership.user_id,
+        actor_type="user",
+        merchant_id=membership.merchant_id,
+        action="payout_access.requested",
+        resource_type="merchant_payout_settings",
+        resource_id=membership.merchant_id,
+        metadata={},
+    )
+    return APIResponse(data={"status": "requested", "requested_at": now})

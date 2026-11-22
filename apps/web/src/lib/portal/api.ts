@@ -1044,6 +1044,17 @@ export interface FundPayoutWalletInput {
  * step-up MFA, a paused account, or not enough in Collections - rather
  * than a generic failure.
  */
+export interface PayoutAccessRequestResult {
+  status: "requested" | "already_requested" | "already_enabled";
+  requested_at: string | null;
+}
+
+/** Asks for Disbursement API access. Grants nothing — a Super Admin
+ * still decides, one environment at a time. */
+export async function requestPayoutAccess(): Promise<PayoutAccessRequestResult> {
+  return apiWrite<PayoutAccessRequestResult>("/v1/merchant/payout-access-request", "POST", {});
+}
+
 export async function fundPayoutWallet(input: FundPayoutWalletInput): Promise<PayoutWallet> {
   return apiWrite<PayoutWallet>("/v1/merchant/payout-wallet/fund", "POST", input, {
     idempotent: true,

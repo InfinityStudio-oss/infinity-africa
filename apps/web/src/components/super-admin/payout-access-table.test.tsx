@@ -29,6 +29,7 @@ function row(overrides: Partial<AdminPayoutAccessRow> = {}): AdminPayoutAccessRo
     daily_limit_tzs: null,
     fee_flat_tzs: null,
     fee_percentage: null,
+    access_requested_at: null,
     version: 3,
     updated_at: "2026-11-21T17:03:45Z",
     wallet_available: "10000.00",

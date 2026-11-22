@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
+import { RequestPayoutAccess } from "@/components/merchant/request-payout-access";
 import { Icon } from "@/components/portal/icon";
 import { KpiCard } from "@/components/portal/kpi-card";
 import { PageHeader } from "@/components/portal/page-header";
@@ -123,9 +124,10 @@ export default function PayoutsPage() {
             <h2 className="mt-3 text-lg font-semibold">The Disbursement API is not enabled yet</h2>
             <p className="mt-2 text-sm text-on-surface-variant max-w-xl mx-auto">
               Payouts let your own server send money out automatically, from a payout wallet you fund
-              in advance. It is granted per account, one environment at a time — contact InfinityPay
-              support to start in the sandbox.
+              in advance. It is granted per account, one environment at a time, and starts in the
+              sandbox where no real money moves.
             </p>
+            <RequestPayoutAccess />
           </div>
         </Card>
       </div>

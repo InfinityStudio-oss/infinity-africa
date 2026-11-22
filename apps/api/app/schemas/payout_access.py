@@ -153,6 +153,9 @@ class MerchantPayoutAccessResponse(BaseModel):
     # would read as this merchant's own deal.
     fee_flat_tzs: Decimal | None = None
     fee_percentage: Decimal | None = None
+    # When the merchant asked for access, if they ever did. Null is not
+    # the same as refused: it means they never asked.
+    access_requested_at: datetime | None = None
     version: int
     updated_at: datetime | None = None
     # What is still committed. Pausing does not recall an in-flight

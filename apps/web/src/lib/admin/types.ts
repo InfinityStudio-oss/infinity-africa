@@ -994,6 +994,9 @@ export interface AdminPayoutAccessRow {
   daily_limit_tzs: string | null;
   fee_flat_tzs: string | null;
   fee_percentage: string | null;
+  /** When the merchant asked for access. Null means they never asked —
+   * which is not the same as having been refused. */
+  access_requested_at: string | null;
   version: number;
   updated_at: string | null;
   wallet_available: string;

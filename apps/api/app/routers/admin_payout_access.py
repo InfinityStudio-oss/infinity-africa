@@ -142,6 +142,7 @@ def _response(client, row: dict) -> MerchantPayoutAccessResponse:
         daily_limit_tzs=row.get("daily_limit_tzs"),
         fee_flat_tzs=row.get("fee_flat_tzs"),
         fee_percentage=row.get("fee_percentage"),
+        access_requested_at=row.get("access_requested_at"),
         version=int(row.get("version") or 1),
         updated_at=row.get("updated_at"),
         # Balances so an operator pausing an account can see what is
