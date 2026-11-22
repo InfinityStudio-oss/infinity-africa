@@ -35,6 +35,8 @@ from decimal import Decimal
 
 from supabase import Client
 
+from app.core.errors import ConflictError, NotFoundError
+from app.services.audit import write_audit_log
 from app.services.crud import get_by_id
 from app.services.ledger import post_payout_release, post_payout_settlement
 from app.services.selcom_business.client import (
@@ -440,3 +442,103 @@ async def sweep_payouts(client: Client, *, limit: int = 50) -> dict[str, int]:
         counts[key] = counts.get(key, 0) + 1
 
     return counts
+
+
+def release_parked_payout(
+    client: Client, *, payout_id: uuid.UUID, reason: str, actor_id: uuid.UUID | None
+) -> dict:
+    """Give back the reserve on a payout parked in reconciliation.
+
+    THE MOST DANGEROUS OPERATION IN THIS MODULE. Everything else that
+    releases funds does so because the provider said, in so many words,
+    that it did not pay. This releases on a human's judgement instead,
+    and if that judgement is wrong the money went out AND went back to
+    the merchant, and the platform covers the difference.
+
+    It exists because the alternative is worse. A payout can park
+    forever - ours did, against a sandbox endpoint that 404s - and until
+    now the only way to free the funds was to edit the database by hand:
+    no validation, no audit entry, no record of who decided. The same
+    argument as granting live access. A deliberate route that leaves a
+    trail beats a forbidden one people work around.
+
+    Two guards, and they are the whole safety of it:
+
+    * Only from `needs_reconciliation`. A `processing` payout may be
+      mid-flight at the provider this second.
+    * Only when the payout carries NO provider_transid and NO
+      provider_raw_response. Either one means the provider acknowledged
+      it, and an acknowledged payout must be resolved by asking them -
+      never by assuming.
+
+    The caller is responsible for having checked with the provider. The
+    reason is stored and audited because that check is the only thing
+    standing behind this.
+    """
+    payout = get_by_id(client, "payouts", payout_id)
+    if not payout:
+        raise NotFoundError("Payout not found")
+
+    if payout["status"] != "needs_reconciliation":
+        raise ConflictError(
+            f"This payout is {payout['status']}, not needs_reconciliation. Only a parked "
+            "payout can be released."
+        )
+    if payout.get("provider_transid") or payout.get("provider_raw_response"):
+        raise ConflictError(
+            "The provider has acknowledged this payout, so it may have been paid. Resolve it "
+            "with the provider rather than releasing the funds here."
+        )
+
+    transaction_id = _parent_transaction_id(client, payout_id)
+    if transaction_id is None:
+        raise ConflictError("This payout has no transaction behind it; its funds cannot be traced.")
+
+    moved = _transition(
+        client,
+        payout_id=payout_id,
+        expected_status="needs_reconciliation",
+        changes={
+            "status": "failed",
+            "failure_code": "released_by_admin",
+            "failure_reason": reason,
+            "completed_at": _now().isoformat(),
+            "next_check_at": None,
+        },
+    )
+    if moved is None:
+        raise ConflictError("This payout changed while you were looking at it. Reload and check again.")
+
+    post_payout_release(
+        client,
+        transaction_id=transaction_id,
+        merchant_id=uuid.UUID(payout["merchant_id"]),
+        total_debit=Decimal(str(payout["total_debit"])),
+        currency=payout["currency"],
+        environment=payout["environment"],
+    )
+    client.table("transactions").update({"status": "failed"}).eq("id", str(transaction_id)).execute()
+
+    write_audit_log(
+        client,
+        actor_id=actor_id,
+        actor_type="user" if actor_id else "system",
+        merchant_id=uuid.UUID(payout["merchant_id"]),
+        action="payout.reserve_released",
+        resource_type="payouts",
+        resource_id=payout_id,
+        metadata={
+            "total_debit": str(payout["total_debit"]),
+            "currency": payout["currency"],
+            "environment": payout["environment"],
+            "previous_failure_code": payout.get("failure_code"),
+            "reason": reason,
+        },
+    )
+    logger.warning(
+        "payout_reserve_released_by_admin id=%s total_debit=%s actor=%s",
+        payout_id,
+        payout["total_debit"],
+        actor_id,
+    )
+    return moved

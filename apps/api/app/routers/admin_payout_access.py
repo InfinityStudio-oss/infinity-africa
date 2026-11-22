@@ -59,12 +59,14 @@ from app.schemas.payout_access import (
     PayoutFeeUpdate,
     PayoutLiveAccessUpdate,
     PayoutPauseUpdate,
+    PayoutReleaseRequest,
     PlatformPayoutTariffResponse,
     PlatformPayoutTariffUpdate,
 )
 from app.services.audit import write_audit_log
 from app.services.crud import execute_maybe_single, get_by_id
 from app.services.ledger import get_payout_wallet_balances
+from app.services.payout_dispatch import release_parked_payout
 
 logger = logging.getLogger("infinity.admin.payout_access")
 
@@ -74,6 +76,11 @@ router = APIRouter(prefix="/admin/payout-access", tags=["admin-payout-access"])
 # gets its own prefix rather than sitting under /{merchant_id}/. Same
 # guards: everything in this module is require_super_admin.
 tariff_router = APIRouter(prefix="/admin/payout-tariff", tags=["admin-payout-access"])
+
+# Acting on ONE payout, rather than on a merchant's access. Separate
+# prefix so a route that hands money back can never be confused with one
+# that changes a permission.
+payouts_router = APIRouter(prefix="/admin/payouts", tags=["admin-payout-access"])
 
 # The columns an operator may change from this screen, and the ones they
 # may not. live_enabled is absent by design - see the module docstring.
@@ -553,4 +560,40 @@ def update_platform_tariff(
             version=after["version"],
             updated_at=after.get("updated_at"),
         )
+    )
+
+
+@payouts_router.post("/{payout_id}/release", response_model=APIResponse[dict])
+def release_payout_reserve(
+    payout_id: uuid.UUID,
+    payload: PayoutReleaseRequest,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_release", limit=5, window_seconds=60))
+    ],
+):
+    """Return the funds held by a payout stuck in reconciliation.
+
+    A parked payout holds its reserve indefinitely and no partner-facing
+    route can clear it, which is correct - only the provider knows what
+    happened. But "indefinitely" turned out to mean exactly that: a
+    payout dispatched at a sandbox endpoint that 404s parked with TZS
+    1,010 held and no way out except editing the database.
+    
+    The service refuses unless the payout is parked AND the provider
+    never acknowledged it. Read release_parked_payout before using this:
+    if the provider did pay, this hands the merchant money that has
+    already left, and the platform covers the difference.
+    """
+    client = get_supabase_admin()
+    row = release_parked_payout(
+        client, payout_id=payout_id, reason=payload.reason, actor_id=admin.id
+    )
+    return APIResponse(
+        data={
+            "id": str(payout_id),
+            "status": row["status"],
+            "released": str(row["total_debit"]),
+            "currency": row["currency"],
+        }
     )

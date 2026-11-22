@@ -160,3 +160,33 @@ class MerchantPayoutAccessResponse(BaseModel):
     wallet_available: Decimal = Decimal(0)
     wallet_reserved: Decimal = Decimal(0)
     wallet_environment: str = "sandbox"
+
+
+class PayoutReleaseRequest(BaseModel):
+    """Give back the reserve on a payout parked in reconciliation.
+
+    `reason` is required and stored, because it is the only record of
+    the judgement being made: somebody decided the provider did not pay.
+    `acknowledge` is the deliberate step, for the same reason it exists
+    on granting live access — this cannot be sent by accident.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=10, max_length=300)
+    acknowledge: bool = False
+
+    @field_validator("reason")
+    @classmethod
+    def _trim(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < 10:
+            raise ValueError("Give a real reason — how do you know the provider did not pay?")
+        return trimmed
+
+    def model_post_init(self, _context) -> None:
+        if not self.acknowledge:
+            raise ValueError(
+                "Releasing a reserve needs acknowledge=true. If the provider did pay, this "
+                "returns money that already left and the platform covers the difference."
+            )
