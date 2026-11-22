@@ -44,6 +44,7 @@ from app.services.selcom_business.client import (
     get_selcom_business_client,
 )
 from app.services.selcom_business.schemas import SelcomBusinessResult
+from app.services.webhooks import enqueue_webhook_event
 
 logger = logging.getLogger("infinity.payouts")
 
@@ -243,6 +244,47 @@ def apply_provider_result(
     )
 
 
+def _emit_payout_event(client: Client, *, payout: dict, event_name: str) -> None:
+    """Tell the merchant what happened to one payout.
+
+    Only terminal outcomes. A payout in flight has nothing to report,
+    and needs_reconciliation in particular means "we do not know yet" -
+    telling a partner about that invites exactly the retry that pays
+    twice.
+
+    The `environment` field is in the payload and it matters: there is
+    one webhook URL per merchant, with no sandbox/live separation, so a sandbox
+    payout notifies the same endpoint a live one does. A receiver that
+    ignores this field will credit a customer for money that never
+    moved. The docs say so in as many words.
+
+    Best-effort by design, like every other emit in this codebase: a
+    webhook that cannot be queued must never unwind a money decision
+    that has already been posted to the ledger.
+    """
+    try:
+        enqueue_webhook_event(
+            client,
+            merchant_id=uuid.UUID(payout["merchant_id"]),
+            event_name=event_name,
+            payload={
+                "payout_id": payout["id"],
+                "reference": payout.get("provider_reference"),
+                "status": payout.get("status"),
+                "environment": payout.get("environment"),
+                "amount": str(payout.get("amount")),
+                "fee_amount": str(payout.get("fee_amount")),
+                "total_debit": str(payout.get("total_debit")),
+                "currency": payout.get("currency"),
+                "beneficiary_id": payout.get("beneficiary_id"),
+                "failure_code": payout.get("failure_code"),
+                "failure_reason": payout.get("failure_reason"),
+            },
+        )
+    except Exception:
+        logger.exception("payout_webhook_enqueue_failed id=%s event=%s", payout.get("id"), event_name)
+
+
 def _settle(client: Client, *, payout: dict, result: SelcomBusinessResult) -> str:
     payout_id = uuid.UUID(payout["id"])
     transaction_id = _parent_transaction_id(client, payout_id)
@@ -283,6 +325,7 @@ def _settle(client: Client, *, payout: dict, result: SelcomBusinessResult) -> st
         "id", str(transaction_id)
     ).execute()
     logger.info("payout_settled id=%s amount=%s", payout_id, payout["amount"])
+    _emit_payout_event(client, payout={**payout, **(moved or {})}, event_name="payout.success")
     return "successful"
 
 
@@ -329,6 +372,7 @@ def _release(client: Client, *, payout: dict, result: SelcomBusinessResult) -> s
         "id", str(transaction_id)
     ).execute()
     logger.info("payout_released id=%s total_debit=%s", payout_id, payout["total_debit"])
+    _emit_payout_event(client, payout={**payout, **(moved or {})}, event_name="payout.failed")
     return "failed"
 
 
@@ -541,4 +585,8 @@ def release_parked_payout(
         payout["total_debit"],
         actor_id,
     )
+    # The merchant is told, same as any other confirmed failure. They
+    # have money back and a payout that will never complete; finding
+    # that out by polling days later is not good enough.
+    _emit_payout_event(client, payout={**payout, **moved}, event_name="payout.failed")
     return moved

@@ -279,13 +279,59 @@ export default function PayoutsApiPage() {
         environment.
       </p>
 
-      <Callout tone="warning" title="There are no payout webhooks. Poll.">
-        Collections notify you by webhook; <strong>payouts do not</strong>. Nothing is sent when a
-        payout settles or fails, so your integration has to poll{" "}
-        <Code>GET /v1/payouts/{"{payout_id}"}</Code> until it reaches a terminal status. If you
-        have integrated Collections, this is the assumption most likely to cost you a day — we
-        would rather say so here than have you wait for a callback that is never coming.
+      <h2 className="text-2xl font-bold text-on-surface mt-12 mb-4">Webhooks</h2>
+      <p className="text-on-surface-variant mb-4 max-w-2xl">
+        Three events, sent to the webhook URL on your account and signed the same way every other
+        InfinityPay webhook is:
+      </p>
+      <ul className="list-disc pl-5 space-y-2 text-on-surface-variant mb-6 max-w-2xl">
+        <li>
+          <Code>payout.success</Code> — confirmed paid by the provider.
+        </li>
+        <li>
+          <Code>payout.failed</Code> — confirmed not paid. The reserve has gone back to your
+          wallet.
+        </li>
+        <li>
+          <Code>payout.reversed</Code> — reversed after having succeeded.
+        </li>
+      </ul>
+      <p className="text-on-surface-variant mb-4 max-w-2xl">
+        <strong>Only terminal outcomes are sent.</strong> Nothing is emitted while a payout is{" "}
+        <Code>queued</Code>, <Code>processing</Code> or <Code>needs_reconciliation</Code> — an
+        unresolved payout has no outcome to report, and announcing one would invite exactly the
+        retry that pays twice. Poll if you want to watch progress.
+      </p>
+
+      <Callout tone="warning" title="Check the environment field">
+        You have <strong>one webhook URL</strong>, with no sandbox/live separation, so a sandbox
+        payout notifies the same endpoint a live one does. Every payload carries{" "}
+        <Code>environment</Code>. A receiver that ignores it will credit a customer for money that
+        never moved.
       </Callout>
+
+      <div className="mt-6">
+        <CodeBlock language="json">{`{
+  "event": "payout.success",
+  "merchant_code": "27000000",
+  "payout_id": "99999999-8888-7777-6666-555555555555",
+  "reference": "PO-EXAMPLEREFERENCE0001",
+  "status": "successful",
+  "environment": "live",
+  "amount": "1000.00",
+  "fee_amount": "10.00",
+  "total_debit": "1010.00",
+  "currency": "TZS",
+  "beneficiary_id": "11111111-2222-3333-4444-555555555555",
+  "failure_code": null,
+  "failure_reason": null
+}`}</CodeBlock>
+      </div>
+      <p className="text-on-surface-variant mt-4 mb-6 max-w-2xl">
+        A webhook is a convenience, not the record. If your endpoint is down you lose nothing —
+        the payout&apos;s status is always available from{" "}
+        <Code>GET /v1/payouts/{"{payout_id}"}</Code>.
+      </p>
 
       {/* --- lifecycle ------------------------------------------------- */}
 

@@ -80,13 +80,25 @@ describe("Payouts API documentation", () => {
     expect(pageText()).toContain("no real money moves and no real recipient is paid");
   });
 
-  it("tells Collections integrators there are no payout webhooks", () => {
-    // Collections notify by webhook; payouts do not. Someone who has
-    // integrated Collections will assume they do and wait for a
-    // callback that never arrives.
+  it("documents the three payout webhook events", () => {
     const text = pageText();
-    expect(text).toContain("There are no payout webhooks");
-    expect(text).toContain("has to poll");
+    expect(text).toContain("payout.success");
+    expect(text).toContain("payout.failed");
+    expect(text).toContain("payout.reversed");
+  });
+
+  it("says only terminal outcomes are sent", () => {
+    // Announcing needs_reconciliation would invite the retry that pays
+    // twice, so the page has to be explicit that nothing comes for it.
+    expect(pageText()).toContain("Only terminal outcomes are sent");
+  });
+
+  it("warns that one webhook URL serves both environments", () => {
+    // A receiver that ignores the environment field credits a customer
+    // for money that never moved.
+    const text = pageText();
+    expect(text).toContain("Check the environment field");
+    expect(text).toContain("one webhook URL");
   });
 
   it("says a payout cannot be cancelled once created", () => {
