@@ -20,6 +20,7 @@ import {
   retryWithdrawalPayout,
   correctMerchantContactEmail,
   createAdminPayoutAccess,
+  dismissAdminPayoutRequest,
   releaseAdminPayout,
   setAdminPayoutFee,
   setAdminPayoutLive,
@@ -838,4 +839,15 @@ export async function releasePayoutAction(
   reason: string,
 ): Promise<PayoutActionState> {
   return runPayoutAction(() => releaseAdminPayout(payoutId, { reason, acknowledge: true }));
+}
+
+/** Takes a request out of the queue without granting or refusing
+ * anything. The reason is stored in the audit entry, because clearing
+ * the stamp destroys the only trace on the row that anyone asked. */
+export async function dismissPayoutRequestAction(
+  merchantId: string,
+  version: number,
+  reason: string,
+): Promise<PayoutActionState> {
+  return runPayoutAction(() => dismissAdminPayoutRequest(merchantId, { version, reason }));
 }

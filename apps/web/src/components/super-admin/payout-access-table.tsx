@@ -7,6 +7,7 @@ import { tdClass, thClass } from "@/components/portal/card";
 import { Icon } from "@/components/portal/icon";
 import { formatDateTime } from "@/lib/format";
 import {
+  dismissPayoutRequestAction,
   setPayoutFeeAction,
   setPayoutLiveAction,
   setPayoutPauseAction,
@@ -96,6 +97,8 @@ function PayoutRow({ row }: { row: AdminPayoutAccessRow }) {
   const [pausing, setPausing] = useState(false);
   const [reason, setReason] = useState("");
   const [editingFee, setEditingFee] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+  const [dismissReason, setDismissReason] = useState("");
   const [feePercent, setFeePercent] = useState(row.fee_percentage ?? "");
   const [pending, startTransition] = useTransition();
 
@@ -120,11 +123,60 @@ function PayoutRow({ row }: { row: AdminPayoutAccessRow }) {
         {/* Someone asked and is waiting. Shown only while nothing is
             granted: once they are switched on the request is history,
             and leaving the badge up would make the queue unreadable. */}
-        {row.access_requested_at && !row.sandbox_enabled && !row.live_enabled && (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-            Requested {formatDateTime(row.access_requested_at)}
-          </span>
-        )}
+        {waiting(row) &&
+          (dismissing ? (
+            <div className="mt-1.5 space-y-1.5 max-w-[15rem]">
+              <input
+                value={dismissReason}
+                onChange={(event) => setDismissReason(event.target.value)}
+                aria-label={`Reason for dismissing the request from ${name}`}
+                placeholder="Why? (recorded)"
+                className="w-full rounded border border-outline-variant bg-transparent px-2 py-1 text-xs text-on-surface"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={pending || dismissReason.trim().length < 5}
+                  onClick={() =>
+                    run(
+                      () =>
+                        dismissPayoutRequestAction(row.merchant_id, row.version, dismissReason.trim()),
+                      () => {
+                        setDismissing(false);
+                        setDismissReason("");
+                      },
+                    )
+                  }
+                  className="rounded bg-surface-container-highest px-2 py-1 text-xs font-semibold text-on-surface disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDismissing(false)}
+                  className="text-xs font-semibold text-on-surface-variant hover:underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                Requested {formatDateTime(row.access_requested_at!)}
+              </span>
+              {/* Takes it out of the queue. Not a refusal the merchant
+                  sees and not a block - they keep the same not-enabled
+                  page and can ask again, which re-stamps the row. */}
+              <button
+                type="button"
+                onClick={() => setDismissing(true)}
+                className="text-[11px] font-semibold text-on-surface-variant hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          ))}
         {error && (
           <p role="alert" className="text-[11px] text-red-700 mt-1 max-w-[16rem]">
             {error}

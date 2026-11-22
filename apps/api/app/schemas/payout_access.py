@@ -234,3 +234,30 @@ class ProviderHealthResponse(BaseModel):
     reachable: bool
     detail: str
     checked_at: datetime
+
+
+class PayoutRequestDismiss(BaseModel):
+    """Clear a pending access request without granting anything.
+
+    The reason is required and audited, because clearing the stamp
+    destroys the only evidence on the row that anybody ever asked. An
+    operator looking later needs to be able to tell "declined, and here
+    is why" from "nobody has ever requested this".
+
+    Deliberately NOT a refusal the merchant is told about and NOT a
+    block: they keep the same not-enabled screen they had before, and
+    they can ask again. A dismissal is an inbox action, not a verdict.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(gt=0)
+    reason: str = Field(min_length=5, max_length=300)
+
+    @field_validator("reason")
+    @classmethod
+    def _trim_reason(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < 5:
+            raise ValueError("Give a short reason — it is the only record of the decision.")
+        return trimmed

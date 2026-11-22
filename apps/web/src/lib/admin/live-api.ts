@@ -1192,3 +1192,16 @@ export async function releaseAdminPayout(
 ): Promise<unknown> {
   return apiWrite(`/v1/admin/payouts/${payoutId}/release`, "POST", input);
 }
+
+/** Clears a pending access request. Grants nothing and blocks nothing —
+ * the merchant keeps the same not-enabled screen and can ask again. */
+export async function dismissAdminPayoutRequest(
+  merchantId: string,
+  input: { version: number; reason: string },
+): Promise<AdminPayoutAccessRow> {
+  return apiWrite<AdminPayoutAccessRow>(
+    `/v1/admin/payout-access/${merchantId}/dismiss-request`,
+    "PATCH",
+    input,
+  );
+}

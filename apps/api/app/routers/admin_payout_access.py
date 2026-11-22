@@ -63,6 +63,7 @@ from app.schemas.payout_access import (
     PayoutLiveAccessUpdate,
     PayoutPauseUpdate,
     PayoutReleaseRequest,
+    PayoutRequestDismiss,
     PlatformPayoutTariffResponse,
     PlatformPayoutTariffUpdate,
     ProviderHealthResponse,
@@ -102,6 +103,10 @@ _AUDITED_FIELDS = (
     "paused_reason",
     "per_payout_limit_tzs",
     "daily_limit_tzs",
+    # Audited because clearing it is a decision - "we are not doing this
+    # for them" - and the before/after is the only trace that a request
+    # existed at all once the stamp is gone.
+    "access_requested_at",
 )
 
 
@@ -164,6 +169,7 @@ def _write(
     admin: AuthenticatedUser,
     request: Request,
     action: str,
+    extra_metadata: dict | None = None,
 ) -> dict:
     """Apply `changes` under optimistic concurrency, and audit it.
 
@@ -208,6 +214,10 @@ def _write(
             "before": {key: _plain(before.get(key)) for key in _AUDITED_FIELDS},
             "after": {key: _plain(after.get(key)) for key in _AUDITED_FIELDS},
             "version": after.get("version"),
+            # Anything the caller must record beyond the field diff - a
+            # dismissal's reason, for instance, which is the only account
+            # of WHY once the request stamp is gone.
+            **(extra_metadata or {}),
         },
     )
     logger.info(
@@ -728,3 +738,51 @@ async def check_provider_health(
             checked_at=checked_at,
         )
     )
+
+
+@router.patch("/{merchant_id}/dismiss-request", response_model=APIResponse[MerchantPayoutAccessResponse])
+def dismiss_payout_request(
+    merchant_id: uuid.UUID,
+    payload: PayoutRequestDismiss,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    request: Request,
+    _rate_limit: Annotated[
+        None, Depends(rate_limit(scope="admin_payout_access_write", limit=20, window_seconds=60))
+    ],
+):
+    """Clear a pending access request, granting nothing.
+
+    Not enabling a merchant is already a refusal - their row grants
+    nothing and they see the same not-enabled screen. What this fixes is
+    the queue: a request nobody intends to act on sat at the top of the
+    list forever, sorted above everyone else, so "new, needs a decision"
+    and "looked at months ago, no" became indistinguishable.
+
+    The merchant is not told and is not blocked. They can ask again, and
+    that re-stamps the row and puts them back in the queue - which is
+    the right behaviour for a business whose circumstances change.
+    """
+    client = get_supabase_admin()
+    before = _load(client, merchant_id)
+
+    if not before.get("access_requested_at"):
+        raise ConflictError("There is no pending request on this account to dismiss.")
+
+    after = _write(
+        client,
+        merchant_id=merchant_id,
+        before=before,
+        changes={"access_requested_at": None, "access_requested_by": None},
+        expected_version=payload.version,
+        admin=admin,
+        request=request,
+        action="payout_access.request_dismissed",
+        extra_metadata={"reason": payload.reason},
+    )
+    logger.info(
+        "payout_access_request_dismissed merchant=%s admin=%s reason=%s",
+        merchant_id,
+        admin.id,
+        payload.reason,
+    )
+    return APIResponse(data=_response(client, after))
