@@ -11,6 +11,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+# A timestamp-ish string starts with a calendar date. Narrow on purpose:
+# see _FakeQuery._as_instant for why a looser test would be worse than
+# none.
+_ISO_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]|$)")
+
 POSTGREST_DEFAULT_PAGE = 1000
 
 
@@ -274,16 +279,58 @@ class _FakeQuery:
 
     @staticmethod
     def _compare(row_value, value):
-        """Numeric comparison when possible (amounts stored as numeric
-        strings), else lexicographic (ISO8601 timestamps sort correctly as
-        strings). Returns -1/0/1, or None if row_value is missing."""
+        """Timestamps as instants, then numbers, then text.
+        Returns -1/0/1, or None if row_value is missing.
+
+        Timestamps are compared as INSTANTS, not lexicographically. This
+        used to say "ISO8601 timestamps sort correctly as strings", which
+        is only true while both sides carry the same offset. Postgres
+        compares timestamptz by instant, so the moment a filter bound
+        arrived as `2026-11-22T00:00:00+03:00` and the stored value as
+        `2026-11-21T21:30:00+00:00` the two disagreed: the same moment,
+        but the string form sorts the stored value first.
+
+        That gap matters here specifically. The Super Admin date filters
+        are anchored in Dar es Salaam (UTC+3) precisely so a Tanzanian
+        day is not read as a UTC one, so an offset-bearing bound against
+        a UTC-stored column is the normal case, not an edge one - and a
+        fake that got it wrong would have failed correct code and, worse,
+        could pass incorrect code.
+
+        A naive value is read as UTC, matching how created_at is stored,
+        rather than being left uncomparable against an aware one.
+        """
         if row_value is None:
             return None
-        try:
-            a, b = float(row_value), float(value)
-        except (TypeError, ValueError):
-            a, b = str(row_value), str(value)
+
+        a_dt = _FakeQuery._as_instant(row_value)
+        b_dt = _FakeQuery._as_instant(value)
+        if a_dt is not None and b_dt is not None:
+            a, b = a_dt, b_dt
+        else:
+            try:
+                a, b = float(row_value), float(value)
+            except (TypeError, ValueError):
+                a, b = str(row_value), str(value)
         return -1 if a < b else (1 if a > b else 0)
+
+    @staticmethod
+    def _as_instant(value):
+        """An ISO date or timestamp as an aware datetime, else None.
+
+        Deliberately narrow: the shape must start YYYY-MM-DD, so a bare
+        number or an id is never mistaken for a timestamp and quietly
+        compared as one.
+        """
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if not isinstance(value, str) or not _ISO_PREFIX.match(value):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
     def _or_branch_matches(self, row, op: str, column: str, value) -> bool:
         """One branch of an `or_()`, matching how the real PostgREST

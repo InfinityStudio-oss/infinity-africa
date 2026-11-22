@@ -30,7 +30,7 @@ from app.auth import require_super_admin
 from app.core.errors import NotFoundError, ValidationAPIError
 from app.core.pagination import LIST_COUNT, PaginationParams, build_page_meta, pagination_params
 from app.core.rate_limit import rate_limit
-from app.core.time import utc_now_iso
+from app.core.time import InvalidFilterDateError, resolve_day_filter_bound, utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.admin import (
     AdminApiKeyResponse,
@@ -104,6 +104,20 @@ from app.services.webhook_status import admin_batch_collection_webhook_status
 from app.services.webhooks import last_webhook_delivery
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _day_bound(value: str, *, end_of_day: bool, field: str) -> str:
+    """A date/timestamp filter value, resolved for comparison.
+
+    Wraps resolve_day_filter_bound only to turn a bad value into a
+    clear 422 naming the field. Before this, an unparseable date went
+    straight into the query and came back as a database error with
+    nothing in it to tell an operator what they had mistyped.
+    """
+    try:
+        return resolve_day_filter_bound(value, end_of_day=end_of_day)
+    except InvalidFilterDateError as exc:
+        raise ValidationAPIError(f"{field}: {exc}") from exc
 
 
 @router.get("/overview", response_model=APIResponse[AdminOverviewResponse])
@@ -932,8 +946,14 @@ def list_admin_collections(
     source: Annotated[str | None, Query()] = None,
     method: Annotated[str | None, Query()] = None,
     status: Annotated[str | None, Query()] = None,
-    date_from: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
-    date_to: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
+    date_from: Annotated[
+        str | None,
+        Query(description="Tanzanian calendar date (YYYY-MM-DD) or an ISO timestamp, inclusive"),
+    ] = None,
+    date_to: Annotated[
+        str | None,
+        Query(description="Tanzanian calendar date (YYYY-MM-DD) or an ISO timestamp, inclusive"),
+    ] = None,
     customer_phone: Annotated[str | None, Query()] = None,
     merchant_reference: Annotated[str | None, Query()] = None,
     api_key_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -969,9 +989,17 @@ def list_admin_collections(
     if status is not None:
         query = query.eq("status", status)
     if date_from is not None:
-        query = query.gte("created_at", date_from)
+        # Anchored in Dar es Salaam, not read as UTC. A bare "2026-11-22"
+        # used to go straight into the query, where Postgres took it as
+        # midnight UTC - 03:00 local - so every payment taken in the
+        # first three hours of the Tanzanian day fell outside it. That
+        # was 127 real payments on a single day, measured against
+        # production. A full timestamp from the dashboard's own counters
+        # already says which instant it means and passes through
+        # untouched.
+        query = query.gte("created_at", _day_bound(date_from, end_of_day=False, field="date_from"))
     if date_to is not None:
-        query = query.lte("created_at", date_to)
+        query = query.lte("created_at", _day_bound(date_to, end_of_day=True, field="date_to"))
     if customer_phone is not None:
         # Normalised, not compared as text. Numbers are stored
         # canonically as 255… and typed however they were read out, so
@@ -1212,8 +1240,14 @@ def list_admin_transactions(
         str | None,
         Query(description="Customer phone in any format: 0762474101, 255762474101, +255 762 474 101, or the last 6 digits"),
     ] = None,
-    date_from: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
-    date_to: Annotated[str | None, Query(description="ISO timestamp, inclusive")] = None,
+    date_from: Annotated[
+        str | None,
+        Query(description="Tanzanian calendar date (YYYY-MM-DD) or an ISO timestamp, inclusive"),
+    ] = None,
+    date_to: Annotated[
+        str | None,
+        Query(description="Tanzanian calendar date (YYYY-MM-DD) or an ISO timestamp, inclusive"),
+    ] = None,
 ):
     client = get_supabase_admin()
     query = client.table("transactions").select("*", count=LIST_COUNT)
@@ -1246,9 +1280,17 @@ def list_admin_transactions(
     if transaction_id is not None:
         query = query.eq("id", str(transaction_id))
     if date_from is not None:
-        query = query.gte("created_at", date_from)
+        # Anchored in Dar es Salaam, not read as UTC. A bare "2026-11-22"
+        # used to go straight into the query, where Postgres took it as
+        # midnight UTC - 03:00 local - so every payment taken in the
+        # first three hours of the Tanzanian day fell outside it. That
+        # was 127 real payments on a single day, measured against
+        # production. A full timestamp from the dashboard's own counters
+        # already says which instant it means and passes through
+        # untouched.
+        query = query.gte("created_at", _day_bound(date_from, end_of_day=False, field="date_from"))
     if date_to is not None:
-        query = query.lte("created_at", date_to)
+        query = query.lte("created_at", _day_bound(date_to, end_of_day=True, field="date_to"))
     result = query.order("created_at", desc=True).range(pagination.start, pagination.end).execute()
     rows = result.data or []
     merchant_names = batch_merchant_names(client, {r["merchant_id"] for r in rows})

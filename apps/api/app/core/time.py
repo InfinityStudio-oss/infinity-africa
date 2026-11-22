@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -100,3 +101,75 @@ def to_dar_es_salaam(iso_value: str) -> datetime:
     (e.g. the Wallet Ledger Excel export), never for filtering, which
     already happens in UTC via dar_es_salaam_day_bounds_utc."""
     return datetime.fromisoformat(iso_value.replace("Z", "+00:00")).astimezone(_DAR_ES_SALAAM)
+
+
+_PLAIN_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class InvalidFilterDateError(ValueError):
+    """A date/timestamp filter value that cannot be understood."""
+
+
+def resolve_day_filter_bound(value: str, *, end_of_day: bool) -> str:
+    """Normalises a date-or-timestamp filter value to one comparable
+    timestamp, anchored in Africa/Dar_es_Salaam when it is a bare date.
+
+    The Super Admin list endpoints are reached two ways, and both have
+    to keep working:
+
+      - a person picking a day in a date box, which sends "2026-11-22"
+      - the dashboard's own counters, which already send a full
+        "2026-11-22T00:00:00.000+03:00" they converted themselves
+
+    A bare date used to be passed straight into the query, where
+    Postgres read it as midnight UTC. Tanzania is UTC+3, so every
+    payment taken between 00:00 and 03:00 local fell outside the day it
+    belonged to - 127 real payments on one day, measured against
+    production. A timestamp that already carries an offset is returned
+    untouched, because the caller has already said which instant it
+    means.
+
+    `end_of_day` makes a bare date the LAST instant of that Tanzanian
+    day rather than the first, so a range stays inclusive at both ends -
+    "22 Nov to 22 Nov" is a whole day, not an empty instant. The bound
+    is microsecond-precise (…23:59:59.999999), which leaves no gap at
+    the precision Postgres stores, so callers can keep using an
+    inclusive comparison throughout rather than switching operators
+    depending on what shape the value arrived in.
+
+    Raises InvalidFilterDateError for anything unparseable, so a typo
+    becomes a clear 4xx rather than a database error or, worse, a
+    filter that silently matches everything.
+    """
+    text = (value or "").strip()
+    if not text:
+        raise InvalidFilterDateError("must be a date (YYYY-MM-DD) or an ISO timestamp")
+
+    if _PLAIN_DATE.match(text):
+        try:
+            day = date.fromisoformat(text)
+        except ValueError as exc:
+            raise InvalidFilterDateError(
+                f"{text!r} is not a real date"
+            ) from exc
+        if end_of_day:
+            moment = datetime(
+                day.year, day.month, day.day, 23, 59, 59, 999999, tzinfo=_DAR_ES_SALAAM
+            )
+        else:
+            moment = datetime(day.year, day.month, day.day, tzinfo=_DAR_ES_SALAAM)
+        return moment.isoformat()
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise InvalidFilterDateError(
+            "must be a date (YYYY-MM-DD) or an ISO timestamp"
+        ) from exc
+    # A timestamp with no offset is ambiguous, and guessing UTC is how
+    # the three-hour hole appeared in the first place. Read it as local
+    # time, which is what somebody writing a bare timestamp by hand in
+    # Dar es Salaam means.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_DAR_ES_SALAAM)
+    return parsed.isoformat()
