@@ -473,15 +473,34 @@ export async function calculateWithdrawalCharges(input: QuoteWithdrawalChargesIn
 
 // --- Transactions (LIVE) ----------------------------------------------------
 
-export async function listTransactions(search?: string): Promise<Transaction[]> {
+export interface TransactionFilters {
+  search?: string;
+  type?: string;
+  status?: string;
+  /** A Tanzanian calendar date, YYYY-MM-DD, inclusive. The backend
+   * anchors it to midnight in Dar es Salaam, not midnight UTC - the
+   * three-hour difference is 100-odd real payments on a busy day. */
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export async function listTransactions(filters?: string | TransactionFilters): Promise<Transaction[]> {
   // Filtered server-side: this endpoint is paginated, so narrowing the
   // page already fetched would report "not found" for a transaction
   // sitting on page two.
-  const term = search?.trim();
-  const path = term
-    ? `/v1/merchant/transactions?search=${encodeURIComponent(term)}`
-    : "/v1/merchant/transactions";
-  return (await apiGet<Transaction[]>(path)) ?? [];
+  //
+  // A bare string is still accepted, because that is what the topbar
+  // search box passes.
+  const f: TransactionFilters = typeof filters === "string" ? { search: filters } : (filters ?? {});
+  const params = new URLSearchParams();
+  const term = f.search?.trim();
+  if (term) params.set("search", term);
+  if (f.type) params.set("type", f.type);
+  if (f.status) params.set("status", f.status);
+  if (f.dateFrom) params.set("date_from", f.dateFrom);
+  if (f.dateTo) params.set("date_to", f.dateTo);
+  const query = params.toString();
+  return (await apiGet<Transaction[]>(query ? `/v1/merchant/transactions?${query}` : "/v1/merchant/transactions")) ?? [];
 }
 
 // --- API Keys (LIVE) ---------------------------------------------------------

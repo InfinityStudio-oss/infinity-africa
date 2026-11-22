@@ -192,9 +192,155 @@ describe("Merchant portal TransactionsPage", () => {
       const { default: TransactionsPage } = await import("./page");
       render(<TransactionsPage />);
 
-      await waitFor(() => expect(listTransactions).toHaveBeenCalledWith("TXN-FINDME"));
+      await waitFor(() =>
+        expect(listTransactions).toHaveBeenCalledWith(
+          expect.objectContaining({ search: "TXN-FINDME" }),
+        ),
+      );
     } finally {
       searchParams.delete("search");
     }
+  });
+
+  // --- the Type / Status / From / To filters ---------------------------------
+  //
+  // These four were a dropdown each and two date boxes wired to
+  // nothing: no value, no handler, and two hardcoded August dates
+  // sitting in the date inputs as though a range had been chosen. The
+  // page looked filtered and was not, which is worse than having no
+  // filters at all.
+
+  it("sends every filter in the URL to the API, not just the search term", async () => {
+    searchParams.set("type", "disbursement");
+    searchParams.set("status", "failed");
+    searchParams.set("date_from", "2026-11-01");
+    searchParams.set("date_to", "2026-11-22");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      await waitFor(() =>
+        expect(listTransactions).toHaveBeenCalledWith({
+          search: "",
+          type: "disbursement",
+          status: "failed",
+          dateFrom: "2026-11-01",
+          dateTo: "2026-11-22",
+        }),
+      );
+    } finally {
+      searchParams.delete("type");
+      searchParams.delete("status");
+      searchParams.delete("date_from");
+      searchParams.delete("date_to");
+    }
+  });
+
+  it("puts a chosen filter in the URL so the view can be linked to and reloaded", async () => {
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "failed" } });
+
+    expect(push).toHaveBeenCalledWith("/portal/transactions?status=failed");
+  });
+
+  it("keeps the other filters when one of them changes", async () => {
+    // Setting a filter used to be impossible; setting one that silently
+    // dropped the others would be its own kind of wrong.
+    searchParams.set("type", "collection");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      fireEvent.change(screen.getByLabelText("Status"), { target: { value: "failed" } });
+
+      expect(push).toHaveBeenCalledWith("/portal/transactions?type=collection&status=failed");
+    } finally {
+      searchParams.delete("type");
+    }
+  });
+
+  it("removes a filter from the URL when it is set back to All", async () => {
+    searchParams.set("status", "failed");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      fireEvent.change(screen.getByLabelText("Status"), { target: { value: "" } });
+
+      expect(push).toHaveBeenCalledWith("/portal/transactions");
+    } finally {
+      searchParams.delete("status");
+    }
+  });
+
+  it("offers every type the ledger can hold, including payouts", async () => {
+    // The old dropdown offered three of seven. A missing option is a
+    // question the merchant cannot ask, and payouts are live.
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    const options = within(screen.getByLabelText("Type") as HTMLSelectElement)
+      .getAllByRole("option")
+      .map((option) => (option as HTMLOptionElement).value);
+
+    expect(options).toEqual([
+      "",
+      "collection",
+      "disbursement",
+      "payout",
+      "fee",
+      "refund",
+      "reversal",
+      "adjustment",
+    ]);
+  });
+
+  it("does not pre-fill the date boxes with a range nobody chose", async () => {
+    // Two hardcoded August dates used to sit here, so the page claimed
+    // to be showing 1-13 August while showing everything.
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("To") as HTMLInputElement).value).toBe("");
+  });
+
+  it("says the filters are why the table is empty, not that there are no transactions", async () => {
+    // "No transactions yet" when a filter is hiding them tells a
+    // merchant their money is missing.
+    listTransactions.mockResolvedValue([]);
+    searchParams.set("status", "reversed");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      expect(await screen.findByText("No transactions match these filters.")).toBeInTheDocument();
+    } finally {
+      searchParams.delete("status");
+    }
+  });
+
+  it("offers a way back out of a filter that matches nothing", async () => {
+    listTransactions.mockResolvedValue([]);
+    searchParams.set("status", "reversed");
+    try {
+      const { default: TransactionsPage } = await import("./page");
+      render(<TransactionsPage />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Clear filters" }));
+
+      expect(push).toHaveBeenCalledWith("/portal/transactions");
+    } finally {
+      searchParams.delete("status");
+    }
+  });
+
+  it("shows no Clear filters button when nothing is filtered", async () => {
+    const { default: TransactionsPage } = await import("./page");
+    render(<TransactionsPage />);
+
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
   });
 });

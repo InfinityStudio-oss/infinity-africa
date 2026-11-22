@@ -12,6 +12,7 @@ layer (e.g. SQLAlchemy Core against DATABASE_URL) replaces this.
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from supabase import Client
@@ -32,6 +33,8 @@ def list_for_merchant(
     search: tuple[str, str] | None = None,
     search_pattern: tuple[str, str] | None = None,
     id_in: list[str] | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
 ) -> tuple[list[dict], int]:
     """`search` is an optional (column, term) pair matched case-insensitively
     as a substring. Deliberately one column rather than an OR across
@@ -47,6 +50,19 @@ def list_for_merchant(
     typed number would mean one thing on the merchant's screen and
     another on Super Admin's. The caller passes `%878545` instead.
 
+    `created_from` / `created_to` bound created_at. They are UTC
+    datetimes, NOT calendar dates: converting a date a person picked
+    into the right instant depends on which timezone that person is in,
+    which is the caller's business. Use
+    app.core.time.dar_es_salaam_day_bounds_utc to do it - a merchant
+    picking "today" means midnight in Dar es Salaam, and treating that
+    as midnight UTC silently hides every payment taken between 00:00
+    and 03:00 local.
+
+    `created_to` is EXCLUSIVE, which is what that helper returns (00:00
+    on the day after), so the whole final day is included without
+    anyone having to reason about 23:59:59.999.
+
     Applied before the range, so paging reflects the filtered total rather
     than the filtered slice of one page."""
     query = client.table(table).select("*", count="exact").eq("merchant_id", str(merchant_id))
@@ -58,6 +74,12 @@ def list_for_merchant(
     if search_pattern:
         column, pattern = search_pattern
         query = query.ilike(column, pattern)
+    if created_from is not None:
+        query = query.gte("created_at", created_from.isoformat())
+    if created_to is not None:
+        # Exclusive. See the docstring: the bound is 00:00 of the day
+        # after, so "to 22 Nov" includes all of 22 Nov in EAT.
+        query = query.lt("created_at", created_to.isoformat())
     if id_in is not None:
         # An explicit, possibly EMPTY, set of ids to restrict to - how a
         # phone-number search narrows transactions to the collections

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { TRANSACTION_STATUS_LABELS, TransactionStatus } from "@infinity/shared";
 
 import { Card, tdClass, thClass } from "@/components/portal/card";
 import { Icon } from "@/components/portal/icon";
@@ -12,6 +13,10 @@ import { formatCurrency, formatDateTime } from "@/lib/format";
 import { listMyRiskAlerts, listTransactions } from "@/lib/portal/api";
 import { transactionStatusBadge, transactionTypeBadge } from "@/lib/portal/status-tones";
 import type { Transaction } from "@/lib/portal/types";
+
+/** Shared by the four filter controls so they stay visually identical. */
+const FILTER_CLASS =
+  "w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary";
 
 const OPEN_ALERT_STATUSES = new Set(["OPEN", "UNDER_REVIEW", "DOCUMENTS_REQUESTED", "ESCALATED"]);
 
@@ -78,12 +83,29 @@ export default function TransactionsPage() {
   // Set by the topbar search box, which navigates here with the term
   // rather than filtering rows this page already holds — the endpoint is
   // paginated, so that would miss anything past the first page.
-  const search = useSearchParams().get("search") ?? "";
+  const params = useSearchParams();
+  const search = params.get("search") ?? "";
+  const type = params.get("type") ?? "";
+  const status = params.get("status") ?? "";
+  const dateFrom = params.get("date_from") ?? "";
+  const dateTo = params.get("date_to") ?? "";
   const router = useRouter();
-  // The URL stays the single source of truth, so this box and the
-  // topbar box cannot disagree about what is being searched.
+  // The URL stays the single source of truth for every filter, so this
+  // box and the topbar box cannot disagree about what is being
+  // searched, and a filtered view can be linked to or reloaded.
   const [searchDraft, setSearchDraft] = useState(search);
   const [loading, setLoading] = useState(true);
+
+  const anyFilter = Boolean(search || type || status || dateFrom || dateTo);
+
+  /** Change one filter, keeping the rest. */
+  function setFilter(key: string, value: string) {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set(key, value);
+    else next.delete(key);
+    const query = next.toString();
+    router.push(query ? `/portal/transactions?${query}` : "/portal/transactions");
+  }
 
   useEffect(() => {
     setSearchDraft(search);
@@ -91,15 +113,21 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     setLoading(true);
-    listTransactions(search)
+    listTransactions({ search, type, status, dateFrom, dateTo })
       .then(setTransactions)
       .finally(() => setLoading(false));
+  }, [search, type, status, dateFrom, dateTo]);
+
+  // Which transactions are under review does not depend on any filter,
+  // so it is fetched once. It used to sit in the effect above, where
+  // every filter change would have re-requested it for no reason.
+  useEffect(() => {
     listMyRiskAlerts().then((alerts) => {
       setFlaggedTransactionIds(
         new Set(alerts.filter((a) => a.transaction_id && OPEN_ALERT_STATUSES.has(a.status)).map((a) => a.transaction_id as string)),
       );
     });
-  }, [search]);
+  }, []);
 
   function handleExportCsv() {
     const blob = new Blob([transactionsToCsv(transactions)], { type: "text/csv;charset=utf-8;" });
@@ -184,32 +212,93 @@ export default function TransactionsPage() {
             />
           </div>
         </form>
+        {anyFilter && (
+          <div className="flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={() => router.push("/portal/transactions")}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Type</label>
-            <select className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
-              <option>All Types</option>
-              <option>Collection</option>
-              <option>Withdrawal</option>
-              <option>Fee</option>
+            <label className="block text-sm font-medium text-on-surface-variant mb-1.5" htmlFor="filter-type">
+              Type
+            </label>
+            {/* Every type the ledger can hold, not the three this
+              * offered before. A missing option is a question the
+              * merchant cannot ask: payouts and refunds exist and were
+              * both unfindable. Withdrawal and Payout are deliberately
+              * separate — one is the merchant moving their own balance,
+              * the other is the Disbursement API. */}
+            <select
+              id="filter-type"
+              className={FILTER_CLASS}
+              value={type}
+              onChange={(event) => setFilter("type", event.target.value)}
+            >
+              <option value="">All Types</option>
+              <option value="collection">Collection</option>
+              <option value="disbursement">Withdrawal</option>
+              <option value="payout">Payout (Disbursement API)</option>
+              <option value="fee">Fee</option>
+              <option value="refund">Refund</option>
+              <option value="reversal">Reversal</option>
+              <option value="adjustment">Adjustment</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-on-surface-variant mb-1.5">Status</label>
-            <select className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm">
-              <option>All Statuses</option>
-              <option>Success</option>
-              <option>Pending</option>
-              <option>Failed</option>
+            <label className="block text-sm font-medium text-on-surface-variant mb-1.5" htmlFor="filter-status">
+              Status
+            </label>
+            {/* Labelled from the shared enum so these cannot drift from
+              * what the backend accepts — "Success" here was not a
+              * value the API has ever known. */}
+            <select
+              id="filter-status"
+              className={FILTER_CLASS}
+              value={status}
+              onChange={(event) => setFilter("status", event.target.value)}
+            >
+              <option value="">All Statuses</option>
+              {Object.values(TransactionStatus).map((value) => (
+                <option key={value} value={value}>
+                  {TRANSACTION_STATUS_LABELS[value]}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-on-surface-variant mb-1.5">From</label>
-            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" type="date" defaultValue="2026-08-01" />
+            <label className="block text-sm font-medium text-on-surface-variant mb-1.5" htmlFor="filter-from">
+              From
+            </label>
+            {/* No default date. The two hardcoded August dates that used
+              * to sit here made the page look filtered to a range
+              * nobody had chosen, while in fact filtering nothing. */}
+            <input
+              id="filter-from"
+              className={FILTER_CLASS}
+              type="date"
+              max={dateTo || undefined}
+              value={dateFrom}
+              onChange={(event) => setFilter("date_from", event.target.value)}
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium text-on-surface-variant mb-1.5">To</label>
-            <input className="w-full px-3.5 py-2.5 bg-surface-container-low border border-surface-container-highest rounded-lg text-sm" type="date" defaultValue="2026-08-13" />
+            <label className="block text-sm font-medium text-on-surface-variant mb-1.5" htmlFor="filter-to">
+              To
+            </label>
+            <input
+              id="filter-to"
+              className={FILTER_CLASS}
+              type="date"
+              min={dateFrom || undefined}
+              value={dateTo}
+              onChange={(event) => setFilter("date_to", event.target.value)}
+            />
           </div>
         </div>
       </Card>
@@ -217,7 +306,7 @@ export default function TransactionsPage() {
       <Card padded={false}>
         <div className="p-5 pb-3">
           <h3 className="text-2xl font-semibold text-on-background">
-            {search ? "Search Results" : "All Transactions"}
+            {anyFilter ? "Filtered Transactions" : "All Transactions"}
           </h3>
         </div>
         <div className="overflow-x-auto">
@@ -251,7 +340,9 @@ export default function TransactionsPage() {
                       ? "Loading…"
                       : search
                         ? `Nothing found for “${search}”. Check the number, or try just the last 6 digits.`
-                        : "No transactions yet."}
+                        : anyFilter
+                          ? "No transactions match these filters."
+                          : "No transactions yet."}
                   </td>
                 </tr>
               )}

@@ -89,6 +89,29 @@ class UserRole(StrEnum):
 MERCHANT_ROLES = (UserRole.MERCHANT_ADMIN, UserRole.MERCHANT_STAFF, UserRole.DEVELOPER)
 
 
+class TransactionType(StrEnum):
+    """What kind of ledger movement a transaction is.
+
+    These MUST stay identical to the transactions_type_check constraint
+    (supabase/migrations/20261116100000_payouts_and_beneficiaries.sql).
+    The in-memory test client does not enforce CHECK constraints, so a
+    value added here and not there passes every test and is rejected by
+    the real database.
+
+    DISBURSEMENT and PAYOUT are different things and both are live: a
+    disbursement is a merchant withdrawing from their own collections
+    balance, a payout is money sent out through the Disbursement API.
+    """
+
+    COLLECTION = "collection"
+    DISBURSEMENT = "disbursement"
+    PAYOUT = "payout"
+    FEE = "fee"
+    REFUND = "refund"
+    REVERSAL = "reversal"
+    ADJUSTMENT = "adjustment"
+
+
 class TransactionStatus(StrEnum):
     """Lifecycle status of any ledger movement."""
 

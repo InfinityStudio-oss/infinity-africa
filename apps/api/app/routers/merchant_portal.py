@@ -20,7 +20,7 @@ import secrets
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -58,7 +58,7 @@ from app.core.pagination import PaginationParams, build_page_meta, pagination_pa
 from app.core.rate_limit import enforce_rate_limit, rate_limit
 from app.core.references import generate_reference
 from app.core.request_ip import client_ip
-from app.core.time import dar_es_salaam_date, utc_now_iso
+from app.core.time import dar_es_salaam_date, dar_es_salaam_day_bounds_utc, utc_now_iso
 from app.database.session import get_supabase_admin
 from app.schemas.api_keys import (
     ApiKeyCreate,
@@ -83,7 +83,13 @@ from app.schemas.disputes import (
     RequestRefundInput,
 )
 from app.schemas.document_requests import DocumentRequestResponse
-from app.schemas.enums import CollectionMethod, DisbursementMethod, UserRole
+from app.schemas.enums import (
+    CollectionMethod,
+    DisbursementMethod,
+    TransactionStatus,
+    TransactionType,
+    UserRole,
+)
 from app.schemas.fraud import FraudAlertResponse
 from app.schemas.invoices import InvoiceItemResponse, InvoiceResponse, InvoiceUpdate
 from app.schemas.ip_allowlist import IpAllowlistCreate, IpAllowlistResponse
@@ -1560,6 +1566,14 @@ def list_my_transactions(
     membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
     search: Annotated[str | None, Query(max_length=100)] = None,
+    type: Annotated[TransactionType | None, Query(description="Ledger movement kind")] = None,
+    status: Annotated[TransactionStatus | None, Query(description="Lifecycle status")] = None,
+    date_from: Annotated[
+        date | None, Query(description="Calendar date in Tanzania (EAT), inclusive")
+    ] = None,
+    date_to: Annotated[
+        date | None, Query(description="Calendar date in Tanzania (EAT), inclusive")
+    ] = None,
 ):
     """One box, two kinds of answer.
 
@@ -1575,7 +1589,22 @@ def list_my_transactions(
 
     Filtered server-side on purpose: this endpoint is paginated, so
     filtering the page the client already holds would report "not
-    found" for a transaction that exists on page two."""
+    found" for a transaction that exists on page two. The same goes for
+    `type`, `status` and the date range - these four were dropdowns on
+    the dashboard that were wired to nothing at all, which is why they
+    arrive here now.
+
+    `type` and `status` are enums, so a value outside them is a 422
+    rather than a filter that silently matches nothing - "no results"
+    and "you asked for something that does not exist" are different
+    answers and a merchant should not have to guess which they got.
+
+    `date_from` / `date_to` are TANZANIAN calendar days, inclusive at
+    both ends. A merchant picking today means midnight where they are,
+    not midnight UTC - three hours earlier - and treating the two as
+    the same hides every payment taken between 00:00 and 03:00 local.
+    This project has already shipped that bug once, on pricing
+    effective dates."""
     client = get_supabase_admin()
     term = (search or "").strip()
 
@@ -1593,6 +1622,14 @@ def list_my_transactions(
         else:
             search_pair = ("reference", term)
 
+    filters: dict[str, Any] = {}
+    if type is not None:
+        filters["type"] = type.value
+    if status is not None:
+        filters["status"] = status.value
+
+    created_from, created_to = dar_es_salaam_day_bounds_utc(date_from, date_to)
+
     rows, total = list_for_merchant(
         client,
         "transactions",
@@ -1600,6 +1637,9 @@ def list_my_transactions(
         pagination=pagination,
         search=search_pair,
         id_in=id_in,
+        filters=filters or None,
+        created_from=created_from,
+        created_to=created_to,
     )
     # One batched lookup for the whole page, not one per row.
     phones = customer_phones_for_collections(client, {r.get("collection_id") for r in rows})
