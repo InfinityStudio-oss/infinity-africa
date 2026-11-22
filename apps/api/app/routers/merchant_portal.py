@@ -196,6 +196,7 @@ from app.services.wallet_push import execute_wallet_push_collection
 from app.services.withdrawal_otp import (
     PAYOUT_FUNDING,
     create_challenge,
+    find_live_challenge,
     get_own_challenge,
     mask_destination,
     mask_email,
@@ -2879,8 +2880,24 @@ def read_my_payout_wallet(
     available, reserved = get_payout_wallet_balances(
         client, merchant_id=membership.merchant_id, currency=currency, environment=resolved
     )
+
+    # A code already sent and still usable. Without this the page cannot
+    # offer the box again after a reload, and the merchant is left with
+    # a valid code in their inbox and nowhere to type it.
+    pending = find_live_challenge(
+        client, merchant_id=membership.merchant_id, purpose=PAYOUT_FUNDING
+    )
+    pending_payload = (pending or {}).get("withdrawal_payload") or {}
+    merchant_row = get_by_id(client, "merchants", membership.merchant_id) or {}
+
     return APIResponse(
         data=MerchantPayoutWalletResponse(
+            pending_funding_challenge_id=(pending or {}).get("id"),
+            pending_funding_masked_email=(
+                mask_email((merchant_row.get("contact_email") or "").strip()) if pending else None
+            ),
+            pending_funding_amount=pending_payload.get("amount") if pending else None,
+            pending_funding_expires_at=(pending or {}).get("expires_at"),
             available=available,
             reserved=reserved,
             currency=currency,

@@ -299,7 +299,19 @@ class _FakeQuery:
         if op == "ilike":
             return self._ilike_matches(row_value, value)
         if op == "is":
-            if str(value) == "null":
+            # Python None and the string "null" mean the same thing here.
+            # postgrest-py renders `.is_(col, None)` as `is.null`, which
+            # was checked against production: on 597 challenge rows,
+            # is_(used_at, None) and is_(used_at, "null") both return
+            # 133, and 133 + 464 not-null = 597.
+            #
+            # The fake only understood the string, so `.is_(col, None)`
+            # matched NOTHING in its null branch and fell through to a
+            # string comparison - which quietly made the filter a no-op
+            # for non-null rows. Every test relying on one was passing
+            # vacuously, including the supersede that is supposed to
+            # leave a merchant exactly one live OTP.
+            if value is None or str(value) == "null":
                 return row_value is None
             if str(value) in ("true", "false"):
                 return bool(row_value) is (str(value) == "true")
@@ -380,8 +392,26 @@ class _FakeQuery:
                 continue
             if kind == "ilike" and not self._ilike_matches(self._value_for(row, column), value):
                 return False
-            if kind == "is" and value == "null" and self._value_for(row, column) is not None:
-                return False
+            if kind == "is":
+                # Python None and the string "null" mean the same thing.
+                # postgrest-py renders `.is_(col, None)` as `is.null`,
+                # confirmed against production: on 597 OTP challenge
+                # rows, is_(used_at, None) and is_(used_at, "null") both
+                # return 133, and 133 + 464 not-null = 597.
+                #
+                # This only honoured the string, so `.is_(col, None)`
+                # was a NO-OP and every caller using it filtered
+                # nothing. That is most of them - including
+                # _supersede_active, whose entire job is to leave a
+                # merchant exactly one live OTP.
+                if value is None or value == "null":
+                    if self._value_for(row, column) is not None:
+                        return False
+                elif value in (True, False, "true", "false"):
+                    if bool(self._value_for(row, column)) is not (value in (True, "true")):
+                        return False
+                elif str(self._value_for(row, column)) != str(value):
+                    return False
             if kind == "in" and str(self._value_for(row, column)) not in [str(v) for v in value]:
                 return False
             if kind in ("gte", "gt", "lte", "lt"):

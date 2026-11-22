@@ -144,3 +144,12 @@ class MerchantPayoutWalletResponse(BaseModel):
     per_payout_limit_tzs: Decimal | None = None
     daily_limit_tzs: Decimal | None = None
     can_fund: bool = False
+    # An outstanding funding code, if one is still usable. The code
+    # itself lives on the server and the box to type it into lived only
+    # in page state, so a reload left a merchant with a valid code in
+    # their inbox and nowhere to put it. This is what lets the page
+    # offer the box again.
+    pending_funding_challenge_id: uuid.UUID | None = None
+    pending_funding_masked_email: str | None = None
+    pending_funding_amount: Decimal | None = None
+    pending_funding_expires_at: datetime | None = None

@@ -697,6 +697,13 @@ export interface PayoutWallet {
   per_payout_limit_tzs: string | null;
   daily_limit_tzs: string | null;
   can_fund: boolean;
+  /** A funding code already emailed and still usable. The code lives on
+   * the server; without this the page cannot offer the box again after
+   * a reload, which is how the first two real funding attempts died. */
+  pending_funding_challenge_id: string | null;
+  pending_funding_masked_email: string | null;
+  pending_funding_amount: string | null;
+  pending_funding_expires_at: string | null;
 }
 
 

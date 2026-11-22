@@ -279,3 +279,36 @@ def _parse_ts(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def find_live_challenge(client: Client, *, merchant_id: uuid.UUID, purpose: str) -> dict | None:
+    """The merchant's outstanding, still-usable challenge for a purpose.
+
+    Exists because a code lives on the SERVER and the box to type it into
+    lived only in React state. A merchant who requested a code and then
+    reloaded the page - or closed the form, or opened their email in the
+    same tab - had a valid code in their inbox and nowhere to put it, and
+    no way to tell that anything was still outstanding. Both of the first
+    real funding attempts died exactly there: emails sent, zero attempts
+    recorded, money never moved.
+
+    Returns None for anything used, locked, or past its expiry, so a dead
+    challenge never resurrects a code box.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (
+        client.table("merchant_withdrawal_otp_challenges")
+        .select("*")
+        .eq("merchant_id", str(merchant_id))
+        .eq("purpose", purpose)
+        .is_("used_at", None)
+        .is_("locked_at", None)
+        .order("created_at", desc=True)
+        .limit(5)
+        .execute()
+    ).data or []
+    for row in rows:
+        expires = _parse_ts(row.get("expires_at"))
+        if expires and expires > now:
+            return row
+    return None

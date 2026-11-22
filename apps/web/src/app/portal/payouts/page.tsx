@@ -89,6 +89,25 @@ export default function PayoutsPage() {
     void load();
   }, [load]);
 
+  // A code can outlive the page that asked for it. If the server still
+  // has one outstanding, offer the box again rather than leaving the
+  // merchant with a valid code in their inbox and nowhere to type it.
+  useEffect(() => {
+    if (!wallet?.pending_funding_challenge_id) return;
+    setFundOpen(true);
+    setFundAmount((current) => current || (wallet.pending_funding_amount ?? ""));
+    setFundChallenge((current) =>
+      current ?? {
+        otp_required: true,
+        challenge_id: wallet.pending_funding_challenge_id!,
+        masked_email: wallet.pending_funding_masked_email ?? "your email",
+        expires_at: wallet.pending_funding_expires_at ?? "",
+        resend_cooldown_seconds: 60,
+        max_attempts: 5,
+      },
+    );
+  }, [wallet]);
+
   async function submitFunding(event: React.FormEvent) {
     event.preventDefault();
     setFundError(null);
