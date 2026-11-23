@@ -136,15 +136,44 @@ WELCOME_TEMPLATE = (
 )
 
 
-def render_welcome() -> str:
+def _with_invite(text: str, community_url: str | None) -> str:
+    """Append the community invitation once, at the very end.
+
+    `community_url` must already be validated
+    (app/services/community_invite.py::community_invite_url); None means
+    no invitation and the message is returned byte-for-byte unchanged.
+
+    Appended, never interleaved: the transactional text before it is
+    never shortened to make room. Measured on 2026-11-23 with the
+    production invite (63 characters, all GSM-7):
+
+      welcome              123 -> 221 characters, 1 -> 2 parts
+      withdrawal_complete  165 -> 263 characters, 2 -> 2 parts
+                           (TZS 999,999,999.99 amounts: 279 of the 306
+                           two parts allow)
+
+    So the invitation doubles the cost of the welcome - once per merchant,
+    ever - and costs the payout confirmation nothing extra.
+    """
+    if not community_url:
+        return text
+    from app.services.community_invite import sms_invite_suffix
+
+    return text + sms_invite_suffix(community_url)
+
+
+def render_welcome(*, community_url: str | None = None) -> str:
     """The welcome message.
 
-    Takes no arguments now. It took `withdrawals_are_free` while it
-    advertised free withdrawals, because telling a merchant something is
-    free when they are charged for it is the one mistake this message
-    must never make. With the claim gone, so is the question.
+    It took `withdrawals_are_free` while it advertised free withdrawals,
+    because telling a merchant something is free when they are charged
+    for it is the one mistake this message must never make. With the
+    claim gone, so is the question.
+
+    `community_url` adds the WhatsApp community invitation. Omitted, the
+    message is exactly what it was before the invitation existed.
     """
-    return WELCOME_TEMPLATE
+    return _with_invite(WELCOME_TEMPLATE, community_url)
 
 
 
@@ -168,6 +197,7 @@ def render_withdrawal_complete(
     fee_amount: Decimal,
     closing_balance: Decimal,
     reference: str,
+    community_url: str | None = None,
 ) -> str:
     """A confirmed payout.
 
@@ -176,12 +206,19 @@ def render_withdrawal_complete(
     wallet for it, reference from the transaction. Nothing is derived
     here, and the fee is rendered rather than assumed - a merchant who
     was charged must never be told the withdrawal was free.
+
+    `community_url` adds the WhatsApp community invitation, after every
+    transaction detail. Only ever passed for a CONFIRMED payout - this
+    template is never rendered for anything else.
     """
-    return WITHDRAWAL_COMPLETE_TEMPLATE.format(
-        amount=format_amount(amount),
-        fee=format_amount(fee_amount),
-        closing_balance=format_amount(closing_balance),
-        reference=reference,
+    return _with_invite(
+        WITHDRAWAL_COMPLETE_TEMPLATE.format(
+            amount=format_amount(amount),
+            fee=format_amount(fee_amount),
+            closing_balance=format_amount(closing_balance),
+            reference=reference,
+        ),
+        community_url,
     )
 
 
