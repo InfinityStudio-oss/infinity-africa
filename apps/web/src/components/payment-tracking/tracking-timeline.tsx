@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Icon } from "@/components/portal/icon";
+import { StatusBadge } from "@/components/portal/status-badge";
 import { formatDateTime } from "@/lib/format";
 import type { PaymentTracking } from "@/lib/portal/types";
 
@@ -14,6 +15,16 @@ import type { PaymentTracking } from "@/lib/portal/types";
  * reading about the merchant's.
  */
 export type TrackingAudience = "merchant" | "admin";
+
+/** Sandbox or Live, only when the record says so. A sandbox payout sits
+ * in the same transaction list as real money, so this badge is the only
+ * thing on screen that tells the two apart. Nothing is rendered when the
+ * environment is not recorded - never a guessed "Live". */
+export function EnvironmentBadge({ environment }: { environment?: string | null }) {
+  if (environment === "sandbox") return <StatusBadge label="Sandbox" tone="pending" />;
+  if (environment === "live") return <StatusBadge label="Live" tone="info" />;
+  return null;
+}
 
 export function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);

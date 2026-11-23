@@ -444,3 +444,117 @@ def test_tracking_is_read_only(fake_client):
     assert after["status"] == before["status"] == "failed"
     assert after["attempts"] == 5
     assert len(fake_client.table("webhook_events")._table.rows) == 1
+
+
+# --- money out: payouts and withdrawals --------------------------------------------
+#
+# A payout's transactions row carries neither its environment nor when it
+# finished, so the panel said "Time not recorded" and could not tell a
+# sandbox test from real money. Both come from the payout row itself.
+
+
+def _payout(fake_client, merchant_id, *, environment, status="successful", completed_at="2026-11-22T13:38:05+00:00"):
+    payout = fake_client.seed(
+        "payouts",
+        {
+            "merchant_id": str(merchant_id),
+            "environment": environment,
+            "status": "completed" if status == "successful" else "failed",
+            "amount": "1000.00",
+            "fee_amount": "10.00",
+            "total_debit": "1010.00",
+            "currency": "TZS",
+            "provider_reference": "PO-4A03D6BEA6A74B1A9219",
+            "completed_at": completed_at,
+        },
+    )
+    transaction = create_transaction(
+        fake_client,
+        merchant_id,
+        type="payout",
+        method="MOBILE_MONEY",
+        payout_id=payout["id"],
+        reference=payout["provider_reference"],
+        status=status,
+        gross_amount="1010.00",
+        fee_amount="10.00",
+        net_amount="1000.00",
+    )
+    return payout, transaction
+
+
+@pytest.mark.parametrize("environment", ["sandbox", "live"])
+def test_a_payout_says_which_environment_it_was_in(fake_client, environment):
+    merchant_id, headers = _merchant(fake_client)
+    _payout_row, transaction = _payout(fake_client, merchant_id, environment=environment)
+
+    data = _tracking(headers, transaction["id"]).json()["data"]
+
+    assert data["environment"] == environment
+
+
+def test_a_successful_payout_shows_when_it_finished(fake_client):
+    merchant_id, headers = _merchant(fake_client)
+    _payout_row, transaction = _payout(fake_client, merchant_id, environment="sandbox")
+
+    steps = _tracking(headers, transaction["id"]).json()["data"]["payment"]
+
+    assert steps[-1]["code"] == "confirmed"
+    assert steps[-1]["at"].startswith("2026-11-22T13:38:05")
+
+
+def test_a_failed_payout_shows_when_it_failed(fake_client):
+    merchant_id, headers = _merchant(fake_client)
+    _payout_row, transaction = _payout(
+        fake_client, merchant_id, environment="live", status="failed", completed_at="2026-11-22T14:00:00+00:00"
+    )
+
+    steps = _tracking(headers, transaction["id"]).json()["data"]["payment"]
+
+    assert steps[-1]["state"] == "failed"
+    assert steps[-1]["at"].startswith("2026-11-22T14:00:00")
+
+
+def test_a_withdrawal_shows_its_completion_time_and_no_guessed_environment(fake_client):
+    merchant_id, headers = _merchant(fake_client)
+    disbursement = fake_client.seed(
+        "disbursements",
+        {
+            "merchant_id": str(merchant_id),
+            "amount": "5000.00",
+            "currency": "TZS",
+            "status": "SUCCESS",
+            "completed_at": "2026-11-20T09:15:00+00:00",
+        },
+    )
+    transaction = create_transaction(
+        fake_client, merchant_id, type="disbursement", method="MOBILE_MONEY", disbursement_id=disbursement["id"]
+    )
+
+    data = _tracking(headers, transaction["id"]).json()["data"]
+
+    assert data["payment"][-1]["at"].startswith("2026-11-20T09:15:00")
+    assert data["environment"] is None
+
+
+def test_a_payout_wallet_top_up_has_no_environment_or_time_invented(fake_client):
+    """A top-up carries no environment anywhere, so none is claimed."""
+    merchant_id, headers = _merchant(fake_client)
+    transaction = create_transaction(fake_client, merchant_id, type="adjustment", method="MOBILE_MONEY")
+
+    data = _tracking(headers, transaction["id"]).json()["data"]
+
+    assert data["environment"] is None
+    assert data["payment"][-1]["at"] is None
+
+
+def test_another_merchants_payout_row_is_never_read(fake_client):
+    merchant_id, headers = _merchant(fake_client)
+    other_id, _ = _merchant(fake_client)
+    their_payout, _their_txn = _payout(fake_client, other_id, environment="sandbox")
+    transaction = create_transaction(fake_client, merchant_id, type="payout", payout_id=their_payout["id"])
+
+    data = _tracking(headers, transaction["id"]).json()["data"]
+
+    assert data["environment"] is None
+    assert data["payment"][-1]["at"] is None

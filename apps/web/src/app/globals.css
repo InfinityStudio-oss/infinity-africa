@@ -331,6 +331,18 @@ body {
   }
 }
 
+/* Slide-over panels (transaction detail, payment tracking) are SOLID.
+   `bg-surface` is the translucent panel colour inside the shells, meant
+   for cards that also blur what is behind them; a drawer has no blur, so
+   the table underneath showed straight through it and its text sat on
+   top of rows of other figures. The composited solid is the colour a
+   card already appears to be, so the drawer still matches the cards.
+   Outside the shells it falls back to the ordinary surface colour. */
+.app-drawer-surface {
+  background-color: var(--panel-surface-solid, var(--color-surface));
+  color: var(--panel-ink, var(--color-on-surface));
+}
+
 /* Light ink for content sitting on the page rather than on a panel.
    Redefined here because the page is darker than the old gradient, so
    the muted step can afford to be dimmer and still clear AA: #cfe6f0 is

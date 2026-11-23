@@ -86,16 +86,62 @@ def _step(code: str, label: str, state: str, at: Any = None, detail: str | None 
     return {"code": code, "label": label, "state": state, "at": _iso(at), "detail": detail}
 
 
-def _payment_steps(collection: dict | None, transaction: dict) -> list[dict]:
+def _money_out_source(client: Client, transaction: dict) -> dict | None:
+    """The payout or withdrawal row behind a money-out transaction, pinned
+    to the transaction's own merchant. None for anything else, including
+    a payout-wallet top-up, which has no source row of its own.
+
+    Read for two facts the ledger row does not carry: when the provider
+    outcome was recorded (completed_at) and, for a payout, whether it was
+    sandbox or live."""
+    for column, table in (("payout_id", "payouts"), ("disbursement_id", "disbursements")):
+        source_id = transaction.get(column)
+        if not source_id:
+            continue
+        try:
+            row = get_by_id(client, table, uuid.UUID(str(source_id)))
+        except Exception:  # supplementary, never takes the panel down
+            logger.warning("payment_tracking_source_unavailable table=%s", table, exc_info=True)
+            return None
+        if row and str(row.get("merchant_id")) == str(transaction["merchant_id"]):
+            return {**row, "_table": table}
+        return None
+    return None
+
+
+def _environment(source: dict | None) -> str | None:
+    """sandbox / live, only where a row actually records it.
+
+    Only payouts carry an environment. The transactions table has none,
+    so a sandbox payout sits in the same ledger as live money and, until
+    this, nothing on screen said which it was. A withdrawal or a payout-
+    wallet top-up has no recorded environment and gets None - shown as no
+    badge, never as a guess."""
+    if source and source.get("_table") == "payouts":
+        env = source.get("environment")
+        return env if env in ("sandbox", "live") else None
+    return None
+
+
+def _payment_steps(collection: dict | None, transaction: dict, source: dict | None = None) -> list[dict]:
     if collection is None:
-        # A withdrawal, fee or adjustment: no customer payment behind it,
-        # so the ledger row is the only evidence there is.
+        # A withdrawal, payout, fee or adjustment: no customer payment
+        # behind it. The ledger row, and the payout or withdrawal row it
+        # points at, are the evidence there is.
         status = transaction.get("status")
+        finished_at = source.get("completed_at") if source else None
         steps = [_step("initiated", "Transaction recorded", "done", transaction.get("created_at"))]
         if status == "successful":
-            steps.append(_step("confirmed", "Transaction successful", "done"))
+            steps.append(_step("confirmed", "Transaction successful", "done", finished_at))
         elif status in ("failed", "cancelled", "reversed"):
-            steps.append(_step(status, f"Transaction {status}", "failed"))
+            steps.append(
+                _step(
+                    status,
+                    f"Transaction {status}",
+                    "failed",
+                    finished_at if source and source.get("_table") == "payouts" else None,
+                )
+            )
         else:
             steps.append(_step("awaiting", "Awaiting confirmation", "waiting"))
         return steps
@@ -221,6 +267,8 @@ def build_payment_tracking(client: Client, *, transaction: dict) -> dict:
         if row and str(row.get("merchant_id")) == merchant_id:
             collection = row
 
+    source = None if collection is not None else _money_out_source(client, transaction)
+
     deliveries: list[dict] = []
     deliveries_available = True
     webhook_configured = False
@@ -233,6 +281,7 @@ def build_payment_tracking(client: Client, *, transaction: dict) -> dict:
 
     return {
         "transaction_id": str(transaction["id"]),
+        "environment": _environment(source),
         "identifiers": {
             # The one value to share with a billing system.
             "payment_id": str(collection["id"]) if collection else None,
@@ -241,7 +290,7 @@ def build_payment_tracking(client: Client, *, transaction: dict) -> dict:
             "provider_reference": transaction.get("provider_reference")
             or (collection.get("provider_reference") if collection else None),
         },
-        "payment": _payment_steps(collection, transaction),
+        "payment": _payment_steps(collection, transaction, source),
         "webhooks": {
             # Webhook delivery is only tracked for customer payments;
             # withdrawal events are not linked to a payment id.

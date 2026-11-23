@@ -160,4 +160,41 @@ describe("TransactionDetailDrawer tracking", () => {
     const dialog = screen.getByRole("dialog", { name: "Transaction detail" });
     expect(within(dialog).queryByRole("button", { name: /retry|resend|replay/i })).not.toBeInTheDocument();
   });
+
+  it("is a solid panel, not the translucent card colour the table shows through", async () => {
+    getTransactionTracking.mockResolvedValue({ data: tracking(), error: null, noAccess: false });
+    await renderDrawer();
+
+    const dialog = screen.getByRole("dialog", { name: "Transaction detail" });
+    expect(dialog.className).toContain("app-drawer-surface");
+    expect(dialog.className).not.toMatch(/bg-surface/);
+  });
+
+  it("marks a sandbox payout as sandbox and says no real money moved", async () => {
+    getTransactionTracking.mockResolvedValue({
+      data: tracking({ environment: "sandbox" }),
+      error: null,
+      noAccess: false,
+    });
+    await renderDrawer();
+
+    expect(screen.getByText("Sandbox")).toBeInTheDocument();
+    expect(screen.getByText(/No real money moved/)).toBeInTheDocument();
+  });
+
+  it("marks a live payout as live", async () => {
+    getTransactionTracking.mockResolvedValue({ data: tracking({ environment: "live" }), error: null, noAccess: false });
+    await renderDrawer();
+
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.queryByText("Sandbox")).not.toBeInTheDocument();
+  });
+
+  it("claims no environment when none is recorded", async () => {
+    getTransactionTracking.mockResolvedValue({ data: tracking({ environment: null }), error: null, noAccess: false });
+    await renderDrawer();
+
+    expect(screen.queryByText("Live")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sandbox")).not.toBeInTheDocument();
+  });
 });

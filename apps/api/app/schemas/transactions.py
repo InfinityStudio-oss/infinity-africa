@@ -100,6 +100,9 @@ class ServiceActivation(BaseModel):
 
 class PaymentTrackingResponse(BaseModel):
     transaction_id: str
+    # "sandbox" / "live" where a row records it - today only payouts.
+    # None means not recorded, never "live by default".
+    environment: str | None = None
     identifiers: PaymentTrackingIdentifiers
     payment: list[PaymentTrackingStep]
     webhooks: PaymentTrackingWebhooks

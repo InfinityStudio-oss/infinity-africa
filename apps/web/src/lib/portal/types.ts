@@ -275,6 +275,9 @@ export interface Transaction {
  * "confirmed"). */
 export interface PaymentTracking {
   transaction_id: string;
+  /** "sandbox" / "live" where a row records it - today only payouts.
+   * Null means not recorded: show nothing, never assume live. */
+  environment?: "sandbox" | "live" | null;
   identifiers: {
     /** InfinityPay's payment id - `collection_id` in the Collections API
      * and every collection.* webhook. The value to share with a billing

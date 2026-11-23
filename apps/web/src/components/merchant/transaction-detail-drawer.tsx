@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Reference, TrackingTimeline } from "@/components/payment-tracking/tracking-timeline";
+import { EnvironmentBadge, Reference, TrackingTimeline } from "@/components/payment-tracking/tracking-timeline";
 import { Icon } from "@/components/portal/icon";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -69,9 +69,9 @@ export function TransactionDetailDrawer({
       <div
         role="dialog"
         aria-label="Transaction detail"
-        className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] bg-surface shadow-ambient-lg overflow-y-auto"
+        className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] app-drawer-surface shadow-ambient-lg overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-container-highest sticky top-0 bg-surface z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-container-highest sticky top-0 app-drawer-surface z-10">
           <h3 className="text-lg font-semibold text-on-background">Transaction Detail</h3>
           <button
             type="button"
@@ -87,7 +87,13 @@ export function TransactionDetailDrawer({
           <div className="flex items-center gap-2.5">
             <StatusBadge {...transactionTypeBadge(transaction.type)} />
             <StatusBadge {...transactionStatusBadge(transaction.status)} />
+            <EnvironmentBadge environment={tracking?.environment} />
           </div>
+          {tracking?.environment === "sandbox" && (
+            <p className="text-sm text-on-surface-variant">
+              Sandbox payout: simulated with test money. No real money moved.
+            </p>
+          )}
 
           {transaction.collection_id && (
             <div>

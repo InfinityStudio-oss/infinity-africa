@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Reference, TrackingTimeline } from "@/components/payment-tracking/tracking-timeline";
+import { EnvironmentBadge, Reference, TrackingTimeline } from "@/components/payment-tracking/tracking-timeline";
 import { Icon } from "@/components/portal/icon";
 import { getAdminTransactionTrackingClient } from "@/lib/admin/transaction-tracking-client";
 import type { AdminTransactionRow } from "@/lib/admin/types";
@@ -45,9 +45,9 @@ export function TransactionTrackingDrawer({
       <div
         role="dialog"
         aria-label="Payment tracking"
-        className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] bg-surface shadow-ambient-lg overflow-y-auto"
+        className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] app-drawer-surface shadow-ambient-lg overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-container-highest sticky top-0 bg-surface z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-container-highest sticky top-0 app-drawer-surface z-10">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-on-background">Payment tracking</h3>
             <p className="text-xs text-on-surface-variant truncate">
@@ -65,6 +65,14 @@ export function TransactionTrackingDrawer({
           </button>
         </div>
         <div className="p-5 space-y-6">
+          {tracking?.environment && (
+            <div className="flex items-center gap-2">
+              <EnvironmentBadge environment={tracking.environment} />
+              {tracking.environment === "sandbox" && (
+                <span className="text-sm text-on-surface-variant">Simulated - no real money moved.</span>
+              )}
+            </div>
+          )}
           <div>
             <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">References</p>
             <Reference
