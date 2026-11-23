@@ -25,6 +25,11 @@ from supabase import Client
 
 from app.config import get_settings
 from app.core.errors import EmailDeliveryError
+from app.services.community_invite import (
+    community_invite_url,
+    email_invite_html,
+    email_invite_text,
+)
 from app.services.crud import execute_maybe_single, insert_row
 from app.services.merchant_notifications import (
     get_notification_settings,
@@ -43,6 +48,7 @@ def send_email(
     sender: str,
     reply_to: str | None = None,
     attachments: list[tuple[str, bytes]] | None = None,
+    text: str | None = None,
 ) -> str:
     """Sends one email through Resend. Returns the provider's message id
     (empty string if Resend didn't return one). Raises EmailDeliveryError
@@ -53,7 +59,11 @@ def send_email(
 
     `attachments` is a list of (filename, raw bytes); this base64-encodes
     them for Resend. Resend caps a message at 40MB total, so callers that
-    can produce something large must bound it themselves."""
+    can produce something large must bound it themselves.
+
+    `text` is the plain-text alternative part. Optional, so every existing
+    caller sends exactly what it sent before; when given, a client that
+    cannot or will not render HTML shows this instead."""
     settings = get_settings()
     if not settings.resend_api_key:
         raise EmailDeliveryError("Email delivery is not configured yet.")
@@ -65,6 +75,8 @@ def send_email(
     params: dict[str, Any] = {"from": sender, "to": recipients, "subject": subject, "html": html}
     if reply_to:
         params["reply_to"] = reply_to
+    if text:
+        params["text"] = text
     if attachments:
         # Resend takes attachment content base64-encoded. Passed as
         # (filename, bytes) so callers never have to know that.
@@ -844,6 +856,11 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
     merchant_code = merchant.get("merchant_code")
     subject = "Your InfinityPay account has been approved"
     sender = settings.email_from
+    # After approval has committed - this function is only called from
+    # the end of approve_onboarding_submission. Sent to the same one
+    # recipient as before (the business's contact_email); nobody else is
+    # added to receive the invitation.
+    community_url = community_invite_url()
 
     services_list = "".join(
         f'<li style="margin:0 0 6px;font-size:14px;color:#374151;">{service}</li>' for service in _WELCOME_SERVICES
@@ -869,11 +886,21 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
       {services_list}
     </ul>
     {_cta_button(portal_url, "Open Merchant Portal")}
+    {email_invite_html(community_url, ink=_BRAND_INK) if community_url else ""}
     """
     html = _email_shell(body_html=body)
+    text = _welcome_text(
+        business_name=business_name,
+        merchant_code=merchant_code,
+        portal_url=portal_url,
+        community_url=community_url,
+        reply_to=settings.email_reply_to,
+    )
 
     try:
-        message_id = send_email(to=recipient, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to)
+        message_id = send_email(
+            to=recipient, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to, text=text
+        )
     except EmailDeliveryError as exc:
         _log_delivery(
             client,
@@ -901,6 +928,33 @@ def send_merchant_welcome_email(client: Client, *, merchant: dict, portal_url: s
         status="sent",
         provider_message_id=message_id or None,
     )
+
+
+def _welcome_text(
+    *,
+    business_name: str,
+    merchant_code: str | None,
+    portal_url: str,
+    community_url: str | None,
+    reply_to: str,
+) -> str:
+    """Plain-text alternative of the welcome email: the same content as
+    the HTML, nothing more, so neither part says something the other
+    does not."""
+    lines = [
+        f"Welcome to InfinityPay, {business_name}!",
+        "",
+        "Your account is approved and ready to go.",
+    ]
+    if merchant_code:
+        lines.append(f"Your Merchant ID: {merchant_code}")
+    lines += ["", "With InfinityPay you can:"]
+    lines += [f"- {service}" for service in _WELCOME_SERVICES]
+    lines += ["", f"Open Merchant Portal: {portal_url}"]
+    if community_url:
+        lines += ["", email_invite_text(community_url)]
+    lines += ["", f"Need help? Reach us at {reply_to}.", "", "Powered by InfinityPay"]
+    return "\n".join(lines)
 
 
 # --- 6b. New merchant signup notification (to CEO) ------------------------------
@@ -1324,6 +1378,34 @@ def send_daily_collection_summary_email(
 # --- 8. Withdrawal success (to merchant) ----------------------------------------
 
 
+def _withdrawal_success_already_sent(client: Client, *, disbursement_id: object) -> bool:
+    """Whether a confirmation for this withdrawal has already gone out.
+
+    Only a `sent` row counts: a `failed` attempt never reached the
+    merchant, so a later success path is still allowed to try. Never
+    raises - if the check itself fails, sending is the safer mistake for
+    a confirmation the merchant is owed.
+    """
+    if not disbursement_id:
+        return False
+    try:
+        rows = (
+            client.table("email_deliveries")
+            .select("id")
+            .eq("email_type", "withdrawal_success")
+            .eq("related_resource_type", "disbursement")
+            .eq("related_resource_id", str(disbursement_id))
+            .eq("status", "sent")
+            .limit(1)
+            .execute()
+            .data
+        ) or []
+    except Exception:  # noqa: BLE001
+        logger.warning("withdrawal_success_dedupe_check_failed disbursement_id=%s", disbursement_id)
+        return False
+    return bool(rows)
+
+
 def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursement: dict) -> dict | None:
     """Best-effort — never raises. Call only once a disbursement has
     genuinely reached its terminal SUCCESS status — both places that
@@ -1344,11 +1426,32 @@ def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursemen
     if not recipient:
         return None
 
+    # The subject line says "successful", so the status is checked here
+    # as well as at both call sites. Anything that is not a confirmed
+    # SUCCESS - pending, approved, processing, timed out, needs
+    # reconciliation, failed - gets no success email and no invitation.
+    if str(disbursement.get("status") or "") != "SUCCESS":
+        logger.warning(
+            "withdrawal_success_email_refused status=%s disbursement_id=%s",
+            disbursement.get("status"),
+            disbursement.get("id"),
+        )
+        return None
+
+    # One confirmation per withdrawal. A provider callback and the
+    # reconciliation sweep can both reach the SUCCESS branch for the same
+    # payout; the SMS is protected by a unique index, and this is the
+    # email's equivalent - the same check send_merchant_collection_
+    # notification_email makes against email_deliveries.
+    if _withdrawal_success_already_sent(client, disbursement_id=disbursement.get("id")):
+        return None
+
     settings = get_settings()
     business_name = merchant.get("business_name") or "there"
     merchant_code = merchant.get("merchant_code")
     amount = disbursement.get("amount")
     currency = disbursement.get("currency") or "TZS"
+    community_url = community_invite_url()
     subject = "Your InfinityPay withdrawal is successful"
     sender = settings.email_from
     portal_url = f"{settings.app_url}/merchant/withdrawals"
@@ -1389,11 +1492,28 @@ def send_withdrawal_success_email(client: Client, *, merchant: dict, disbursemen
       {rows_html}
     </table>
     {_cta_button(portal_url, "View Merchant Portal")}
+    {email_invite_html(community_url, ink=_BRAND_INK) if community_url else ""}
     """
     html = _email_shell(body_html=body)
+    text_lines = [
+        "Your withdrawal is successful",
+        "",
+        f"Hi {business_name}, your withdrawal has been completed.",
+        "",
+        f"Amount: {_money(amount, currency)}",
+        *(f"{label}: {value}" for label, value in rows if value),
+        "",
+        f"View Merchant Portal: {portal_url}",
+    ]
+    if community_url:
+        text_lines += ["", email_invite_text(community_url)]
+    text_lines += ["", f"Need help? Reach us at {settings.email_reply_to}.", "", "Powered by InfinityPay"]
+    text = "\n".join(text_lines)
 
     try:
-        message_id = send_email(to=recipient, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to)
+        message_id = send_email(
+            to=recipient, subject=subject, html=html, sender=sender, reply_to=settings.email_reply_to, text=text
+        )
     except EmailDeliveryError as exc:
         _log_delivery(
             client,

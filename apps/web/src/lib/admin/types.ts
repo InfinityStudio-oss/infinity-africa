@@ -534,7 +534,7 @@ export interface AdminTransactionRow {
   merchant_id: string;
   merchant_name: string;
   merchant_code: string | null;
-  type: "collection" | "disbursement" | "fee" | "refund" | "reversal" | "adjustment";
+  type: "collection" | "disbursement" | "payout" | "fee" | "refund" | "reversal" | "adjustment";
   reference: string;
   provider_reference: string | null;
   method: string;
@@ -553,6 +553,9 @@ export interface AdminTransactionRow {
    * transaction belongs to. Null for anything that is not a collection,
    * and for a collection with no number recorded. */
   customer_phone: string | null;
+  /** InfinityPay's payment id (collections.id) - the `collection_id` a
+   * billing integration holds. Null for anything that is not a payment. */
+  collection_id?: string | null;
   created_at: string;
 }
 

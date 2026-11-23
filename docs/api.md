@@ -290,8 +290,9 @@ wrappers, no reimplemented logic) — see `app/routers/merchant_portal.py`.
 | POST | `/v1/merchant/collections/{ussd-push,stk-push,selcom-pesa-push,dynamic-qr}` | MERCHANT_ADMIN, MERCHANT_STAFF | `Idempotency-Key` required |
 | GET | `/v1/merchant/withdrawals` | MERCHANT_ADMIN, MERCHANT_STAFF | "Withdrawal" is the same thing as "disbursement" everywhere else — user-facing naming only |
 | POST | `/v1/merchant/withdrawals` | **MERCHANT_ADMIN only** | Deliberately stricter than `/v1/disbursements/{method}` (which also allows MERCHANT_STAFF) — single endpoint, `method` in the body, `Idempotency-Key` required |
-| GET | `/v1/merchant/transactions` | MERCHANT_ADMIN, MERCHANT_STAFF | |
+| GET | `/v1/merchant/transactions` | MERCHANT_ADMIN, MERCHANT_STAFF | Paginated (`page`, `page_size` ≤ 100; `meta.total` is over the filtered set). Filters, all applied before paging: `status` (`pending` `processing` `successful` `failed` `reversed` `cancelled`), `type`, `date_from`/`date_to` (Tanzanian days, inclusive), `method`, `search` (phone, reference substring, or an exact InfinityPay Payment ID / transaction UUID) |
 | GET | `/v1/merchant/transactions/{reference}` | MERCHANT_ADMIN, MERCHANT_STAFF | By the human-readable reference (`TXN-...`), not the internal UUID — new, doesn't exist on the `/v1/merchants/{id}/transactions/*` routes |
+| GET | `/v1/merchant/transactions/{transaction_id}/tracking` | MERCHANT_ADMIN, MERCHANT_STAFF | Payment, webhook delivery and service-activation timeline for one of the caller's own transactions. Read-only. See [`payment-tracking.md`](payment-tracking.md) |
 | GET/POST | `/v1/merchant/api-keys` | MERCHANT_ADMIN, DEVELOPER | |
 | PATCH | `/v1/merchant/api-keys/{id}/revoke` | MERCHANT_ADMIN, DEVELOPER | Same effect as the existing `DELETE`, new verb/path |
 | GET | `/v1/merchant/users/me` | any member | Own `merchant_users` row + `full_name`/`email` joined from Supabase Auth — what the portal topbar reads |

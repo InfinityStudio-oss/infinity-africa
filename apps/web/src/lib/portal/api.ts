@@ -41,6 +41,7 @@ import type {
   NotificationSettings,
   PayByLink,
   PaymentLink,
+  PaymentTracking,
   Refund,
   SupportTicket,
   Transaction,
@@ -482,6 +483,110 @@ export interface TransactionFilters {
    * three-hour difference is 100-odd real payments on a busy day. */
   dateFrom?: string;
   dateTo?: string;
+  /** Payment method as stored (e.g. MOBILE_MONEY) - what the Overview
+   * chart's legend links to. */
+  method?: string;
+}
+
+function transactionQuery(f: TransactionFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  const term = f.search?.trim();
+  if (term) params.set("search", term);
+  if (f.type) params.set("type", f.type);
+  if (f.status) params.set("status", f.status);
+  if (f.dateFrom) params.set("date_from", f.dateFrom);
+  if (f.dateTo) params.set("date_to", f.dateTo);
+  if (f.method) params.set("method", f.method);
+  return params;
+}
+
+export interface TransactionPage {
+  rows: Transaction[];
+  /** Every row the filters match, across all pages - computed by the
+   * API over the same filtered query the page was cut from. */
+  total: number;
+  totalPages: number;
+  /** Set when the request failed. The caller must show this rather than
+   * an empty table: "nothing matched" and "it did not load" are
+   * different answers about a merchant's money. */
+  error: string | null;
+}
+
+/** One page of the filtered ledger, with the paging meta and the error
+ * that listTransactions throws away.
+ *
+ * listTransactions turns every failure into [], which is how a filter
+ * that failed to load read as "No transactions match these filters" -
+ * the merchant was told nothing was Successful when the request had
+ * simply not worked. It also only ever fetched page 1. */
+export async function readTransactionsPage(
+  filters: TransactionFilters,
+  { page = 1, pageSize = 50 }: { page?: number; pageSize?: number } = {},
+): Promise<TransactionPage> {
+  const params = transactionQuery(filters);
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/v1/merchant/transactions?${params.toString()}`, {
+      headers: await getAuthHeader(),
+      cache: "no-store",
+    });
+  } catch {
+    return { rows: [], total: 0, totalPages: 0, error: "Couldn't reach InfinityPay. Check your connection and try again." };
+  }
+  let body: ApiEnvelope<Transaction[]> | null = null;
+  try {
+    body = (await res.json()) as ApiEnvelope<Transaction[]>;
+  } catch {
+    body = null;
+  }
+  if (!res.ok || !body?.success) {
+    const message =
+      res.status === 422
+        ? "One of these filters isn't valid. Clear filters and choose again."
+        : (body?.error?.message ?? `Transactions could not be loaded (HTTP ${res.status}).`);
+    return { rows: [], total: 0, totalPages: 0, error: message };
+  }
+  const rows = body.data ?? [];
+  return {
+    rows,
+    total: body.meta?.total ?? rows.length,
+    totalPages: body.meta?.total_pages ?? (rows.length ? 1 : 0),
+    error: null,
+  };
+}
+
+/** Rows the CSV export will fetch at most. Past this the export says it
+ * is partial rather than quietly stopping. */
+export const TRANSACTION_EXPORT_LIMIT = 10_000;
+
+/** Every row the current filters match, for the CSV export - the same
+ * filters as the table, every page, not just the one on screen.
+ *
+ * Pages are fetched one after another, in order, so the file is newest
+ * first like the table. Any page failing fails the whole export: a CSV
+ * that silently lacks a page is worse than none. */
+export async function fetchAllTransactionsForExport(
+  filters: TransactionFilters,
+): Promise<{ rows: Transaction[]; total: number; truncated: boolean; error: string | null }> {
+  const pageSize = 100;
+  const rows: Transaction[] = [];
+  let total = 0;
+  for (let page = 1; rows.length < TRANSACTION_EXPORT_LIMIT; page += 1) {
+    const result = await readTransactionsPage(filters, { page, pageSize });
+    if (result.error) return { rows: [], total: 0, truncated: false, error: result.error };
+    total = result.total;
+    rows.push(...result.rows);
+    if (result.rows.length < pageSize || page >= result.totalPages) break;
+  }
+  const exported = rows.slice(0, TRANSACTION_EXPORT_LIMIT);
+  return { rows: exported, total, truncated: total > exported.length, error: null };
+}
+
+/** The payment / webhook / activation timeline for one transaction. */
+export async function getTransactionTracking(transactionId: string): Promise<ApiReadResult<PaymentTracking>> {
+  return apiRead<PaymentTracking>(`/v1/merchant/transactions/${encodeURIComponent(transactionId)}/tracking`);
 }
 
 export async function listTransactions(filters?: string | TransactionFilters): Promise<Transaction[]> {
@@ -492,14 +597,7 @@ export async function listTransactions(filters?: string | TransactionFilters): P
   // A bare string is still accepted, because that is what the topbar
   // search box passes.
   const f: TransactionFilters = typeof filters === "string" ? { search: filters } : (filters ?? {});
-  const params = new URLSearchParams();
-  const term = f.search?.trim();
-  if (term) params.set("search", term);
-  if (f.type) params.set("type", f.type);
-  if (f.status) params.set("status", f.status);
-  if (f.dateFrom) params.set("date_from", f.dateFrom);
-  if (f.dateTo) params.set("date_to", f.dateTo);
-  const query = params.toString();
+  const query = transactionQuery(f).toString();
   return (await apiGet<Transaction[]>(query ? `/v1/merchant/transactions?${query}` : "/v1/merchant/transactions")) ?? [];
 }
 

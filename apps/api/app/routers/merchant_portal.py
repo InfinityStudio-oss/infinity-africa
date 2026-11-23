@@ -126,7 +126,7 @@ from app.schemas.payouts import (
 from app.schemas.referrals import MerchantReferralSummaryResponse
 from app.schemas.refunds import RefundResponse
 from app.schemas.reports import ReportRequest, ReportResponse
-from app.schemas.transactions import TransactionResponse
+from app.schemas.transactions import PaymentTrackingResponse, TransactionResponse
 from app.schemas.withdrawals import (
     FeeBreakdown,
     RecipientLookupRequest,
@@ -190,6 +190,7 @@ from app.services.payment_links import (
     validate_payment_link_for_collection,
     with_effective_status,
 )
+from app.services.payment_tracking import build_payment_tracking
 from app.services.payouts import (
     PayoutSettings,
     assert_payout_allowed,
@@ -1574,8 +1575,22 @@ def list_my_transactions(
     date_to: Annotated[
         date | None, Query(description="Calendar date in Tanzania (EAT), inclusive")
     ] = None,
+    method: Annotated[
+        str | None,
+        Query(
+            max_length=40,
+            pattern=r"^[A-Z0-9_]+$",
+            description="Payment method as stored, e.g. MOBILE_MONEY - what the Overview chart links to",
+        ),
+    ] = None,
 ):
-    """One box, two kinds of answer.
+    """One box, three kinds of answer.
+
+    A full UUID is InfinityPay's payment id (`collection_id`, the value
+    the Collections API and every collection.* webhook already hand a
+    billing system) or a transaction id, matched exactly. Checked before
+    the phone case on purpose: a UUID that happens to be all digits and
+    dashes also "looks like" a phone number.
 
     A term that is digits - 0762474101, 255762474101, +255 762 474 101,
     or just the last six - is treated as the CUSTOMER'S PHONE and
@@ -1611,7 +1626,10 @@ def list_my_transactions(
     search_pair = None
     id_in = None
     if term:
-        if looks_like_phone(term):
+        as_uuid = _as_uuid(term)
+        if as_uuid is not None:
+            id_in = _transaction_ids_for_uuid(client, membership.merchant_id, as_uuid)
+        elif looks_like_phone(term):
             collection_ids = collection_ids_for_phone(
                 client, term=term, merchant_id=membership.merchant_id
             )
@@ -1627,6 +1645,8 @@ def list_my_transactions(
         filters["type"] = type.value
     if status is not None:
         filters["status"] = status.value
+    if method:
+        filters["method"] = method
 
     created_from, created_to = dar_es_salaam_day_bounds_utc(date_from, date_to)
 
@@ -1647,6 +1667,53 @@ def list_my_transactions(
         TransactionResponse(**row, customer_phone=phones.get(row.get("collection_id"))) for row in rows
     ]
     return APIResponse(data=data, meta=build_page_meta(pagination, total))
+
+
+def _as_uuid(term: str) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(term)
+    except ValueError:
+        return None
+
+
+def _transaction_ids_for_uuid(client, merchant_id: uuid.UUID, value: uuid.UUID) -> list[str]:
+    """Transactions this merchant owns whose payment id (collection_id) or
+    own id is `value`. Two exact lookups, both pinned to merchant_id, so a
+    payment id belonging to another merchant matches nothing here - the
+    same "no results" as an id that does not exist at all."""
+    ids: set[str] = set()
+    for column in ("collection_id", "id"):
+        rows = (
+            client.table("transactions")
+            .select("id")
+            .eq("merchant_id", str(merchant_id))
+            .eq(column, str(value))
+            .execute()
+            .data
+        ) or []
+        ids.update(str(row["id"]) for row in rows)
+    return sorted(ids)
+
+
+@router.get(
+    "/transactions/{transaction_id}/tracking",
+    response_model=APIResponse[PaymentTrackingResponse],
+)
+def get_my_transaction_tracking(
+    transaction_id: uuid.UUID,
+    membership: Annotated[MerchantMembership, Depends(require_own_merchant_role(*_ADMIN_AND_STAFF))],
+):
+    """Payment, webhook delivery and service activation, kept apart.
+
+    Read-only. It never resends a webhook, retries a payment or changes
+    a status - it reports what was recorded. Scoped to the caller's own
+    merchant: another merchant's transaction id is a 404, the same as an
+    id that does not exist, so ids cannot be probed from here."""
+    client = get_supabase_admin()
+    row = get_for_merchant(client, "transactions", merchant_id=membership.merchant_id, row_id=transaction_id)
+    if not row:
+        raise NotFoundError("Transaction not found")
+    return APIResponse(data=PaymentTrackingResponse(**build_payment_tracking(client, transaction=row)))
 
 
 @router.get("/transactions/{reference}", response_model=APIResponse[TransactionResponse])

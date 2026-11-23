@@ -133,6 +133,30 @@ def _is_due(event: dict, *, now: datetime) -> bool:
     return now >= last + timedelta(seconds=_BACKOFF_SECONDS[attempts])
 
 
+MAX_ATTEMPTS = _MAX_ATTEMPTS
+
+
+def next_attempt_at(event: dict) -> datetime | None:
+    """When the worker will next try this event, for display only.
+
+    The same arithmetic as _is_due, read the other way round, so a
+    timeline cannot promise a retry the worker would not make. None when
+    no further attempt will happen (delivered, or attempts exhausted) or
+    when the event has never been attempted - it is then due at the next
+    sweep, which is a few seconds, not a moment worth inventing.
+    """
+    status = event.get("status")
+    if status not in ("pending", "retrying"):
+        return None
+    attempts = int(event.get("attempts") or 0)
+    if attempts >= _MAX_ATTEMPTS:
+        return None
+    last = _parse_ts(event.get("last_attempted_at"))
+    if last is None:
+        return None
+    return last + timedelta(seconds=_BACKOFF_SECONDS[attempts])
+
+
 def _pending_events(client: Client) -> list[dict]:
     """The scan window, oldest first — NOT the batch. Slicing to the batch
     here is what used to let backed-off rows crowd out due ones."""

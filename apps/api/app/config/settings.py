@@ -819,6 +819,19 @@ class Settings(BaseSettings):
     # are unconditional either way — only this email is gated.
     send_merchant_withdrawal_emails: bool = False
 
+    # The InfinityPay WhatsApp community invitation, appended to exactly
+    # two merchant notifications: the approval welcome (email + SMS) and
+    # a CONFIRMED successful withdrawal (email + SMS). One value, read by
+    # app/services/community_invite.py and nowhere else, so the link is
+    # never copied into a template.
+    #
+    # Blank (the default) or anything that is not an https link on
+    # chat.whatsapp.com means "no invitation": the notification goes out
+    # exactly as it did before. It never makes a notification fail, and
+    # it is a plain string on purpose - a bad value here must not be able
+    # to stop the API from booting.
+    merchant_community_whatsapp_url: str = ""
+
     @property
     def super_admin_sms_numbers(self) -> list[str]:
         """SUPER_ADMIN_SMS_RECIPIENTS parsed into numbers, in the order given.

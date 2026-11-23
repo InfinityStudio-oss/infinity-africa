@@ -14,10 +14,13 @@ export interface TransactionsFilterValues {
   status?: string;
   providerReference?: string;
   transactionId?: string;
+  collectionId?: string;
   customerPhone?: string;
   dateFrom?: string;
   dateTo?: string;
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function TransactionsFilters({ merchants, initial }: { merchants: MerchantOption[]; initial: TransactionsFilterValues }) {
   const router = useRouter();
@@ -40,6 +43,31 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
     setPhoneDraft(initial.customerPhone ?? "");
   }, [initial.customerPhone]);
 
+  // The payment id a merchant quotes from their billing system. Checked
+  // here before it is sent: the API takes a UUID, and a mistyped one
+  // would come back as an error that this page renders as "no matches" -
+  // telling the operator the payment does not exist when it was a typo.
+  const [paymentIdDraft, setPaymentIdDraft] = useState(initial.collectionId ?? "");
+  const [paymentIdError, setPaymentIdError] = useState<string | null>(null);
+  // Follow the URL (back/forward, cleared filters) by adjusting state
+  // during render, React's recommended alternative to an effect here.
+  const [paymentIdFromUrl, setPaymentIdFromUrl] = useState(initial.collectionId);
+  if (paymentIdFromUrl !== initial.collectionId) {
+    setPaymentIdFromUrl(initial.collectionId);
+    setPaymentIdDraft(initial.collectionId ?? "");
+  }
+
+  function applyPaymentId() {
+    const trimmed = paymentIdDraft.trim();
+    if (trimmed && !UUID_PATTERN.test(trimmed)) {
+      setPaymentIdError("An InfinityPay Payment ID looks like 6f1c2b9e-1a2b-4c3d-8e9f-0123456789ab.");
+      return;
+    }
+    setPaymentIdError(null);
+    if (trimmed === (values.collectionId ?? "")) return;
+    apply({ ...values, collectionId: trimmed || undefined });
+  }
+
   function apply(next: TransactionsFilterValues) {
     setValues(next);
     const params = new URLSearchParams();
@@ -48,6 +76,7 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
     if (next.status) params.set("status", next.status);
     if (next.providerReference) params.set("provider_reference", next.providerReference);
     if (next.transactionId) params.set("transaction_id", next.transactionId);
+    if (next.collectionId) params.set("collection_id", next.collectionId);
     if (next.customerPhone) params.set("customer_phone", next.customerPhone);
     if (next.dateFrom) params.set("date_from", next.dateFrom);
     if (next.dateTo) params.set("date_to", next.dateTo);
@@ -72,6 +101,8 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
             onClick={() => {
               setValues({});
               setPhoneDraft("");
+              setPaymentIdDraft("");
+              setPaymentIdError(null);
               router.push("/super-admin/transactions");
             }}
             className="text-sm font-medium text-primary hover:underline"
@@ -101,6 +132,7 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
           <option value="">All Types</option>
           <option value="collection">Collection</option>
           <option value="disbursement">Withdrawal</option>
+          <option value="payout">Payout (Disbursement API)</option>
           <option value="fee">Fee</option>
           <option value="refund">Refund</option>
           <option value="reversal">Reversal</option>
@@ -131,6 +163,29 @@ export function TransactionsFilters({ merchants, initial }: { merchants: Merchan
           value={values.transactionId ?? ""}
           onChange={(event) => apply({ ...values, transactionId: event.target.value || undefined })}
         />
+        <div>
+          <input
+            className={`${inputClass} w-full`}
+            placeholder="InfinityPay Payment ID"
+            aria-label="InfinityPay Payment ID (collection_id)"
+            aria-invalid={paymentIdError ? true : undefined}
+            aria-describedby={paymentIdError ? "payment-id-error" : undefined}
+            value={paymentIdDraft}
+            onChange={(event) => setPaymentIdDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyPaymentId();
+              }
+            }}
+            onBlur={applyPaymentId}
+          />
+          {paymentIdError && (
+            <p id="payment-id-error" role="alert" className="mt-1 text-xs text-error">
+              {paymentIdError}
+            </p>
+          )}
+        </div>
         <input
           className={inputClass}
           type="tel"

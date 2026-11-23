@@ -65,6 +65,7 @@ from app.schemas.merchant_notifications import (
     MerchantNotificationSettingsUpdate,
 )
 from app.schemas.pay_by_link import PayByLinkResponse
+from app.schemas.transactions import PaymentTrackingResponse
 from app.schemas.webhook_config import WebhookConfigResponse
 from app.services.admin_customers import list_admin_customers, summarise_admin_customers
 from app.services.admin_directory import (
@@ -102,6 +103,7 @@ from app.services.merchant_notifications import (
 )
 from app.services.pay_by_link import get_own_pay_link
 from app.services.payment_links import build_public_url
+from app.services.payment_tracking import build_payment_tracking
 from app.services.phone_search import canonical_or_suffix, collection_ids_for_phone
 from app.services.webhook_status import admin_batch_collection_webhook_status
 from app.services.webhooks import last_webhook_delivery
@@ -1289,6 +1291,10 @@ def list_admin_transactions(
     status: Annotated[str | None, Query()] = None,
     provider_reference: Annotated[str | None, Query()] = None,
     transaction_id: Annotated[uuid.UUID | None, Query(description="Exact transactions.id")] = None,
+    collection_id: Annotated[
+        uuid.UUID | None,
+        Query(description="InfinityPay payment id (collection_id) - the reference a billing system holds"),
+    ] = None,
     customer_phone: Annotated[
         str | None,
         Query(description="Customer phone in any format: 0762474101, 255762474101, +255 762 474 101, or the last 6 digits"),
@@ -1332,6 +1338,8 @@ def list_admin_transactions(
         query = query.eq("provider_reference", provider_reference)
     if transaction_id is not None:
         query = query.eq("id", str(transaction_id))
+    if collection_id is not None:
+        query = query.eq("collection_id", str(collection_id))
     if date_from is not None:
         # Anchored in Dar es Salaam, not read as UTC. A bare "2026-11-22"
         # used to go straight into the query, where Postgres took it as
@@ -1370,11 +1378,30 @@ def list_admin_transactions(
             balance_after=row.get("balance_after"),
             direction=row.get("direction"),
             customer_phone=phones.get(str(row.get("collection_id"))),
+            collection_id=row.get("collection_id"),
             created_at=row["created_at"],
         )
         for row in rows
     ]
     return APIResponse(data=data, meta=build_page_meta(pagination, result.count or 0))
+
+
+@router.get(
+    "/transactions/{transaction_id}/tracking",
+    response_model=APIResponse[PaymentTrackingResponse],
+)
+def get_admin_transaction_tracking(
+    transaction_id: uuid.UUID,
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """The same evidence a merchant sees for their own payment, for the
+    Super Admin answering "my customer paid and was never connected".
+    Read-only: it never resends or retries anything."""
+    client = get_supabase_admin()
+    row = get_by_id(client, "transactions", transaction_id)
+    if not row:
+        raise NotFoundError("Transaction not found")
+    return APIResponse(data=PaymentTrackingResponse(**build_payment_tracking(client, transaction=row)))
 
 
 @router.get("/webhooks", response_model=APIResponse[list[AdminWebhookEventResponse]])

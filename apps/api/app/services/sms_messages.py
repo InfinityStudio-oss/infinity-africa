@@ -38,6 +38,7 @@ from supabase import Client
 from app.config import get_settings
 from app.core.phone import normalize_tz_phone
 from app.core.time import utc_now_iso
+from app.services.community_invite import community_invite_url
 from app.services.sms_text import (
     message_cost,
     render_new_merchant_admin,
@@ -235,7 +236,9 @@ def enqueue_welcome_sms(client: Client, *, merchant_id: uuid.UUID) -> dict | Non
         if skip_reason or not phone:
             return _skip(client, merchant_id, "welcome", key, skip_reason or SKIP_NO_NUMBER)
 
-        body = render_welcome()
+        # Frozen into the row now, like every other part of the body, so
+        # a later change to the setting never rewrites a queued message.
+        body = render_welcome(community_url=community_invite_url())
         return _insert(
             client,
             {
@@ -273,6 +276,14 @@ def enqueue_withdrawal_complete_sms(
     try:
         settings = get_settings()
         if not settings.oasis_sms_enabled or not settings.oasis_sms_withdrawal_enabled:
+            return None
+
+        # The message opens "Imethibitishwa" (confirmed) and carries the
+        # community invitation, so it is refused for anything but a
+        # confirmed SUCCESS even though every caller already checks. A
+        # pending, processing, timed-out or failed payout must never be
+        # described as complete.
+        if str(disbursement.get("status") or "") != "SUCCESS":
             return None
 
         merchant_id = uuid.UUID(disbursement["merchant_id"])
@@ -330,6 +341,10 @@ def enqueue_withdrawal_complete_sms(
             fee_amount=fee_amount,
             closing_balance=closing_balance,
             reference=reference,
+            # This branch is only reached for a payout the provider has
+            # confirmed (see the docstring), which is the one withdrawal
+            # outcome the invitation may accompany.
+            community_url=community_invite_url(),
         )
         return _insert(
             client,

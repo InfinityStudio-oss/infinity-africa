@@ -35,3 +35,72 @@ class TransactionResponse(BaseModel):
     metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+# --- payment tracking ---------------------------------------------------------
+#
+# GET /v1/merchant/transactions/{id}/tracking and its Super Admin twin.
+# Built by app/services/payment_tracking.py from recorded evidence only.
+
+
+class PaymentTrackingIdentifiers(BaseModel):
+    # InfinityPay's own stable id for the payment (collections.id) - the
+    # `collection_id` already returned by the Collections API create and
+    # status responses and every collection.* webhook. The ONE value to
+    # share with a billing system. Null for a withdrawal or fee.
+    payment_id: str | None = None
+    # The integrator's own order/subscriber reference, exactly as they
+    # sent it (collections.merchant_reference). Theirs, not ours.
+    merchant_reference: str | None = None
+    # InfinityPay's ledger handle for this row (transactions.reference).
+    transaction_reference: str | None = None
+    # The mobile-money provider's receipt/transaction id.
+    provider_reference: str | None = None
+
+
+class PaymentTrackingStep(BaseModel):
+    code: str
+    label: str
+    # done | failed | waiting | unknown
+    state: str
+    # Only ever a recorded timestamp; null when none is recorded.
+    at: str | None = None
+    detail: str | None = None
+
+
+class WebhookDeliveryRecord(BaseModel):
+    event_name: str | None = None
+    # queued | retrying | delivered | exhausted
+    state: str
+    label: str
+    attempts: int
+    max_attempts: int
+    queued_at: str | None = None
+    last_attempt_at: str | None = None
+    delivered_at: str | None = None
+    # The merchant's own server's HTTP answer to the last attempt.
+    response_status: int | None = None
+    next_retry_at: str | None = None
+
+
+class PaymentTrackingWebhooks(BaseModel):
+    applicable: bool
+    configured: bool
+    available: bool
+    deliveries: list[WebhookDeliveryRecord]
+
+
+class ServiceActivation(BaseModel):
+    # Always "not_confirmed" today: no billing integration sends an
+    # authenticated activation acknowledgement. See docs/payment-tracking.md.
+    status: str
+    label: str
+    detail: str
+
+
+class PaymentTrackingResponse(BaseModel):
+    transaction_id: str
+    identifiers: PaymentTrackingIdentifiers
+    payment: list[PaymentTrackingStep]
+    webhooks: PaymentTrackingWebhooks
+    service_activation: ServiceActivation

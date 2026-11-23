@@ -3,8 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Transaction } from "@/lib/portal/types";
 
-const listTransactions = vi.fn();
+const readTransactionsPage = vi.fn();
+const fetchAllTransactionsForExport = vi.fn();
+const getTransactionTracking = vi.fn();
 const listMyRiskAlerts = vi.fn();
+
+/** What the API answers for the page on screen. `total` defaults to the
+ * rows given, i.e. a single page. */
+function respond(rows: Transaction[], extra: { total?: number; totalPages?: number; error?: string | null } = {}) {
+  readTransactionsPage.mockResolvedValue({
+    rows,
+    total: extra.total ?? rows.length,
+    totalPages: extra.totalPages ?? (rows.length ? 1 : 0),
+    error: extra.error ?? null,
+  });
+  fetchAllTransactionsForExport.mockResolvedValue({ rows, total: rows.length, truncated: false, error: null });
+}
 
 // The page reads ?search= so the topbar's search box can narrow the
 // list server-side.
@@ -20,7 +34,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/portal/api", () => ({
-  listTransactions: (...args: unknown[]) => listTransactions(...args),
+  readTransactionsPage: (...args: unknown[]) => readTransactionsPage(...args),
+  fetchAllTransactionsForExport: (...args: unknown[]) => fetchAllTransactionsForExport(...args),
+  getTransactionTracking: (...args: unknown[]) => getTransactionTracking(...args),
   listMyRiskAlerts: (...args: unknown[]) => listMyRiskAlerts(...args),
 }));
 
@@ -52,6 +68,8 @@ describe("Merchant portal TransactionsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listMyRiskAlerts.mockResolvedValue([]);
+    respond([]);
+    getTransactionTracking.mockResolvedValue({ data: null, error: "Not found", noAccess: true });
     if (!URL.createObjectURL) URL.createObjectURL = vi.fn();
     if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn();
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-url");
@@ -59,16 +77,16 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("disables the Export CSV button when there are no transactions", async () => {
-    listTransactions.mockResolvedValue([]);
+    respond([]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
-    await waitFor(() => expect(listTransactions).toHaveBeenCalled());
+    await waitFor(() => expect(readTransactionsPage).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: /Export CSV/ })).toBeDisabled();
   });
 
   it("downloads a CSV containing every visible transaction, including the balance/charge audit fields, when clicked", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -85,11 +103,11 @@ describe("Merchant portal TransactionsPage", () => {
 
     fireEvent.click(button);
 
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
     const text = await blob.text();
     expect(text).toContain(
-      '"Date","Type","Transaction ID","Reference","Provider Reference","Channel","Customer Phone","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status"',
+      '"Date","Type","Transaction ID","Reference","Provider Reference","Channel","Customer Phone","Opening Balance","Amount","Charge","Net","Closing Balance","Currency","Direction","Status","InfinityPay Payment ID"',
     );
     expect(text).toContain("TXN-20260822-E7803AE4");
     expect(text).toContain("SELCOM-REF-1");
@@ -97,13 +115,14 @@ describe("Merchant portal TransactionsPage", () => {
     expect(text).toContain("+2000.00");
     expect(text).toContain("500.00");
     expect(text).toContain("2470.00");
+    expect(text).toContain('"col-1"');
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
     createElementSpy.mockRestore();
   });
 
   it("renders the opening/closing balance and charge columns in the table", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -114,7 +133,7 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("shows 'Not available' instead of a fabricated number for a transaction with no balance snapshot", async () => {
-    listTransactions.mockResolvedValue([transaction({ balance_before: null, balance_after: null })]);
+    respond([transaction({ balance_before: null, balance_after: null })]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -123,7 +142,7 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("opens the transaction detail drawer with identifiers and balance breakdown when a row is clicked", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -136,7 +155,7 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("closes the detail drawer when the close button is clicked", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -150,7 +169,7 @@ describe("Merchant portal TransactionsPage", () => {
   // --- who paid ------------------------------------------------------------
 
   it("shows the payer's phone on a collection row", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -160,7 +179,7 @@ describe("Merchant portal TransactionsPage", () => {
 
   it("shows a dash rather than a guess when there is no payer", async () => {
     // A withdrawal has no customer on the other side.
-    listTransactions.mockResolvedValue([
+    respond([
       transaction({ type: "disbursement", collection_id: null, customer_phone: null }),
     ]);
     const { default: TransactionsPage } = await import("./page");
@@ -172,7 +191,7 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("includes the customer phone in the detail drawer", async () => {
-    listTransactions.mockResolvedValue([transaction()]);
+    respond([transaction()]);
     const { default: TransactionsPage } = await import("./page");
     render(<TransactionsPage />);
 
@@ -193,8 +212,9 @@ describe("Merchant portal TransactionsPage", () => {
       render(<TransactionsPage />);
 
       await waitFor(() =>
-        expect(listTransactions).toHaveBeenCalledWith(
+        expect(readTransactionsPage).toHaveBeenCalledWith(
           expect.objectContaining({ search: "TXN-FINDME" }),
+          expect.anything(),
         ),
       );
     } finally {
@@ -220,13 +240,17 @@ describe("Merchant portal TransactionsPage", () => {
       render(<TransactionsPage />);
 
       await waitFor(() =>
-        expect(listTransactions).toHaveBeenCalledWith({
-          search: "",
-          type: "disbursement",
-          status: "failed",
-          dateFrom: "2026-11-01",
-          dateTo: "2026-11-22",
-        }),
+        expect(readTransactionsPage).toHaveBeenCalledWith(
+          {
+            search: "",
+            type: "disbursement",
+            status: "failed",
+            dateFrom: "2026-11-01",
+            dateTo: "2026-11-22",
+            method: "",
+          },
+          { page: 1, pageSize: 50 },
+        ),
       );
     } finally {
       searchParams.delete("type");
@@ -310,7 +334,7 @@ describe("Merchant portal TransactionsPage", () => {
   it("says the filters are why the table is empty, not that there are no transactions", async () => {
     // "No transactions yet" when a filter is hiding them tells a
     // merchant their money is missing.
-    listTransactions.mockResolvedValue([]);
+    respond([]);
     searchParams.set("status", "reversed");
     try {
       const { default: TransactionsPage } = await import("./page");
@@ -323,7 +347,7 @@ describe("Merchant portal TransactionsPage", () => {
   });
 
   it("offers a way back out of a filter that matches nothing", async () => {
-    listTransactions.mockResolvedValue([]);
+    respond([]);
     searchParams.set("status", "reversed");
     try {
       const { default: TransactionsPage } = await import("./page");
