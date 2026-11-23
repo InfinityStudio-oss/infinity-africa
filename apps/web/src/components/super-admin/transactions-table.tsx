@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Card, tdClass, thClass } from "@/components/portal/card";
 import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -7,12 +9,16 @@ import type { BadgeProps } from "@/lib/portal/status-tones";
 import { transactionStatusBadge } from "@/lib/portal/status-tones";
 import type { AdminTransactionRow } from "@/lib/admin/types";
 
+import { TransactionTrackingDrawer } from "./transaction-tracking-drawer";
+
 function typeBadge(type: AdminTransactionRow["type"]): BadgeProps {
   switch (type) {
     case "collection":
       return { label: "Collection", tone: "positive", dot: true };
     case "disbursement":
       return { label: "Withdrawal", tone: "info" };
+    case "payout":
+      return { label: "Payout", tone: "info" };
     case "refund":
       return { label: "Refund", tone: "negative" };
     case "reversal":
@@ -39,7 +45,9 @@ export function TransactionsTable({
    * on the Collections screen. */
   filtered?: boolean;
 }) {
+  const [tracked, setTracked] = useState<AdminTransactionRow | null>(null);
   return (
+    <>
     <Card padded={false}>
       <div className="p-5 pb-3">
         <h3 className="text-2xl font-semibold text-on-background">
@@ -59,6 +67,7 @@ export function TransactionsTable({
                 <th className={thClass}>Merchant</th>
                 <th className={thClass}>Type</th>
                 <th className={thClass}>Transaction ID</th>
+                <th className={thClass}>Payment ID</th>
                 <th className={thClass}>Reference</th>
                 <th className={thClass}>Provider Reference</th>
                 <th className={thClass}>Method</th>
@@ -70,6 +79,9 @@ export function TransactionsTable({
                 <th className={thClass}>Closing Balance</th>
                 <th className={thClass}>Direction</th>
                 <th className={thClass}>Status</th>
+                <th className={thClass}>
+                  <span className="sr-only">Tracking</span>
+                </th>
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -89,6 +101,12 @@ export function TransactionsTable({
                   </td>
                   <td className={`${tdClass} font-mono text-xs text-on-surface-variant`}>
                     {transaction.transaction_id.slice(0, 8)}
+                  </td>
+                  {/* The full id, not a prefix: this is the value a merchant
+                    * reads out of their billing system, and an operator has
+                    * to be able to match all of it. */}
+                  <td className={`${tdClass} font-mono text-xs text-on-surface-variant whitespace-nowrap`}>
+                    {transaction.collection_id ?? "—"}
                   </td>
                   <td className={`${tdClass} font-mono text-sm text-on-background`}>{transaction.reference}</td>
                   <td className={`${tdClass} font-mono text-xs text-on-surface-variant`}>
@@ -130,6 +148,16 @@ export function TransactionsTable({
                   <td className={tdClass}>
                     <StatusBadge {...transactionStatusBadge(transaction.status)} />
                   </td>
+                  <td className={tdClass}>
+                    <button
+                      type="button"
+                      onClick={() => setTracked(transaction)}
+                      className="text-sm font-medium text-primary hover:underline whitespace-nowrap"
+                      aria-label={`Track payment ${transaction.reference}`}
+                    >
+                      Track
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -137,5 +165,11 @@ export function TransactionsTable({
         </div>
       )}
     </Card>
+    {/* Outside the Card on purpose: .app-panel has backdrop-filter, which
+      * makes it the containing block for position:fixed descendants, so a
+      * drawer rendered inside it is clipped to the card instead of
+      * covering the screen. */}
+    <TransactionTrackingDrawer transaction={tracked} onClose={() => setTracked(null)} />
+    </>
   );
 }

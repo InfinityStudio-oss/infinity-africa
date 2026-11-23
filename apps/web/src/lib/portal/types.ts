@@ -269,6 +269,49 @@ export interface Transaction {
   created_at: string;
 }
 
+/** GET /v1/merchant/transactions/{id}/tracking - recorded evidence only.
+ * Three separate facts: the payment, whether the merchant's endpoint
+ * received the webhook, and service activation (never recorded, so never
+ * "confirmed"). */
+export interface PaymentTracking {
+  transaction_id: string;
+  identifiers: {
+    /** InfinityPay's payment id - `collection_id` in the Collections API
+     * and every collection.* webhook. The value to share with a billing
+     * system. Null for a withdrawal or fee. */
+    payment_id: string | null;
+    /** The integrator's own order/subscriber reference. */
+    merchant_reference: string | null;
+    transaction_reference: string | null;
+    provider_reference: string | null;
+  };
+  payment: {
+    code: string;
+    label: string;
+    state: "done" | "failed" | "waiting" | "unknown";
+    at: string | null;
+    detail: string | null;
+  }[];
+  webhooks: {
+    applicable: boolean;
+    configured: boolean;
+    available: boolean;
+    deliveries: {
+      event_name: string | null;
+      state: "queued" | "retrying" | "delivered" | "exhausted";
+      label: string;
+      attempts: number;
+      max_attempts: number;
+      queued_at: string | null;
+      last_attempt_at: string | null;
+      delivered_at: string | null;
+      response_status: number | null;
+      next_retry_at: string | null;
+    }[];
+  };
+  service_activation: { status: string; label: string; detail: string };
+}
+
 export interface Customer {
   id: string;
   merchant_id: string;

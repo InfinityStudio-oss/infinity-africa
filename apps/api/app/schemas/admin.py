@@ -325,6 +325,10 @@ class AdminTransactionResponse(BaseModel):
     # were given. A search whose results cannot be checked against what
     # was typed is how the wrong payment gets reported as the right one.
     customer_phone: str | None = None
+    # InfinityPay's payment id (collections.id) - the `collection_id` a
+    # billing integration already holds. Shown so an operator can match
+    # the reference a merchant quotes to the exact row.
+    collection_id: uuid.UUID | None = None
     created_at: datetime
 
 

@@ -15,6 +15,7 @@ interface SuperAdminTransactionsPageProps {
     status?: string;
     provider_reference?: string;
     transaction_id?: string;
+    collection_id?: string;
     customer_phone?: string;
     date_from?: string;
     date_to?: string;
@@ -30,6 +31,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
       filters.status ||
       filters.provider_reference ||
       filters.transaction_id ||
+      filters.collection_id ||
       filters.customer_phone ||
       filters.date_from ||
       filters.date_to,
@@ -42,6 +44,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
       status: filters.status,
       providerReference: filters.provider_reference,
       transactionId: filters.transaction_id,
+      collectionId: filters.collection_id,
       customerPhone: filters.customer_phone,
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
@@ -65,6 +68,7 @@ export default async function SuperAdminTransactionsPage({ searchParams }: Super
           status: filters.status,
           providerReference: filters.provider_reference,
           transactionId: filters.transaction_id,
+          collectionId: filters.collection_id,
           customerPhone: filters.customer_phone,
           dateFrom: filters.date_from,
           dateTo: filters.date_to,
