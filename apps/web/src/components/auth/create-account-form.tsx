@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useActionState } from "react";
+import { Suspense, useActionState, useEffect, useRef } from "react";
 
 import { resendVerificationAction, signupWithBusinessAction } from "@/lib/auth/actions";
 
@@ -68,6 +68,26 @@ function Field({
   );
 }
 
+/** Field name -> the label the person actually sees.
+ *
+ * The summary has to name fields the way the form does. "nidaNumber"
+ * in an error list is a developer's word for it and sends someone
+ * hunting. */
+const FIELD_LABELS: Record<string, string> = {
+  businessName: "Business Name",
+  ownerName: "Your Name",
+  businessCategory: "Business Type",
+  nidaNumber: "NIDA Number",
+  businessEmail: "Email",
+  businessPhone: "Business Phone",
+  tinNumber: "TIN",
+  password: "Password",
+  confirmPassword: "Confirm Password",
+  agreedToTerms: "Terms of Service",
+  agreedToPrivacy: "Privacy Policy",
+  confirmedAccurate: "Confirmation that your information is accurate",
+};
+
 function SignupComplete({ email, notice, canResend }: { email: string; notice?: string; canResend: boolean }) {
   const [resendState, resendAction, resending] = useActionState(resendVerificationAction, null);
 
@@ -122,6 +142,39 @@ function CreateAccountFormInner() {
   const v = state?.values ?? {};
   const err = state?.errors ?? {};
 
+  // Every field error renders inline, under its own field. That is the
+  // right place for it and it was the only place for it, which made a
+  // rejected signup look like a dead button: the submit control sits at
+  // the very bottom of a long form, so someone pressing it sees
+  // "Creating account…" flick back to "Create Account" while the actual
+  // reason - "NIDA number is required." - is painted several hundred
+  // pixels above the fold, out of sight.
+  //
+  // Reported as the form "getting stuck". Nothing was stuck; the answer
+  // was just somewhere the person could not see.
+  //
+  // So on a failed submit: say so where they are looking, and take them
+  // to the first field that needs them.
+  const errorKeys = Object.keys(err);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (errorKeys.length === 0) return;
+    // The summary first - it is at the top of the form and names
+    // everything wrong, which matters when more than one field failed.
+    summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Then the cursor into the first field that needs attention, so the
+    // next keystroke goes somewhere useful. Focus is what actually
+    // moves the page for a keyboard or screen-reader user; the scroll
+    // above is for everyone else.
+    const first = document.getElementById(errorKeys[0]);
+    if (first instanceof HTMLInputElement) {
+      first.focus({ preventScroll: true });
+    }
+    // Keyed on the state object: a second submit that fails the same way
+    // must scroll again, and comparing error keys would not re-fire.
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (state?.notice) {
     return (
       <SignupComplete
@@ -134,6 +187,33 @@ function CreateAccountFormInner() {
 
   return (
     <form action={action} className="mt-8 space-y-9">
+      {errorKeys.length > 0 && (
+        <div
+          ref={summaryRef}
+          role="alert"
+          tabIndex={-1}
+          className="rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error"
+        >
+          <p className="font-semibold">
+            {errorKeys.length === 1
+              ? "One thing needs fixing before we can create your account:"
+              : `${errorKeys.length} things need fixing before we can create your account:`}
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 font-medium">
+            {errorKeys.map((key) => (
+              <li key={key}>
+                {/* Linked, so a form this long is one click rather than
+                    a hunt. */}
+                <a href={`#${key}`} className="underline hover:no-underline">
+                  {FIELD_LABELS[key] ?? key}
+                </a>
+                : {err[key]?.[0]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {state?.formError && (
         <div role="alert" className="rounded-lg bg-error/10 px-4 py-3 text-sm font-medium text-error">
           <p>{state.formError}</p>
