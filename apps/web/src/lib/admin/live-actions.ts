@@ -18,7 +18,9 @@ import {
   reconcilePendingWithdrawals,
   refreshWithdrawalStatus,
   retryWithdrawalPayout,
+  confirmMerchantEmail,
   correctMerchantContactEmail,
+  resendMerchantVerification,
   createAdminPayoutAccess,
   dismissAdminPayoutRequest,
   releaseAdminPayout,
@@ -128,6 +130,36 @@ export async function correctMerchantContactEmailAction(
   return runMerchantAction(async () => {
     await correctMerchantContactEmail(merchantId, trimmed);
     return `Email changed to ${trimmed}. A verification link has been sent there.`;
+  });
+}
+
+/** Send another verification link to the address already on file.
+ *
+ * The safe one, and the one to try first. Nine live businesses were
+ * stranded unable to sign in because the only resend on the platform is
+ * self-service, reached from a "check your email" screen a merchant who
+ * closed the tab weeks ago cannot get back to. */
+export async function resendMerchantVerificationAction(
+  merchantId: string,
+): Promise<MerchantActionState> {
+  return runMerchantAction(async () => {
+    await resendMerchantVerification(merchantId);
+    return "Verification link sent. They still need to click it to sign in.";
+  });
+}
+
+/** Mark the login email verified without the merchant clicking a link.
+ *
+ * The override. For an account stranded despite a correct address -
+ * links sent repeatedly, none clicked, the business already approved
+ * and KYC verified by a person. Audited with the address in full,
+ * because the mistake that matters is confirming the WRONG one. */
+export async function confirmMerchantEmailAction(
+  merchantId: string,
+): Promise<MerchantActionState> {
+  return runMerchantAction(async () => {
+    await confirmMerchantEmail(merchantId);
+    return "Email marked verified. They can sign in now.";
   });
 }
 

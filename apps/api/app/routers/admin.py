@@ -39,6 +39,7 @@ from app.schemas.admin import (
     AdminCollectionResponse,
     AdminCustomerResponse,
     AdminCustomerSummaryResponse,
+    AdminEmailVerificationState,
     AdminInquiryResponse,
     AdminInvoiceResponse,
     AdminMerchantEmailCorrection,
@@ -95,6 +96,11 @@ from app.services.duplicate_signup import mask_email
 from app.services.email import batch_latest_email_deliveries
 from app.services.ledger import get_wallet_balance
 from app.services.merchant_email_correction import correct_merchant_contact_email
+from app.services.merchant_email_verification import (
+    confirm_email,
+    resend_verification,
+    verification_state,
+)
 from app.services.merchant_notifications import (
     get_or_create_notification_settings,
     notification_delivery_summary,
@@ -418,6 +424,117 @@ def correct_admin_merchant_contact_email(
         },
     )
     return get_admin_merchant(merchant_id, admin)
+
+
+@router.get(
+    "/merchants/{merchant_id}/email-verification",
+    response_model=APIResponse[AdminEmailVerificationState],
+)
+def get_admin_merchant_email_verification(
+    merchant_id: uuid.UUID,
+    _admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """Whether this merchant can actually sign in.
+
+    Read-only. The screen shows the state rather than offering a button
+    whose effect nobody can predict - "Confirm email" means one thing on
+    a stranded account and nothing at all on a working one.
+    """
+    client = get_supabase_admin()
+    if not get_by_id(client, "merchants", merchant_id):
+        raise NotFoundError("Merchant not found")
+    return APIResponse(data=AdminEmailVerificationState(**verification_state(client, merchant_id)))
+
+
+@router.post(
+    "/merchants/{merchant_id}/resend-verification",
+    response_model=APIResponse[AdminEmailVerificationState],
+)
+def resend_admin_merchant_verification(
+    merchant_id: uuid.UUID,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+    _rate: Annotated[
+        None, Depends(rate_limit(scope="admin_resend_verification", limit=30, window_seconds=60))
+    ] = None,
+):
+    """Send another verification link to the address already on file.
+
+    The safe one, and the one to try first. Nothing about the account
+    changes - the merchant still proves they can receive mail at that
+    address by clicking the link.
+
+    Exists because the only other resend on the platform is
+    self-service, reached from the "check your email" screen that a
+    merchant who closed the tab a month ago can no longer get to. Nine
+    live businesses were stranded that way with no way for anyone to
+    help them.
+    """
+    client = get_supabase_admin()
+    merchant = get_by_id(client, "merchants", merchant_id)
+    if not merchant:
+        raise NotFoundError("Merchant not found")
+
+    result = resend_verification(client, merchant_id)
+    write_audit_log(
+        client,
+        actor_id=admin.id,
+        actor_type="user",
+        merchant_id=merchant_id,
+        action="merchant.verification_resent",
+        resource_type="merchant",
+        resource_id=merchant_id,
+        # Masked: an audit log is readable by every Super Admin and
+        # exportable, so it proves what happened without carrying a
+        # personal address in clear text.
+        metadata={"to": mask_email(result["email"])},
+    )
+    return APIResponse(data=AdminEmailVerificationState(**verification_state(client, merchant_id)))
+
+
+@router.post(
+    "/merchants/{merchant_id}/confirm-email",
+    response_model=APIResponse[AdminEmailVerificationState],
+)
+def confirm_admin_merchant_email(
+    merchant_id: uuid.UUID,
+    admin: Annotated[AuthenticatedUser, Depends(require_super_admin)],
+):
+    """Mark the login email verified without the merchant clicking a link.
+
+    The override, for an account stranded despite a correct address -
+    links sent repeatedly, none clicked, the business already approved
+    and KYC verified by a person.
+
+    This overrides a security control, so it is audited unmasked. Every
+    other entry in this log masks the address; this one records it in
+    full on purpose, because the mistake that matters is confirming the
+    WRONG address, and a masked entry cannot be reviewed for that. The
+    unverified flag is the only remaining signal that an address is
+    wrong and this removes it - a wrong address wants
+    correct-contact-email instead, which leaves the new one unverified.
+    """
+    client = get_supabase_admin()
+    merchant = get_by_id(client, "merchants", merchant_id)
+    if not merchant:
+        raise NotFoundError("Merchant not found")
+
+    result = confirm_email(client, merchant_id)
+    if not result["already_confirmed"]:
+        write_audit_log(
+            client,
+            actor_id=admin.id,
+            actor_type="user",
+            merchant_id=merchant_id,
+            action="merchant.email_confirmed_by_admin",
+            resource_type="merchant",
+            resource_id=merchant_id,
+            metadata={
+                "email": result["email"],
+                "confirmed_at": result["email_confirmed_at"],
+                "note": "verification bypassed by Super Admin",
+            },
+        )
+    return APIResponse(data=AdminEmailVerificationState(**verification_state(client, merchant_id)))
 
 
 @router.get("/merchants/{merchant_id}/api-keys", response_model=APIResponse[list[ApiKeyResponse]])

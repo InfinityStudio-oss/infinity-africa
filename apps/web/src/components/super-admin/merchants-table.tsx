@@ -10,7 +10,9 @@ import { StatusBadge } from "@/components/portal/status-badge";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import {
   approveMerchantAction,
+  confirmMerchantEmailAction,
   correctMerchantContactEmailAction,
+  resendMerchantVerificationAction,
   setMerchantStatusAction,
   type MerchantActionState,
 } from "@/lib/admin/live-actions";
@@ -46,11 +48,34 @@ function IconSubmit({
   );
 }
 
-function TextSubmit({ idleLabel, pendingLabel, className }: { idleLabel: string; pendingLabel: string; className: string }) {
+function TextSubmit({
+  idleLabel,
+  pendingLabel,
+  className,
+  title,
+  children,
+}: {
+  idleLabel: string;
+  pendingLabel: string;
+  className: string;
+  /** Accessible name. Required when the button's content is an icon,
+   *  because `idleLabel` is then empty and the control would otherwise
+   *  have no name at all for a screen reader. */
+  title?: string;
+  /** Icon content in place of a text label. Existing callers pass none
+   *  and keep their text. */
+  children?: React.ReactNode;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={`${className} disabled:opacity-60`}>
-      {pending ? pendingLabel : idleLabel}
+    <button
+      type="submit"
+      disabled={pending}
+      title={title}
+      aria-label={title}
+      className={`${className} disabled:opacity-60`}
+    >
+      {pending ? pendingLabel : (children ?? idleLabel)}
     </button>
   );
 }
@@ -204,6 +229,79 @@ function CorrectEmailForm({ merchantId, currentEmail }: { merchantId: string; cu
         </button>
       </form>
       <ActionFeedback state={state} />
+    </>
+  );
+}
+
+/** Helping a merchant who cannot get past email verification.
+ *
+ * Nine live businesses were stranded unable to sign in - approved, KYC
+ * verified, wallet ready - because nobody had clicked the link in their
+ * verification email. There was no way for Super Admin to help: the
+ * only resend is self-service, reached from a "check your email" screen
+ * a merchant who closed the tab weeks ago cannot get back to. The
+ * fallback was hand-editing auth.users in the Supabase dashboard.
+ *
+ * Two buttons, deliberately unequal. Resend is the obvious one and
+ * changes nothing. Confirming is an override of a security control, so
+ * it asks first and says plainly what it gives up. */
+function EmailVerificationActions({ merchantId }: { merchantId: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const [resendState, resendAction] = useActionState<MerchantActionState, FormData>(
+    () => resendMerchantVerificationAction(merchantId),
+    MERCHANT_ACTION_IDLE,
+  );
+  const [confirmState, confirmAction] = useActionState<MerchantActionState, FormData>(
+    () => confirmMerchantEmailAction(merchantId),
+    MERCHANT_ACTION_IDLE,
+  );
+
+  return (
+    <>
+      <form action={resendAction} className="inline">
+        <TextSubmit
+          idleLabel=""
+          pendingLabel="Sending…"
+          title="Resend verification email"
+          className="p-1.5 text-on-surface-variant hover:text-primary"
+        >
+          <Icon name="forward_to_inbox" className="text-[18px]" />
+        </TextSubmit>
+      </form>
+      <ActionFeedback state={resendState} />
+
+      {!confirming ? (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          title="Mark email verified without them clicking the link"
+          className="p-1.5 text-on-surface-variant hover:text-primary"
+        >
+          <Icon name="verified_user" className="text-[18px]" />
+        </button>
+      ) : (
+        <form action={confirmAction} className="inline-flex items-center gap-2">
+          {/* Said out loud, not buried in a tooltip. Confirming an
+              address nobody has proved they can receive removes the
+              only signal that the address is wrong. */}
+          <span className="text-xs text-on-surface-variant">
+            Mark verified without proof? Use “Correct signup email” instead if the address is wrong.
+          </span>
+          <TextSubmit
+            idleLabel="Confirm"
+            pendingLabel="Confirming…"
+            className="px-2 py-1 rounded-md bg-primary-container text-on-surface text-xs font-semibold"
+          />
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="px-2 py-1 rounded-md border border-surface-container-highest text-xs"
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+      <ActionFeedback state={confirmState} />
     </>
   );
 }
@@ -383,6 +481,7 @@ export function MerchantsTable({
                           merchantId={merchant.merchant_id}
                           currentEmail={merchant.email ?? null}
                         />
+                        <EmailVerificationActions merchantId={merchant.merchant_id} />
                       </td>
                     </tr>
                   );

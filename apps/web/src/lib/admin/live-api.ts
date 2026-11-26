@@ -578,6 +578,20 @@ export async function correctMerchantContactEmail(merchantId: string, email: str
   await apiWrite(`/v1/admin/merchants/${merchantId}/correct-contact-email`, "POST", { email });
 }
 
+/** Another verification link to the address already on file. Changes
+ * nothing - the merchant still proves they can receive mail there. */
+export async function resendMerchantVerification(merchantId: string): Promise<void> {
+  await apiWrite(`/v1/admin/merchants/${merchantId}/resend-verification`, "POST");
+}
+
+/** Mark the login email verified without the merchant clicking a link.
+ * An override of a security control, for an account stranded despite a
+ * correct address. A WRONG address wants correctMerchantContactEmail
+ * instead, which leaves the new one unverified. */
+export async function confirmMerchantEmail(merchantId: string): Promise<void> {
+  await apiWrite(`/v1/admin/merchants/${merchantId}/confirm-email`, "POST");
+}
+
 export async function suspendMerchantApiAccess(merchantId: string): Promise<void> {
   await apiWrite(`/v1/admin/merchants/${merchantId}/api-access/suspend`, "POST");
 }

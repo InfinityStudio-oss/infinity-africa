@@ -302,6 +302,21 @@ class AdminWithdrawalResponse(BaseModel):
     success_email_status: str | None = None
 
 
+class AdminEmailVerificationState(BaseModel):
+    """Whether a merchant's owner can actually sign in.
+
+    `can_sign_in` is the one the screen reads. An unverified email is
+    not a cosmetic flag - it is a locked front door, and nine live
+    businesses sat behind one for up to 48 days because nothing
+    surfaced it.
+    """
+
+    email: str | None = None
+    email_confirmed_at: datetime | None = None
+    last_sign_in_at: datetime | None = None
+    can_sign_in: bool
+
+
 class AdminTransactionResponse(BaseModel):
     transaction_id: uuid.UUID
     merchant_id: uuid.UUID

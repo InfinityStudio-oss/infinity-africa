@@ -899,12 +899,20 @@ class _FakeAuthAdmin:
             if any(u.email == email and u.id != str(user_id) for u in self._users.values()):
                 raise Exception(f"A user with email {email} already registered")  # noqa: TRY002
             user.email = email
-            # email_confirm absent or False leaves the new address
-            # unverified, exactly as the real API does - the behaviour the
+            # A NEW address starts unverified unless email_confirm says
+            # otherwise, exactly as the real API does - the behaviour the
             # correction flow depends on.
             user.email_confirmed_at = (
                 "2026-01-01T00:00:00+00:00" if attributes.get("email_confirm") else None
             )
+        elif attributes.get("email_confirm"):
+            # email_confirm on its OWN, with no address change: the real
+            # API confirms the existing address. This branch was missing,
+            # so a call that only confirms changed nothing here while
+            # working against production - which would have failed the
+            # Super Admin "Confirm email" action in tests and, worse,
+            # could have passed a version of it that did nothing.
+            user.email_confirmed_at = "2026-01-01T00:00:00+00:00"
         return _FakeGetUserResult(user)
 
     def get_user_by_id(self, user_id: str) -> _FakeGetUserResult:
