@@ -115,7 +115,26 @@ class AdminMerchantResponse(BaseModel):
     merchant_code: str | None = None
     business_name: str
     owner_name: str | None = None
+    # The business CONTACT address. Free text on the merchant record,
+    # and allowed to differ from the address the owner signs in with -
+    # a business may legitimately publish info@ while the owner logs in
+    # as themselves.
     email: str
+    # The address the owner actually types into the login form, read
+    # from Supabase Auth.
+    #
+    # Shown because the two silently diverging cost a real support
+    # call: a business stored as "Ilafashaedward@gmail.com" signs in as
+    # "ilafashaedward@gmail.com", and in the portal's font a capital I
+    # and a lowercase l are the same glyph. Whoever read the contact
+    # address off the screen to help gave out an address that does not
+    # exist, and the login answered "Incorrect email or password",
+    # which is true and useless.
+    #
+    # None when the owner's auth record cannot be read - a deleted
+    # account degrades to no name and no email rather than failing the
+    # whole list.
+    login_email: str | None = None
     contact_phone: str | None = None
     nature_of_business: str | None = None
     physical_address: str | None = None

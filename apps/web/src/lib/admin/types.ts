@@ -47,7 +47,17 @@ export interface Merchant {
   merchant_code: string | null;
   business_name: string;
   owner_name: string | null;
+  /** The business CONTACT address, free text on the merchant record.
+   *  Allowed to differ from the address the owner signs in with. */
   email: string;
+  /** The address the owner actually types into the login form, read
+   *  from Supabase Auth. Null when that account cannot be read.
+   *
+   *  Shown separately because the two silently diverging cost a real
+   *  support call: a capital I and a lowercase l are the same glyph in
+   *  this font, so an operator reading the contact address aloud gave
+   *  out an address that did not exist. */
+  login_email: string | null;
   contact_phone: string | null;
   nature_of_business: string | null;
   physical_address: string | null;

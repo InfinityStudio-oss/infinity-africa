@@ -22,6 +22,7 @@ function merchant(overrides: Partial<Merchant> = {}): Merchant {
     business_name: "Oddza Dev",
     owner_name: "Jane Doe",
     email: "owner@oddza.co.tz",
+    login_email: null,
     contact_phone: "+255700000000",
     nature_of_business: null,
     physical_address: null,
@@ -199,5 +200,76 @@ describe("MerchantsTable correct signup email", () => {
     render(<MerchantsTable rows={[merchant({ account_status: "suspended" })]} />);
 
     expect(screen.getByTitle("Correct signup email")).toBeInTheDocument();
+  });
+});
+
+/**
+ * The login address, shown when it differs from the business contact one.
+ *
+ * These are allowed to differ - a business may publish info@ while the
+ * owner signs in as themselves - and the divergence is invisible: in
+ * this font a capital I and a lowercase l are the same glyph. An
+ * operator read a contact address aloud to help a customer, the
+ * customer typed the other letter, and the login answered "Incorrect
+ * email or password", which is true and tells nobody anything.
+ */
+describe("MerchantsTable login address", () => {
+  it("shows the sign-in address when it differs from the contact address", () => {
+    render(
+      <MerchantsTable
+        rows={[merchant({ email: "Info@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+      />,
+    );
+
+    expect(screen.getByText("Signs in as:")).toBeInTheDocument();
+    expect(screen.getByText("owner@oddza.co.tz")).toBeInTheDocument();
+  });
+
+  it("stays quiet when the two are the same", () => {
+    // On most rows they match, and a second identical line is noise
+    // that trains people to stop reading it.
+    render(
+      <MerchantsTable
+        rows={[merchant({ email: "owner@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+      />,
+    );
+
+    expect(screen.queryByText("Signs in as:")).not.toBeInTheDocument();
+  });
+
+  it("treats a difference of case alone as the same address", () => {
+    // The exact production case: contact stored "Ixample@gmail.com",
+    // login "ixample@gmail.com". Same person, and once the migration
+    // lowercases the stored form there is nothing to report.
+    render(
+      <MerchantsTable
+        rows={[merchant({ email: "Ixample@gmail.com", login_email: "ixample@gmail.com" })]}
+      />,
+    );
+
+    expect(screen.queryByText("Signs in as:")).not.toBeInTheDocument();
+  });
+
+  it("stays quiet when the login address could not be read", () => {
+    // A deleted auth account degrades to null rather than failing the
+    // whole list; it must not render an empty "Signs in as:".
+    render(<MerchantsTable rows={[merchant({ login_email: null })]} />);
+
+    expect(screen.queryByText("Signs in as:")).not.toBeInTheDocument();
+  });
+
+  it("finds a merchant by the address they sign in with", () => {
+    // An operator pasting the login address should land on the row.
+    render(
+      <MerchantsTable
+        rows={[merchant({ email: "info@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/Search by ID, business name, email/i), {
+      target: { value: "owner@oddza.co.tz" },
+    });
+
+    expect(screen.getByText("Oddza Dev")).toBeInTheDocument();
   });
 });

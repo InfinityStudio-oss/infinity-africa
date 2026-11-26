@@ -75,11 +75,30 @@ class OnboardingMerchantAccountCreate(BaseModel):
     @field_validator("business_email")
     @classmethod
     def _check_business_email(cls, value: str | None) -> str | None:
+        """Validated, and lowercased.
+
+        Supabase Auth stores the LOGIN address lowercased, and this one
+        is free text, so "Ilafashaedward@gmail.com" on the business
+        record and "ilafashaedward@gmail.com" on the login are the same
+        person written two ways. In the portal's font a capital I and a
+        lowercase l are the same glyph, so whoever reads the contact
+        address off the screen to help a customer cannot tell which
+        they are looking at - and an address typed back with the wrong
+        one gets "Incorrect email or password", which is true and
+        tells them nothing.
+
+        Lowercasing here means the stored form matches the login and
+        the ambiguous capital never appears. Safe to do: the local part
+        of an address is case-sensitive by RFC, but no mail provider
+        anyone here uses treats it that way, and Supabase has already
+        made this decision for the address that actually matters.
+        """
         if not value:
             return None
-        if not re.match(_EMAIL_PATTERN, value):
+        normalised = value.strip().lower()
+        if not re.match(_EMAIL_PATTERN, normalised):
             raise ValueError("Enter a valid business email address")
-        return value
+        return normalised
 
 
 class OnboardingSignupCreate(OnboardingMerchantAccountCreate):

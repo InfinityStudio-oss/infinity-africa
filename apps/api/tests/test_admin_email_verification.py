@@ -282,3 +282,51 @@ def test_a_confirm_that_silently_changes_nothing_is_reported_as_a_failure(fake_c
     assert "still reads as unverified" in response.text.lower()
     # And nothing was audited, because nothing happened.
     assert _audits(fake_client, "merchant.email_confirmed_by_admin") == []
+
+
+# --- the login address on the merchants list ---------------------------------
+#
+# merchants.contact_email is a business contact field and may
+# legitimately differ from the address the owner signs in with. The two
+# diverging silently cost a support call: in the portal's font a capital
+# I and a lowercase l are the same glyph, so an operator reading the
+# contact address aloud gave out an address that did not exist.
+
+
+def test_the_merchants_list_shows_the_address_they_sign_in_with(fake_client):
+    headers = _admin(fake_client)
+    merchant_id, owner = _stranded(fake_client, email="owner@business.co.tz")
+    fake_client.table("merchants").update({"contact_email": "info@business.co.tz"}).eq(
+        "id", str(merchant_id)
+    ).execute()
+
+    rows = client.get("/v1/admin/merchants", headers=headers).json()["data"]
+    row = next(r for r in rows if r["merchant_id"] == str(merchant_id))
+
+    # Both, and distinguishable.
+    assert row["email"] == "info@business.co.tz"
+    assert row["login_email"] == "owner@business.co.tz"
+
+
+def test_one_merchant_also_carries_the_login_address(fake_client):
+    # The detail view must not contradict the list.
+    headers = _admin(fake_client)
+    merchant_id, _ = _stranded(fake_client, email="owner@business.co.tz")
+
+    row = client.get(f"/v1/admin/merchants/{merchant_id}", headers=headers).json()["data"]
+
+    assert row["login_email"] == "owner@business.co.tz"
+
+
+def test_an_unreadable_login_degrades_to_none_rather_than_failing_the_list(fake_client):
+    # A deleted auth account must not take the whole Super Admin list
+    # down with it.
+    headers = _admin(fake_client)
+    merchant_id = uuid.UUID(create_merchant(fake_client)["id"])
+    make_merchant_member(fake_client, merchant_id, uuid.uuid4(), "MERCHANT_ADMIN")
+
+    response = client.get("/v1/admin/merchants", headers=headers)
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["data"] if r["merchant_id"] == str(merchant_id))
+    assert row["login_email"] is None

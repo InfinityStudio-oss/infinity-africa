@@ -359,6 +359,7 @@ export function MerchantsTable({
         merchant.business_name,
         merchant.merchant_code ?? "",
         merchant.email,
+        merchant.login_email ?? "",
         merchant.contact_phone ?? "",
       ]
         .join(" ")
@@ -453,6 +454,25 @@ export function MerchantsTable({
                                 </>
                               )}
                             </div>
+                            {/* The address they sign in with, shown only
+                              * when it differs from the contact address
+                              * above - on most rows they are the same and
+                              * a second identical line would be noise.
+                              *
+                              * Monospaced on purpose. In the body font a
+                              * capital I and a lowercase l are the same
+                              * glyph, which is the whole reason this line
+                              * exists: an operator read a contact address
+                              * aloud, the customer typed the other letter,
+                              * and the login said "Incorrect email or
+                              * password". */}
+                            {merchant.login_email &&
+                              merchant.login_email.toLowerCase() !== merchant.email?.toLowerCase() && (
+                                <div className="text-xs text-on-surface-variant">
+                                  <span className="font-semibold">Signs in as:</span>{" "}
+                                  <span className="font-mono">{merchant.login_email}</span>
+                                </div>
+                              )}
                           </div>
                         </Link>
                       </td>

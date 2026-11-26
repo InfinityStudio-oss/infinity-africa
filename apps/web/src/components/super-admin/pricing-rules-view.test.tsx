@@ -20,6 +20,7 @@ const merchant: Merchant = {
   business_name: "Juma Traders Ltd",
   owner_name: null,
   email: "juma@example.com",
+  login_email: null,
   contact_phone: null,
   nature_of_business: null,
   physical_address: null,
