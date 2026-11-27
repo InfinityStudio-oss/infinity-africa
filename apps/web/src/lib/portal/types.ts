@@ -466,17 +466,32 @@ export interface SupportTicket {
 
 /** The events services/webhooks.py can enqueue — mirrors the
  * webhook_events.event_name CHECK constraint. */
+/** Every webhook event the platform can send, in the order the portal
+ *  lists them.
+ *
+ *  Must stay identical to WEBHOOK_EVENT_NAMES in
+ *  apps/api/app/services/webhook_event_names.py, which is the source of
+ *  truth. apps/api/tests/test_webhook_event_names.py reads this file and
+ *  fails if the two disagree.
+ *
+ *  Why that test exists: a merchant who narrows their selection stops
+ *  receiving anything not in it, so an event missing from this list is
+ *  not just hidden, it is unreachable. Five were missing - the reversals
+ *  among them, which are money being taken back - and four more were
+ *  listed here while nothing emitted them, so ticking those did nothing. */
 export const WEBHOOK_EVENT_NAMES = [
-  "collection.pending",
   "collection.success",
   "collection.failed",
+  "collection.reversed",
+  "collection.pending_review",
   "disbursement.success",
   "disbursement.failed",
+  "disbursement.reversed",
+  "payout.success",
+  "payout.failed",
   "invoice.paid",
-  "invoice.overdue",
-  "payment_link.created",
   "payment_link.paid",
-  "payment_link.expired",
+  "payment_link.payment_reversed",
   "refund.succeeded",
   "refund.failed",
   "chargeback.opened",

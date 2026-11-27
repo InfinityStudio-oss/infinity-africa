@@ -11,12 +11,16 @@ delivery from Selcom to POST /v1/webhooks/selcom, in public.selcom_webhook_event
 
 import hashlib
 import hmac
+import logging
 import uuid
 from typing import Any
 
 from supabase import Client
 
 from app.services.crud import execute_maybe_single, get_by_id, insert_row
+from app.services.webhook_event_names import KNOWN_WEBHOOK_EVENTS
+
+logger = logging.getLogger("infinity.webhooks")
 
 
 def last_webhook_delivery(client: Client, merchant_id: uuid.UUID) -> dict | None:
@@ -136,6 +140,18 @@ def enqueue_webhook_event(
 
     if not target_url:
         return None
+
+    if event_name not in KNOWN_WEBHOOK_EVENTS:
+        # Logged, never raised. A webhook that cannot be queued must not
+        # unwind a money decision already posted to the ledger, so this
+        # still sends. But an unknown name is a real defect: the portal
+        # cannot offer a checkbox for it, so any merchant who has
+        # narrowed their selection will never receive it, silently.
+        logger.error(
+            "webhook event %r is not in webhook_event_names.WEBHOOK_EVENT_NAMES — "
+            "merchants with a narrowed subscription will never receive it",
+            event_name,
+        )
 
     subscribed = merchant.get("webhook_subscribed_events") if merchant else None
     if subscribed and event_name not in subscribed:

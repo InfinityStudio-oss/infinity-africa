@@ -353,3 +353,71 @@ describe("WebhooksView - first-time setup generates a signing secret", () => {
     );
   });
 });
+
+/**
+ * Which events a merchant can actually tick.
+ *
+ * Narrowing the selection makes enqueue_webhook_event drop everything
+ * outside it, so an event missing from these checkboxes is not merely
+ * hidden — it is unreachable. Five emitted events were missing, the
+ * reversals among them, and a reversal is money being taken back.
+ *
+ * The exact list is pinned against the backend in
+ * apps/api/tests/test_webhook_event_names.py. This is the other half:
+ * that the list is actually rendered as something a person can tick.
+ */
+describe("WebhooksView — choosing which events to receive", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function showTheCheckboxes() {
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+    // Defaults to "All events"; the checkboxes only appear once it is off.
+    fireEvent.click(await screen.findByLabelText("All events"));
+  }
+
+  it("offers the reversal events, which were missing entirely", async () => {
+    await showTheCheckboxes();
+
+    for (const name of [
+      "collection.reversed",
+      "disbursement.reversed",
+      "payment_link.payment_reversed",
+    ]) {
+      expect(await screen.findByText(name)).toBeInTheDocument();
+    }
+  });
+
+  it("offers the payout events, so the Disbursement API is subscribable", async () => {
+    await showTheCheckboxes();
+
+    expect(await screen.findByText("payout.success")).toBeInTheDocument();
+    expect(await screen.findByText("payout.failed")).toBeInTheDocument();
+  });
+
+  it("no longer offers events that nothing emits", async () => {
+    // Ticking one of these did nothing at all, which is a quiet way to
+    // lose someone's trust in the whole screen.
+    await showTheCheckboxes();
+
+    await screen.findByText("collection.success");
+    for (const phantom of [
+      "collection.pending",
+      "invoice.overdue",
+      "payment_link.created",
+      "payment_link.expired",
+    ]) {
+      expect(screen.queryByText(phantom)).not.toBeInTheDocument();
+    }
+  });
+
+  it("hides the checkboxes while All events is on", async () => {
+    const { WebhooksView } = await import("./webhooks-view");
+    render(<WebhooksView />);
+
+    await screen.findByLabelText("All events");
+    expect(screen.queryByText("collection.reversed")).not.toBeInTheDocument();
+  });
+});
