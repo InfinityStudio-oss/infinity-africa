@@ -271,12 +271,14 @@ def _assert_one_email_invite(call: dict):
 
 
 def _submit_and_seed(fake_client):
-    from tests.test_admin_onboarding import _seed_required_documents, _valid_payload
+    # Reuses the submit helper rather than posting the same payload
+    # again, so an application set up here is identical to one set up
+    # over there - including the confirmed auth user that approval now
+    # requires. Posting it independently meant these tests stopped
+    # approving the moment that gate landed.
+    from tests.test_admin_onboarding import _seed_required_documents, _submit_onboarding
 
-    user_id = uuid.uuid4()
-    response = client.post("/v1/onboarding/merchant-account", headers=auth_headers(user_id), json=_valid_payload())
-    assert response.status_code == 201, response.text
-    merchant_id = response.json()["data"]["merchant"]["id"]
+    merchant_id = _submit_onboarding(fake_client, uuid.uuid4())["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id

@@ -46,6 +46,8 @@ from app.services.email import (
 )
 from app.services.ledger import get_wallet_balance
 from app.services.merchant_code import generate_merchant_code
+from app.services.merchant_email_correction import _owner_user_id
+from app.services.merchant_email_verification import _auth_user
 from app.services.referrals import start_referral_period
 from app.services.sms_messages import (
     enqueue_admin_new_merchant_sms,
@@ -663,6 +665,63 @@ def _missing_required_documents(client: Client, merchant_id: uuid.UUID) -> list[
     return [doc_type.value for doc_type in _REQUIRED_APPROVAL_DOCUMENTS if doc_type.value not in present]
 
 
+def _unverified_login_email(client: Client, merchant_id: uuid.UUID) -> str | None:
+    """The owner's login address, when nobody has ever proved they can
+    read it. None means approval may go ahead.
+
+    Approval is the moment a business can take money: wallet, API keys,
+    live collections. Until then the login email is a claim. Approving
+    on an unproved address has gone wrong twice in ways that cost real
+    time:
+
+      - 2026-11-27: a business approved 18 minutes after signing up on
+        a placeholder address typed during a demo. The owner could not
+        sign in, and the verification link had gone to a mailbox that
+        plausibly belongs to a stranger - who would have landed in that
+        business's dashboard by clicking it.
+      - the nine accounts behind
+        app/services/merchant_email_verification.py, every one approved
+        and KYC-verified while stranded outside its own account.
+
+    Checked at approval rather than at signup on purpose. Signup must
+    stay open - a merchant who mistypes their address still needs the
+    account that lets support correct it - and approval is where a
+    person is already looking at the application.
+
+    Reads merchant_users, not merchants.contact_email: the login is what
+    is at stake, and the business contact address may legitimately
+    differ from it.
+    """
+    try:
+        user_id = _owner_user_id(client, merchant_id)
+    except NotFoundError:
+        # No account owner at all. Nothing can sign in, so there is no
+        # login here to hand to the wrong person - the risk this gate
+        # exists for cannot occur, and refusing would only block an
+        # approval for a reason that does not apply. Merchants created
+        # by an admin rather than through signup look like this.
+        return None
+
+    try:
+        user = _auth_user(client, user_id)
+    except NotFoundError as exc:
+        # Deliberately the opposite choice from
+        # duplicate_signup._owner_never_verified, which allows a signup
+        # when this lookup fails. There, failing closed turns away a real
+        # merchant who may never come back. Here, failing open is the
+        # exact outcome the gate exists to prevent, and the cost of
+        # failing closed is a Super Admin pressing Approve again a minute
+        # later. Different stakes, opposite defaults.
+        raise ValidationAPIError(
+            "Cannot approve: couldn't check whether this business's login email "
+            "has been verified. Try again in a moment."
+        ) from exc
+
+    if user.get("email_confirmed_at"):
+        return None
+    return (user.get("email") or "").strip() or "(no address on file)"
+
+
 def approve_onboarding_submission(
     client: Client,
     *,
@@ -683,6 +742,21 @@ def approve_onboarding_submission(
     if missing:
         raise ValidationAPIError(
             f"Cannot approve: missing required document(s): {', '.join(missing)}"
+        )
+
+    # After the document check, which is a local read - no point spending
+    # an auth round-trip on an application that is going to be refused
+    # for a cheaper reason anyway.
+    unverified = _unverified_login_email(client, merchant_id)
+    if unverified:
+        # Short on purpose: this lands in a table cell beside the three
+        # buttons it names, so it has to say which one to press, not
+        # explain each of them.
+        raise ValidationAPIError(
+            f"Cannot approve: nobody has verified the login email {unverified}. "
+            "On this row use “Resend verification email”, "
+            "“Correct signup email” if the address is wrong, or "
+            "“Confirm email” to verify it yourself."
         )
 
     updated = update_row(

@@ -65,7 +65,20 @@ def _valid_payload(**overrides) -> dict:
     }
 
 
-def _submit_onboarding(user_id: uuid.UUID, **overrides) -> dict:
+def _submit_onboarding(fake_client, user_id: uuid.UUID, **overrides) -> dict:
+    # A confirmed auth user, because this endpoint is reached with a
+    # signed-in session and approval now refuses a business whose login
+    # email was never verified. Seeded here rather than in each test so
+    # the ordinary case reads as the ordinary case; the tests that care
+    # about the gate set up their own owner.
+    #
+    # Never overwrites one a test seeded itself - doing so silently threw
+    # away a seeded owner's name and failed the signup-notification test
+    # on an assertion about the email's contents, nowhere near here.
+    if str(user_id) not in fake_client.auth.admin._users:
+        fake_client.auth.admin.seed_user(
+            str(user_id), email="user@example.com", email_confirmed_at="2026-01-01T00:00:00+00:00"
+        )
     response = client.post(
         "/v1/onboarding/merchant-account", headers=auth_headers(user_id), json=_valid_payload(**overrides)
     )
@@ -94,13 +107,13 @@ def _seed_required_documents(fake_client, merchant_id: str, *, document_types=("
 
 
 def test_list_requires_super_admin(fake_client):
-    _submit_onboarding(uuid.uuid4())
+    _submit_onboarding(fake_client, uuid.uuid4())
     response = client.get("/v1/admin/onboarding", headers=auth_headers(uuid.uuid4()))
     assert response.status_code == 403
 
 
 def test_list_returns_submitted_merchant(fake_client):
-    _submit_onboarding(uuid.uuid4())
+    _submit_onboarding(fake_client, uuid.uuid4())
     admin_id = uuid.uuid4()
     make_super_admin(fake_client, admin_id)
 
@@ -120,7 +133,7 @@ def test_list_returns_submitted_merchant(fake_client):
 
 
 def test_get_detail_includes_signed_urls_for_documents(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     fake_client.seed(
         "onboarding_documents",
@@ -151,7 +164,7 @@ def test_get_detail_includes_signed_urls_for_documents(fake_client):
 
 
 def test_approve_promotes_merchant_status(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -170,7 +183,7 @@ def test_approve_promotes_merchant_status(fake_client):
 
 
 def test_approval_sends_a_welcome_email(fake_client, fake_resend):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -195,7 +208,7 @@ def test_approval_sends_a_welcome_email(fake_client, fake_resend):
 
 def test_approval_succeeds_even_when_welcome_email_delivery_fails(fake_client, fake_resend):
     fake_resend.should_fail = True
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -218,7 +231,7 @@ def test_welcome_email_never_goes_to_ceo(fake_client, fake_resend, monkeypatch):
     monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -237,7 +250,7 @@ def test_welcome_email_never_goes_to_ceo(fake_client, fake_resend, monkeypatch):
 
 
 def test_welcome_email_reply_to_is_info_email(fake_client, fake_resend):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -253,7 +266,7 @@ def test_welcome_email_reply_to_is_info_email(fake_client, fake_resend):
 
 
 def test_email_delivery_log_for_welcome_email_uses_merchant_email(fake_client, fake_resend):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -283,7 +296,7 @@ def test_missing_merchant_email_does_not_fall_back_to_ceo(fake_client, fake_rese
     monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -340,7 +353,7 @@ def test_new_merchant_signup_notification_goes_to_ceo(fake_client, fake_resend, 
     monkeypatch.setenv("CEO_EMAIL", "ceo@infinitypay.me")
     get_settings.cache_clear()
 
-    _submit_onboarding(uuid.uuid4())
+    _submit_onboarding(fake_client, uuid.uuid4())
 
     signup_calls = [c for c in fake_resend.calls if c["subject"] == "New merchant signup submitted"]
     assert len(signup_calls) == 1
@@ -372,7 +385,7 @@ def test_signup_notification_includes_merchant_business_and_contact_details(fake
     # test_list_returns_submitted_merchant's identical assumption).
     fake_client.seed_auth_user(user_id, email="owner@kilimanjarofresh.co.tz", full_name="Amina Juma")
 
-    submitted = _submit_onboarding(user_id, contact_phone="+255712345678")
+    submitted = _submit_onboarding(fake_client, user_id, contact_phone="+255712345678")
 
     signup_call = next(c for c in fake_resend.calls if c["subject"] == "New merchant signup submitted")
     html = signup_call["html"]
@@ -391,7 +404,7 @@ def test_no_signup_notification_without_ceo_email_configured(fake_client, fake_r
     """CEO_EMAIL unset (the default in tests/most local dev) must never
     raise or block submission — same convention as every other
     CEO-notification email in this codebase."""
-    _submit_onboarding(uuid.uuid4())
+    _submit_onboarding(fake_client, uuid.uuid4())
 
     assert fake_resend.calls == []
     assert fake_client.table("email_deliveries")._table.rows == []
@@ -421,7 +434,7 @@ def test_approve_succeeds_with_no_documents(fake_client):
     """KYC document upload was removed from onboarding — a submission with
     no documents attached at all is approvable; the Super Admin's manual
     review is the gate, not an in-app upload."""
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
@@ -442,7 +455,7 @@ def test_approve_succeeds_with_no_documents(fake_client):
 def test_business_licence_is_optional_for_approval(fake_client):
     """Approval must succeed with only NIDA + TIN uploaded — no
     BUSINESS_LICENCE document required or seeded here at all."""
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)  # NIDA + TIN only
     submission_id = next(
@@ -457,7 +470,7 @@ def test_business_licence_is_optional_for_approval(fake_client):
 
 
 def test_approval_creates_wallet_and_assigns_custom_pricing_rule(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -492,7 +505,7 @@ def test_approval_without_custom_pricing_creates_no_merchant_specific_rule(fake_
     """No custom pricing entered -> no merchant-specific row is created;
     the merchant relies on whatever platform fallback rule (merchant_id
     IS NULL) is configured, same as every other merchant."""
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
     submission_id = next(
@@ -518,7 +531,7 @@ def test_reject_suspends_the_merchant(fake_client):
     2026-10-11 - a Super Admin had rejected a business and banned its
     login, and the merchant row was still active.
     """
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
@@ -547,7 +560,7 @@ def test_reject_suspends_the_merchant(fake_client):
 def test_request_more_info_leaves_the_merchant_alone(fake_client):
     """"We need something else from you" is not "no". Suspending a
     business mid-review would stop one that has done nothing wrong."""
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
@@ -569,7 +582,7 @@ def test_request_more_info_leaves_the_merchant_alone(fake_client):
 
 
 def test_request_more_info(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
@@ -588,7 +601,7 @@ def test_request_more_info(fake_client):
 
 def test_rejected_merchant_can_resubmit_and_reappears_pending(fake_client):
     user_id = uuid.uuid4()
-    submitted = _submit_onboarding(user_id)
+    submitted = _submit_onboarding(fake_client, user_id)
     merchant_id = submitted["merchant"]["id"]
     submission_id = next(
         r["id"] for r in fake_client.table("onboarding_submissions")._table.rows if r["merchant_id"] == merchant_id
@@ -614,7 +627,7 @@ def test_rejected_merchant_can_resubmit_and_reappears_pending(fake_client):
 
 
 def test_approve_by_merchant_id(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
     _seed_required_documents(fake_client, merchant_id)
 
@@ -631,7 +644,7 @@ def test_approve_by_merchant_id(fake_client):
 
 
 def test_reject_by_merchant_id(fake_client):
-    submitted = _submit_onboarding(uuid.uuid4())
+    submitted = _submit_onboarding(fake_client, uuid.uuid4())
     merchant_id = submitted["merchant"]["id"]
 
     admin_id = uuid.uuid4()
@@ -650,3 +663,173 @@ def test_patch_by_id_404_when_no_submission_for_merchant(fake_client):
     make_super_admin(fake_client, admin_id)
     response = client.patch(f"/v1/admin/onboarding/{uuid.uuid4()}/approve", headers=auth_headers(admin_id))
     assert response.status_code == 404
+
+
+# --- the unverified-login-email gate ----------------------------------------
+#
+# Approval is the moment a business can take money. Approving while the
+# login email is still unproved went wrong twice: a business approved
+# 18 minutes after signing up on a placeholder address nobody owned
+# (2026-11-27), and the nine stranded accounts behind
+# app/services/merchant_email_verification.py.
+
+
+def _submission_id_for(fake_client, merchant_id: str) -> str:
+    return next(
+        r["id"]
+        for r in fake_client.table("onboarding_submissions")._table.rows
+        if r["merchant_id"] == merchant_id
+    )
+
+
+def _pending_merchant_with_owner(fake_client, *, email_confirmed_at):
+    """A submitted application whose owner is in whatever verification
+    state the test is about."""
+    user_id = uuid.uuid4()
+    fake_client.auth.admin.seed_user(
+        str(user_id), email="owner@example.com", email_confirmed_at=email_confirmed_at
+    )
+    submitted = _submit_onboarding(fake_client, user_id)
+    merchant_id = submitted["merchant"]["id"]
+    return merchant_id, _submission_id_for(fake_client, merchant_id)
+
+
+def test_approve_refuses_while_the_login_email_is_unverified(fake_client):
+    _, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 422
+    detail = response.json()["error"]["message"]
+    assert "owner@example.com" in detail
+    # The three ways out, because a refusal that does not say what to do
+    # next sends the Super Admin back to editing auth.users by hand.
+    assert "Resend verification email" in detail
+    assert "Correct signup email" in detail
+    assert "Confirm email" in detail
+
+
+def test_a_refused_approval_changes_nothing(fake_client):
+    """The gate runs before the first write. A half-approved merchant -
+    status active, submission still pending, no wallet - would be worse
+    than either outcome."""
+    merchant_id, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    merchant = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
+    assert merchant["status"] == "pending"
+    assert merchant["kyc_status"] == "unverified"
+    submission = next(
+        r for r in fake_client.table("onboarding_submissions")._table.rows if r["id"] == submission_id
+    )
+    assert submission["review_status"] == "PENDING_VERIFICATION"
+
+
+def test_approve_proceeds_once_the_login_email_is_verified(fake_client):
+    merchant_id, submission_id = _pending_merchant_with_owner(
+        fake_client, email_confirmed_at="2026-11-27T09:00:00+00:00"
+    )
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 200
+    merchant = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
+    assert merchant["status"] == "active"
+
+
+def test_confirming_the_email_unblocks_the_same_application(fake_client):
+    """The escape hatch the refusal names actually works. Without this,
+    the gate and the Super Admin's own controls are only assumed to fit
+    together."""
+    merchant_id, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    blocked = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+    assert blocked.status_code == 422
+
+    confirmed = client.post(
+        f"/v1/admin/merchants/{merchant_id}/confirm-email", headers=auth_headers(admin_id)
+    )
+    assert confirmed.status_code == 200
+
+    retried = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+    assert retried.status_code == 200
+
+
+def test_approve_allowed_when_there_is_no_account_owner_at_all(fake_client):
+    """No login exists, so there is no login to hand to the wrong person
+    and nothing for the gate to protect. Refusing here would block an
+    approval for a reason that does not apply."""
+    merchant_id, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    rows = fake_client.table("merchant_users")._table.rows
+    rows[:] = [r for r in rows if r["merchant_id"] != merchant_id]
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 200
+
+
+def test_approve_refuses_when_the_login_cannot_be_read(fake_client):
+    """Fails CLOSED, the opposite of duplicate_signup's owner check.
+
+    There, a lookup failure allows the signup, because turning away a
+    real merchant is the worse outcome. Here, allowing is exactly what
+    the gate exists to prevent, and the cost of refusing is pressing
+    Approve again a minute later.
+    """
+    merchant_id, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    # The merchant_users row survives its auth user, as it would after
+    # the user was deleted in the Supabase dashboard.
+    fake_client.auth.admin._users.clear()
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 422
+    assert "couldn't check" in response.json()["error"]["message"]
+    merchant = next(r for r in fake_client.table("merchants")._table.rows if r["id"] == merchant_id)
+    assert merchant["status"] == "pending"
+
+
+def test_the_gate_also_covers_the_patch_by_merchant_id_route(fake_client):
+    """Two routes, one service function. A gate on only the one the
+    Businesses page does not use would be no gate at all."""
+    merchant_id, _ = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+
+    response = client.patch(f"/v1/admin/onboarding/{merchant_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 422
+
+
+def test_approve_refuses_when_the_owner_has_no_address_at_all(fake_client):
+    """An owner with no email is the strongest case of all - there is
+    nothing that could have been verified - and it is the one that reads
+    as "nothing to report" if the refusal is built out of the address
+    string. Without a stand-in the gate returns "", which is falsy, and
+    the application sails through.
+    """
+    merchant_id, submission_id = _pending_merchant_with_owner(fake_client, email_confirmed_at=None)
+    owner_id = next(
+        r["user_id"] for r in fake_client.table("merchant_users")._table.rows if r["merchant_id"] == merchant_id
+    )
+    fake_client.auth.admin._users[str(owner_id)].email = None
+
+    admin_id = uuid.uuid4()
+    make_super_admin(fake_client, admin_id)
+    response = client.post(f"/v1/admin/onboarding/{submission_id}/approve", headers=auth_headers(admin_id))
+
+    assert response.status_code == 422
+    assert "no address on file" in response.json()["error"]["message"]
