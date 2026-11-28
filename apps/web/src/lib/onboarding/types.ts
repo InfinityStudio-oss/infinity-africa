@@ -141,3 +141,18 @@ export interface OnboardingSubmission {
   // missing — see app/schemas/onboarding.py::OnboardingSubmissionResponse.
   welcome_email_warning?: string | null;
 }
+
+/** The result of an Approve / Reject / Request More Info click.
+ *
+ * Returned by the three server actions in admin-actions.ts rather than
+ * thrown, because a Server Action's thrown message never reaches the
+ * browser — see the comment there.
+ *
+ * "warning": the action itself succeeded, but something non-blocking
+ * needs attention — currently only "approved, but the welcome email
+ * couldn't be sent" (app/services/onboarding.py::approve_onboarding_submission).
+ */
+export interface ReviewOutcome {
+  type: "success" | "warning" | "error";
+  message: string;
+}

@@ -749,14 +749,15 @@ def approve_onboarding_submission(
     # for a cheaper reason anyway.
     unverified = _unverified_login_email(client, merchant_id)
     if unverified:
-        # Short on purpose: this lands in a table cell beside the three
-        # buttons it names, so it has to say which one to press, not
-        # explain each of them.
+        # Names the page the fix is actually on. The three controls -
+        # Resend verification email, Correct signup email, Confirm email
+        # - live on the Businesses table, not on this review row, and an
+        # earlier wording said "on this row", which sent the reviewer
+        # looking for buttons that were never there.
         raise ValidationAPIError(
             f"Cannot approve: nobody has verified the login email {unverified}. "
-            "On this row use “Resend verification email”, "
-            "“Correct signup email” if the address is wrong, or "
-            "“Confirm email” to verify it yourself."
+            "Fix it under Businesses - resend the verification email, correct "
+            "the address if it is wrong, or confirm it yourself - then approve."
         )
 
     updated = update_row(

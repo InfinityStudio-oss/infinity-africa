@@ -704,11 +704,14 @@ def test_approve_refuses_while_the_login_email_is_unverified(fake_client):
     assert response.status_code == 422
     detail = response.json()["error"]["message"]
     assert "owner@example.com" in detail
-    # The three ways out, because a refusal that does not say what to do
-    # next sends the Super Admin back to editing auth.users by hand.
-    assert "Resend verification email" in detail
-    assert "Correct signup email" in detail
-    assert "Confirm email" in detail
+    # The way out, because a refusal that does not say what to do next
+    # sends the Super Admin back to editing auth.users by hand. It has to
+    # name the page the fix is on: the three controls live on Businesses,
+    # not on this review row.
+    assert "Businesses" in detail
+    assert "resend the verification email" in detail
+    assert "correct the address" in detail
+    assert "confirm it yourself" in detail
 
 
 def test_a_refused_approval_changes_nothing(fake_client):
