@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { DocumentType } from "@infinity/shared";
 
 import { getAccessToken } from "@/lib/supabase/session";
@@ -78,20 +80,113 @@ async function parseEnvelope<T>(res: Response): Promise<T> {
 
 // --- Self-service (merchant) -------------------------------------------
 
-/** Returns null on no session, network failure, or a non-2xx response —
- * every caller treats "status unknown" the same as "start onboarding". */
-export async function getOnboardingStatus(accessToken?: string): Promise<OnboardingStatus | null> {
+/**
+ * How long a merchant's onboarding status may be reused without asking
+ * the API again.
+ *
+ * This endpoint is on the critical path of EVERY portal page - the portal
+ * layout and four pages await it before rendering anything - and the
+ * answer it gives changes perhaps twice in an account's lifetime. Without
+ * this, clicking Overview -> Withdrawals -> Invoices costs three
+ * identical round trips to Railway, each of which queries Supabase.
+ *
+ * Ten seconds, not minutes, because two of the states it carries are
+ * acted on immediately:
+ *
+ *   - a Super Admin suspending a business (redirectIfSuspended)
+ *   - a Super Admin approving one
+ *
+ * For up to ten seconds after either, the portal still shows the previous
+ * state. That is survivable because this is a UX guard, not the control:
+ * apps/api refuses every /v1/merchant/* call from a suspended business
+ * regardless of what this says. Raising this value trades directly
+ * against how long a suspended merchant keeps seeing a portal whose every
+ * panel 403s - which is exactly the "looks like an outage" case
+ * lib/onboarding/guard.ts was written to avoid. Do not make it minutes.
+ */
+const STATUS_TTL_MS = 10_000;
+
+/** Bounded so a long-lived serverless instance serving many merchants
+ * cannot grow this without limit. Entries are tiny; the cap is about
+ * never being the reason a container runs out of memory. */
+const STATUS_CACHE_MAX_ENTRIES = 500;
+
+const statusCache = new Map<string, { storedAt: number; value: OnboardingStatus }>();
+
+/** Keyed by a digest of the access token, never the token itself: the
+ * value sits in process memory for ten seconds and there is no reason for
+ * a credential to be the thing it is filed under. A digest also means one
+ * merchant can never read another's entry - a different session is a
+ * different token is a different key. */
+async function statusCacheKey(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Buffer.from(digest).toString("base64url");
+}
+
+function readStatusCache(key: string): OnboardingStatus | null {
+  const hit = statusCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.storedAt >= STATUS_TTL_MS) {
+    statusCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function writeStatusCache(key: string, value: OnboardingStatus): void {
+  const now = Date.now();
+  for (const [k, entry] of statusCache) {
+    if (now - entry.storedAt >= STATUS_TTL_MS) statusCache.delete(k);
+  }
+  if (statusCache.size >= STATUS_CACHE_MAX_ENTRIES) {
+    // Oldest insertion first — Map preserves it.
+    const oldest = statusCache.keys().next();
+    if (!oldest.done) statusCache.delete(oldest.value);
+  }
+  statusCache.set(key, { storedAt: now, value });
+}
+
+/** Test seam. Module state outlives a test file, and a status cached by
+ * one test would otherwise answer another's request. */
+export function __clearOnboardingStatusCache(): void {
+  statusCache.clear();
+}
+
+/**
+ * Returns null on no session, network failure, or a non-2xx response —
+ * every caller treats "status unknown" the same as "start onboarding".
+ *
+ * Deduped per request with React's `cache` (a layout and its page both
+ * ask) and reused for STATUS_TTL_MS across requests on the same warm
+ * instance.
+ *
+ * **Only a successful answer is stored.** A null is a failed request or a
+ * 401, and caching that would turn one bad second into ten seconds of a
+ * verified merchant being bounced to /onboarding.
+ */
+export const getOnboardingStatus = cache(async function getOnboardingStatus(
+  accessToken?: string,
+): Promise<OnboardingStatus | null> {
+  const token = accessToken ?? (await getAccessToken());
+  const key = token ? await statusCacheKey(token) : null;
+  if (key) {
+    const hit = readStatusCache(key);
+    if (hit) return hit;
+  }
+
   try {
     const res = await fetch(`${API_BASE}/v1/onboarding/status`, {
-      headers: await authHeader(accessToken),
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       cache: "no-store",
     });
     if (!res.ok) return null;
-    return await parseEnvelope<OnboardingStatus>(res);
+    const status = await parseEnvelope<OnboardingStatus>(res);
+    if (key) writeStatusCache(key, status);
+    return status;
   } catch {
     return null;
   }
-}
+});
 
 /** Combined signup — unauthenticated (no Authorization header), sent as
  * multipart/form-data (no file is collected by the Get Started form

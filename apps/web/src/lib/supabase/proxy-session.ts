@@ -37,7 +37,28 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       },
     );
 
-    await supabase.auth.getUser();
+    // getSession(), NOT getUser(), and the difference is a network round
+    // trip on every single request this proxy matches.
+    //
+    // getUser() always calls Supabase Auth over the network to revalidate
+    // the JWT. getSession() reads the cookie and only goes to the network
+    // when the access token is within EXPIRY_MARGIN_MS (90s) of expiring,
+    // which is when it refreshes and writes the new cookie through setAll
+    // above. Refreshing that cookie is the ONLY reason this function
+    // exists - a Server Component cannot set cookies, so the refresh has
+    // to happen here.
+    //
+    // Nothing is weakened by the swap, because the result was always
+    // thrown away. This made no authorization decision before and makes
+    // none now; every page still proves who the caller is with its own
+    // getUser() (lib/supabase/session.ts), which is the call that must
+    // stay a revalidating one. What was removed is the SECOND, duplicate
+    // revalidation of the same token in the same request.
+    //
+    // Measured from Dar es Salaam, 2026-11-28: the portal renders in
+    // Frankfurt (x-vercel-id cpt1::fra1) and this was one of three serial
+    // hops before a page could paint.
+    await supabase.auth.getSession();
   } catch {
     // Connectivity failure (or any other Supabase error) — fail open and
     // let the request through unmodified.
