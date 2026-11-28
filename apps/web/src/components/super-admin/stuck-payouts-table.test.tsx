@@ -12,7 +12,7 @@ function row(overrides: Partial<AdminPayoutRow> = {}): AdminPayoutRow {
     id: "payout-1",
     merchant_id: "merchant-1",
     business_name: "Merchant",
-    merchant_code: "27413765",
+    merchant_code: "27000006",
     environment: "sandbox",
     status: "needs_reconciliation",
     amount: "1000.00",
@@ -90,7 +90,7 @@ describe("Releasing a stuck payout", () => {
 
   it("names the business and the amount in the confirmation", async () => {
     const { StuckPayoutsTable } = await import("./stuck-payouts-table");
-    render(<StuckPayoutsTable rows={[row({ business_name: "GOOD NET" })]} />);
+    render(<StuckPayoutsTable rows={[row({ business_name: "UHURU NET" })]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Release funds" }));
 
@@ -98,7 +98,7 @@ describe("Releasing a stuck payout", () => {
     // column, and an unscoped match would pass even if the confirmation
     // never named anyone — which is the whole point of it.
     const confirmation = screen.getByText(/Return TZS 1,010.00 to/);
-    expect(confirmation).toHaveTextContent("GOOD NET");
+    expect(confirmation).toHaveTextContent("UHURU NET");
     expect(confirmation).toHaveTextContent(/Only do this if you know the provider did not pay/);
   });
 

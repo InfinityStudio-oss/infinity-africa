@@ -70,7 +70,7 @@ def _collection(fake_client, merchant_id, *, reference, created_at):
             "status": "successful",
             "method": "USSD_PUSH",
             "source": "DASHBOARD_REQUEST",
-            "customer_phone": "255762474101",
+            "customer_phone": "255755123456",
             "metadata": {},
             "initiated_at": created_at,
             "created_at": created_at,

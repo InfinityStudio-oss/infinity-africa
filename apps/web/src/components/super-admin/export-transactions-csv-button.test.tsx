@@ -15,7 +15,7 @@ function transaction(overrides: Partial<AdminTransactionRow> = {}): AdminTransac
     reference: "TXN-20260822-E7803AE4",
     provider_reference: "SELCOM-REF-1",
     method: "DYNAMIC_QR",
-    customer_phone: "255762474101",
+    customer_phone: "255755123456",
     gross_amount: "2000.00",
     fee_amount: "30.00",
     net_amount: "1970.00",

@@ -78,8 +78,8 @@ class OnboardingMerchantAccountCreate(BaseModel):
         """Validated, and lowercased.
 
         Supabase Auth stores the LOGIN address lowercased, and this one
-        is free text, so "Ilafashaedward@gmail.com" on the business
-        record and "ilafashaedward@gmail.com" on the login are the same
+        is free text, so "Ikondajohn@example.com" on the business
+        record and "ikondajohn@example.com" on the login are the same
         person written two ways. In the portal's font a capital I and a
         lowercase l are the same glyph, so whoever reads the contact
         address off the screen to help a customer cannot tell which

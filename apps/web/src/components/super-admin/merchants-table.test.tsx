@@ -18,10 +18,10 @@ import { MerchantsTable } from "./merchants-table";
 function merchant(overrides: Partial<Merchant> = {}): Merchant {
   return {
     merchant_id: "merchant-1",
-    merchant_code: "27039828",
-    business_name: "Oddza Dev",
+    merchant_code: "27000002",
+    business_name: "Zuri Dev",
     owner_name: "Jane Doe",
-    email: "owner@oddza.co.tz",
+    email: "owner@zuri.co.tz",
     login_email: null,
     contact_phone: "+255700000000",
     nature_of_business: null,
@@ -50,7 +50,7 @@ describe("MerchantsTable actions", () => {
 
     fireEvent.click(screen.getByTitle("Suspend"));
 
-    expect(screen.getByText(/Suspend Oddza Dev\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Suspend Zuri Dev\?/)).toBeInTheDocument();
     expect(setMerchantStatusAction).not.toHaveBeenCalled();
   });
 
@@ -217,12 +217,12 @@ describe("MerchantsTable login address", () => {
   it("shows the sign-in address when it differs from the contact address", () => {
     render(
       <MerchantsTable
-        rows={[merchant({ email: "Info@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+        rows={[merchant({ email: "Info@zuri.co.tz", login_email: "owner@zuri.co.tz" })]}
       />,
     );
 
     expect(screen.getByText("Signs in as:")).toBeInTheDocument();
-    expect(screen.getByText("owner@oddza.co.tz")).toBeInTheDocument();
+    expect(screen.getByText("owner@zuri.co.tz")).toBeInTheDocument();
   });
 
   it("stays quiet when the two are the same", () => {
@@ -230,7 +230,7 @@ describe("MerchantsTable login address", () => {
     // that trains people to stop reading it.
     render(
       <MerchantsTable
-        rows={[merchant({ email: "owner@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+        rows={[merchant({ email: "owner@zuri.co.tz", login_email: "owner@zuri.co.tz" })]}
       />,
     );
 
@@ -262,14 +262,14 @@ describe("MerchantsTable login address", () => {
     // An operator pasting the login address should land on the row.
     render(
       <MerchantsTable
-        rows={[merchant({ email: "info@oddza.co.tz", login_email: "owner@oddza.co.tz" })]}
+        rows={[merchant({ email: "info@zuri.co.tz", login_email: "owner@zuri.co.tz" })]}
       />,
     );
 
     fireEvent.change(screen.getByPlaceholderText(/Search by ID, business name, email/i), {
-      target: { value: "owner@oddza.co.tz" },
+      target: { value: "owner@zuri.co.tz" },
     });
 
-    expect(screen.getByText("Oddza Dev")).toBeInTheDocument();
+    expect(screen.getByText("Zuri Dev")).toBeInTheDocument();
   });
 });

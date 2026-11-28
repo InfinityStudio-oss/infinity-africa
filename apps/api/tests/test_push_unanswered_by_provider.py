@@ -1,8 +1,8 @@
 """A push Selcom never answers must still leave a collection behind.
 
 From production, 2026-10-19. Selcom slowed down and **30 payment starts
-across seven merchants** timed out after about 33 seconds each - GodyNet,
-UTETE INTERNET, Quicknet, Kitonga_WiFi, KILUNGULE SUPER WiFi, BBTECH and
+across seven merchants** timed out after about 33 seconds each - Juhudi Net,
+Pwani Internet, Swiftlink, Msasani_WiFi, Mlimani Super WiFi, Kibo Tech and
 MAXTON'S WIFI. 4.7% of that day's API requests, against 0.1% two days
 earlier.
 

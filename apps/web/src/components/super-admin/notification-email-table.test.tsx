@@ -15,12 +15,12 @@ vi.mock("@/lib/admin/live-actions", () => ({
 function row(overrides: Partial<AdminNotificationSettingsListRow> = {}): AdminNotificationSettingsListRow {
   return {
     merchant_id: "merchant-1",
-    merchant_name: "GOOD NET",
-    merchant_code: "27074678",
+    merchant_name: "UHURU NET",
+    merchant_code: "27000004",
     collection_notifications_enabled: true,
     primary_notification_email: null,
     secondary_notification_email: null,
-    effective_recipient: "goodluckdanstan@gmail.com",
+    effective_recipient: "recipient@example.com",
     uses_account_email_fallback: true,
     configured: false,
     updated_at: "2026-11-21T13:47:29Z",
@@ -44,7 +44,7 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
 
     render(<NotificationEmailTable {...table([row()])} />);
 
-    const toggle = screen.getByRole("switch", { name: "Collection emails for GOOD NET" });
+    const toggle = screen.getByRole("switch", { name: "Collection emails for UHURU NET" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(toggle).toHaveTextContent("Enabled");
 
@@ -70,7 +70,7 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
       />,
     );
 
-    const toggle = screen.getByRole("switch", { name: "Collection emails for GOOD NET" });
+    const toggle = screen.getByRole("switch", { name: "Collection emails for UHURU NET" });
     expect(toggle).toHaveTextContent("Disabled");
 
     fireEvent.click(toggle);
@@ -88,7 +88,7 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
 
     render(<NotificationEmailTable {...table([row()])} />);
 
-    const toggle = screen.getByRole("switch", { name: "Collection emails for GOOD NET" });
+    const toggle = screen.getByRole("switch", { name: "Collection emails for UHURU NET" });
     fireEvent.click(toggle);
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Couldn't change collection emails"));
@@ -104,14 +104,14 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
 
     render(<NotificationEmailTable {...table([row()])} />);
     const cells = screen.getAllByRole("row")[1];
-    expect(within(cells).getByText("goodluckdanstan@gmail.com")).toBeInTheDocument();
+    expect(within(cells).getByText("recipient@example.com")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for GOOD NET" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for UHURU NET" }));
 
     // The two cells describe the same fact and must not contradict each
     // other while the save is in flight.
     await waitFor(() => expect(within(cells).getByText("Nobody — switched off")).toBeInTheDocument());
-    expect(within(cells).queryByText("goodluckdanstan@gmail.com")).not.toBeInTheDocument();
+    expect(within(cells).queryByText("recipient@example.com")).not.toBeInTheDocument();
   });
 
   it("drops the 'Default — never changed' note once the operator has changed it", async () => {
@@ -122,7 +122,7 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
     render(<NotificationEmailTable {...table([row({ configured: false })])} />);
     expect(screen.getByText("Default — never changed")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for GOOD NET" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for UHURU NET" }));
 
     await waitFor(() => expect(screen.queryByText("Default — never changed")).not.toBeInTheDocument());
   });
@@ -136,15 +136,15 @@ describe("NotificationEmailTable — the collection-emails switch", () => {
       <NotificationEmailTable
         {...table([
           row(),
-          row({ merchant_id: "merchant-2", merchant_name: "BennyWiFi", merchant_code: "27004818" }),
+          row({ merchant_id: "merchant-2", merchant_name: "Serengeti WiFi", merchant_code: "27000001" }),
         ])}
       />,
     );
 
-    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for BennyWiFi" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Collection emails for Serengeti WiFi" }));
 
     await waitFor(() => expect(setCollectionEmailsEnabledAction).toHaveBeenCalledWith("merchant-2", false));
-    expect(screen.getByRole("switch", { name: "Collection emails for GOOD NET" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Collection emails for UHURU NET" })).toHaveAttribute(
       "aria-checked",
       "true",
     );

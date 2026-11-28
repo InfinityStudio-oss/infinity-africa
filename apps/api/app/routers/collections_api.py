@@ -483,7 +483,7 @@ def get_collection_status(
     same as the four create endpoints above. It was required here until
     2026-10-16, and the four create endpoints beside it were not - so a
     partner could start a payment and then not be allowed to ask what
-    happened to it. Kinange Wifi hit that for 61 consecutive lookups
+    happened to it. Nyati Wifi hit that for 61 consecutive lookups
     across five payments, while following the published integration
     guide, which shows this call with no query string at all.
 

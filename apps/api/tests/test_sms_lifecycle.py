@@ -619,7 +619,7 @@ def test_every_idempotency_key_fits_the_format_the_provider_documents():
 
     anchor = uuid.uuid4()
     # Separators a number can really be configured with, and a long one.
-    phones = ("255762474101", "+255 762 474 101", "+255-762-474-101", "0" * 20)
+    phones = ("255755123456", "+255 755 123 456", "+255-762-474-101", "0" * 20)
 
     keys = [_idempotency_key(p, anchor) for p in ("welcome", "withdrawal_complete")]
     keys += [
@@ -629,7 +629,7 @@ def test_every_idempotency_key_fits_the_format_the_provider_documents():
     ]
     # A purpose long enough to overflow must still produce a usable key,
     # not a rejected one.
-    keys.append(_admin_idempotency_key("a" * 80, anchor, "255762474101"))
+    keys.append(_admin_idempotency_key("a" * 80, anchor, "255755123456"))
 
     for key in keys:
         assert 1 <= len(key) <= 64, f"{key!r} is {len(key)} characters; the provider allows 64"
@@ -645,9 +645,9 @@ def test_an_idempotency_key_is_the_same_every_time_it_is_built():
     anchor = uuid.uuid4()
     long_purpose = "a" * 80  # the digest branch, where sameness is easiest to lose
 
-    assert _admin_idempotency_key(long_purpose, anchor, "255762474101") == (
-        _admin_idempotency_key(long_purpose, anchor, "255762474101")
+    assert _admin_idempotency_key(long_purpose, anchor, "255755123456") == (
+        _admin_idempotency_key(long_purpose, anchor, "255755123456")
     )
-    assert _admin_idempotency_key(long_purpose, anchor, "255762474101") != (
+    assert _admin_idempotency_key(long_purpose, anchor, "255755123456") != (
         _admin_idempotency_key(long_purpose, anchor, "255762474102")
     ), "a second operator number must get its own copy, not be deduplicated away"

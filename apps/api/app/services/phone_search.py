@@ -8,7 +8,7 @@ number, and nothing else.
 
 Numbers are STORED canonically. Every one of the last 400 collections
 is `255XXXXXXXXX`. Numbers are TYPED however the person in front of you
-said them: 0762474101, 255762474101, +255 762 474 101, 0762 474 101.
+said them: 0755123456, 255755123456, +255 755 123 456, 0755 123 456.
 A naive equality filter on the typed text matches nothing and tells the
 operator the payment does not exist — which is worse than no search,
 because it is a confident wrong answer about someone's money.
@@ -18,7 +18,7 @@ normalize_tz_phone the rest of the platform writes with.
 
 --- Partial numbers
 
-An operator often has only the tail: "it ends 474101". A short suffix
+An operator often has only the tail: "it ends 123456". A short suffix
 is allowed, but with a floor. Two or three digits would match thousands
 of rows across every merchant and scan the whole table to do it, so
 anything under six digits is treated as not-a-phone and left to the
@@ -105,7 +105,7 @@ def collection_ids_for_phone(
         if exact:
             return q.eq("customer_phone", exact)
         # Suffix, not "contains": the tail of a number is what people
-        # read out. `%474101` cannot use the btree index, which is why
+        # read out. `%123456` cannot use the btree index, which is why
         # the digit floor exists.
         return q.ilike("customer_phone", f"%{suffix}")
 

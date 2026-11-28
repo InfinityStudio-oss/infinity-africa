@@ -21,7 +21,7 @@ function row(overrides: Partial<AdminCollectionRow>): AdminCollectionRow {
     currency: "TZS",
     fee_amount: null,
     net_amount: null,
-    phone: "255762474101",
+    phone: "255755123456",
     merchant_reference: null,
     provider_reference: "S123",
     api_key_id: null,

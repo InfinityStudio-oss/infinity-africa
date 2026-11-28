@@ -91,7 +91,7 @@ def _enable_automation(fake_client, monkeypatch, *, max_amount="100000"):
 
 
 def _merchant_and_admin(fake_client, **overrides):
-    merchant = create_merchant(fake_client, business_name="BennyWiFi", **overrides)
+    merchant = create_merchant(fake_client, business_name="Serengeti WiFi", **overrides)
     merchant_id = uuid.UUID(merchant["id"])
     user_id = uuid.uuid4()
     make_merchant_member(fake_client, merchant_id, user_id, "MERCHANT_ADMIN")
@@ -371,7 +371,7 @@ def test_the_automatic_alert_is_addressed_to_an_operator_not_the_merchant(
 def test_the_message_costs_one_segment_for_a_normal_business_name():
     """Measured, not assumed. The same property the request alert has."""
     body = render_withdrawal_auto_admin(
-        business_name="BennyWiFi", amount=Decimal(45000), reference="A223A1FE"
+        business_name="Serengeti WiFi", amount=Decimal(45000), reference="A223A1FE"
     )
 
     cost = message_cost(body)
@@ -391,7 +391,7 @@ def test_a_very_long_business_name_still_costs_at_most_two_segments():
 
 def test_the_amount_never_passes_through_a_float():
     body = render_withdrawal_auto_admin(
-        business_name="BennyWiFi", amount=Decimal("1000.10"), reference="A223A1FE"
+        business_name="Serengeti WiFi", amount=Decimal("1000.10"), reference="A223A1FE"
     )
 
     assert "1,000.10" in body

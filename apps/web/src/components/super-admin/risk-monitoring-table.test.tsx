@@ -17,7 +17,7 @@ const alert: AdminFraudAlertRow = {
   alert_id: "alert-1",
   merchant_id: "merchant-1",
   merchant_name: "Masanja Traders",
-  merchant_code: "27413765",
+  merchant_code: "27000006",
   transaction_id: null,
   customer_phone: "255747730270",
   rule_code: "SELF_PAYMENT_OWN_TILL",

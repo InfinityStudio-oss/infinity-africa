@@ -53,7 +53,7 @@ function collection(overrides: Partial<Collection>): Collection {
     method: CollectionMethod.STK_PUSH,
     amount: "1000.00",
     currency: "TZS",
-    customer_phone: "255762474101",
+    customer_phone: "255755123456",
     status: "processing",
     provider: "selcom",
     provider_reference: "S123",

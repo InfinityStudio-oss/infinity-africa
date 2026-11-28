@@ -19,7 +19,7 @@ function row(overrides: Partial<AdminPayoutAccessRow> = {}): AdminPayoutAccessRo
   return {
     merchant_id: "merchant-1",
     business_name: "Merchant",
-    merchant_code: "27413765",
+    merchant_code: "27000006",
     enabled: true,
     sandbox_enabled: true,
     live_enabled: false,
@@ -83,13 +83,13 @@ describe("Super Admin payout access", () => {
 
   it("names the business in the live confirmation, so a wrong row is visible", async () => {
     const { PayoutAccessTable } = await import("./payout-access-table");
-    render(<PayoutAccessTable rows={[row({ business_name: "GOOD NET" })]} />);
+    render(<PayoutAccessTable rows={[row({ business_name: "UHURU NET" })]} />);
 
-    fireEvent.click(screen.getByRole("switch", { name: "Live payouts for GOOD NET" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Live payouts for UHURU NET" }));
 
     // "Are you sure?" gets a reflex yes. The name is what makes the
     // operator look at which row they are on.
-    expect(screen.getByText("GOOD NET", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("UHURU NET", { selector: "span" })).toBeInTheDocument();
   });
 
   it("grants live once confirmed", async () => {
@@ -187,11 +187,11 @@ describe("Super Admin payout access", () => {
 
     render(
       <PayoutAccessTable
-        rows={[row(), row({ merchant_id: "merchant-2", business_name: "BennyWiFi", version: 7 })]}
+        rows={[row(), row({ merchant_id: "merchant-2", business_name: "Serengeti WiFi", version: 7 })]}
       />,
     );
 
-    fireEvent.click(screen.getByRole("switch", { name: "Sandbox payouts for BennyWiFi" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Sandbox payouts for Serengeti WiFi" }));
 
     await waitFor(() => expect(setPayoutSandboxAction).toHaveBeenCalledWith("merchant-2", false, 7));
   });

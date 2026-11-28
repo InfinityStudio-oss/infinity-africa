@@ -1,6 +1,6 @@
 """Looking up a payment with the key that created it.
 
-From production, 2026-10-15: Kinange Wifi (merchant 27607535) made 70 API
+From production, 2026-10-15: Nyati Wifi (merchant 27000007) made 70 API
 requests. Seven were `POST /v1/collections/wallet-push` and succeeded with
 202. **Sixty-one were `GET /v1/collections/{uuid}` and every one returned
 422.** Five distinct collections, polled up to twenty-five times each,
@@ -59,7 +59,7 @@ def _setup(fake_client):
             "currency": "TZS",
             "status": "successful",
             "environment": "live",
-            "merchant_reference": "KINANGE-SB2",
+            "merchant_reference": "NYATI-SB2",
             "channel": "TIGOPESA",
         },
     )
@@ -86,7 +86,7 @@ def test_the_documented_request_works(fake_client):
 
 
 def test_a_partner_polling_repeatedly_gets_the_same_answer(fake_client):
-    """Kinange polled one collection twenty-five times. Whatever the
+    """Nyati polled one collection twenty-five times. Whatever the
     answer is, it has to be stable and it has to be an answer."""
     _merchant_id, raw_key, collection = _setup(fake_client)
 
@@ -202,12 +202,12 @@ def test_refresh_status_takes_the_merchant_from_the_key_too(fake_client):
 
 
 def test_a_merchant_reference_is_not_a_collection_id(fake_client):
-    """Kinange also tried GET /v1/transactions/KINANGE-SB2 twice and got
+    """Nyati also tried GET /v1/transactions/NYATI-SB2 twice and got
     404. Their own reference is not an InfinityPay id, and the lookup
     route takes the id we returned at creation."""
     _merchant_id, raw_key, _collection = _setup(fake_client)
 
-    response = client.get("/v1/collections/KINANGE-SB2", headers=_key(raw_key))
+    response = client.get("/v1/collections/NYATI-SB2", headers=_key(raw_key))
 
     assert response.status_code == 422
     details = response.json()["error"]["details"] or []

@@ -16,7 +16,7 @@ vi.mock("./api", () => ({
 }));
 
 vi.mock("@/lib/auth/current-user", () => ({
-  getCurrentUser: async () => ({ id: "user-1", email: "davemma22@gmail.com" }),
+  getCurrentUser: async () => ({ id: "user-1", email: "dave.m@example.com" }),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({
 function validForm(): FormData {
   const data = new FormData();
   for (const [key, value] of Object.entries({
-    businessName: "CHITE Wi-Fi",
+    businessName: "Chuo Wi-Fi",
     natureOfBusiness: "Hotspot",
     businessCategory: "Internet",
     physicalAddress: "Mbezi",
@@ -54,7 +54,7 @@ describe("what a duplicate signup is told", () => {
   it("shows the API's own reason instead of rewriting it", async () => {
     // The regression. A conflict used to be replaced with "You already
     // have a merchant account submitted for review" whatever the API
-    // said. CHITE Wi-Fi's account was active and verified, not queued,
+    // said. Chuo Wi-Fi's account was active and verified, not queued,
     // so that sentence was false and told them nothing they could act
     // on. It became a support ticket.
     submitOnboardingAccount.mockRejectedValue(

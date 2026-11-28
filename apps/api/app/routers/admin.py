@@ -1177,7 +1177,7 @@ def list_admin_collections(
     if customer_phone is not None:
         # Normalised, not compared as text. Numbers are stored
         # canonically as 255… and typed however they were read out, so
-        # an exact match on "0762474101" found nothing and told the
+        # an exact match on "0755123456" found nothing and told the
         # operator the payment did not exist - a confident wrong answer
         # about somebody's money.
         exact, suffix = canonical_or_suffix(customer_phone)
@@ -1416,7 +1416,7 @@ def list_admin_transactions(
     ] = None,
     customer_phone: Annotated[
         str | None,
-        Query(description="Customer phone in any format: 0762474101, 255762474101, +255 762 474 101, or the last 6 digits"),
+        Query(description="Customer phone in any format: 0755123456, 255755123456, +255 755 123 456, or the last 6 digits"),
     ] = None,
     date_from: Annotated[
         str | None,
@@ -1791,7 +1791,7 @@ def resend_merchant_webhook(
     was asking them to reconcile by hand.
 
     That is a real gap for a platform where a webhook is how a partner
-    learns money arrived. BennyWiFi hit it on 2026-10-22: their callback
+    learns money arrived. Serengeti WiFi hit it on 2026-10-22: their callback
     answered five deliveries with a redirect to an error page, and five
     payments plus a payout had to be read back to them by reference.
 

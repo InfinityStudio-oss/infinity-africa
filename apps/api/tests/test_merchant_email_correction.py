@@ -78,7 +78,7 @@ def _setup(fake_client, *, email="jumakassim1@example.com"):
     make_merchant_member(
         fake_client, uuid.UUID(merchant["id"]), owner_id, "MERCHANT_ADMIN"
     )
-    fake_client.auth.admin.seed_user(str(owner_id), email=email, full_name="Hussein Said")
+    fake_client.auth.admin.seed_user(str(owner_id), email=email, full_name="Juma Kassim")
     return merchant, owner_id, auth_headers(admin_id)
 
 

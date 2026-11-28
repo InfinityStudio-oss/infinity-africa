@@ -124,8 +124,8 @@ class AdminMerchantResponse(BaseModel):
     # from Supabase Auth.
     #
     # Shown because the two silently diverging cost a real support
-    # call: a business stored as "Ilafashaedward@gmail.com" signs in as
-    # "ilafashaedward@gmail.com", and in the portal's font a capital I
+    # call: a business stored as "Ikondajohn@example.com" signs in as
+    # "ikondajohn@example.com", and in the portal's font a capital I
     # and a lowercase l are the same glyph. Whoever read the contact
     # address off the screen to help gave out an address that does not
     # exist, and the login answered "Incorrect email or password",

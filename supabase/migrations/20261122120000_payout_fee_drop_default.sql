@@ -8,7 +8,7 @@
 --
 -- So every row inserted without naming those columns still got 0 - and
 -- the row that matters is the one the new access-request flow creates.
--- The first real merchant to use it, MONTANA TECH (27930533), asked for
+-- The first real merchant to use it, SAVANNA TECH (27000008), asked for
 -- payout access on 2026-11-22 and landed on fee 0.0% / flat 0.00. The
 -- Super Admin screen correctly reported that as a deliberate zero
 -- rather than "Standard (tariff)", because that is exactly what the

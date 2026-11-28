@@ -64,7 +64,7 @@ describe("a rejected signup says why, where it can be seen", () => {
   it("names the problem at the TOP of the form, not only beside the field", () => {
     // The exact case reported: everything filled in except NIDA.
     renderWith({
-      values: { businessName: "John wifi" },
+      values: { businessName: "Mashariki wifi" },
       errors: { nidaNumber: ["NIDA number is required."] },
     });
 
@@ -131,11 +131,11 @@ describe("a rejected signup says why, where it can be seen", () => {
 
   it("keeps what was already typed, so nothing has to be entered twice", () => {
     renderWith({
-      values: { businessName: "John wifi", businessPhone: "0758847348", tinNumber: "000000" },
+      values: { businessName: "Mashariki wifi", businessPhone: "0750000000", tinNumber: "000000" },
       errors: { nidaNumber: ["NIDA number is required."] },
     });
 
-    expect(screen.getByLabelText(/Business Name/i)).toHaveValue("John wifi");
-    expect(screen.getByLabelText(/Business Phone/i)).toHaveValue("0758847348");
+    expect(screen.getByLabelText(/Business Name/i)).toHaveValue("Mashariki wifi");
+    expect(screen.getByLabelText(/Business Phone/i)).toHaveValue("0750000000");
   });
 });

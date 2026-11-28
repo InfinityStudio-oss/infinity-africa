@@ -110,7 +110,7 @@ def insert_transaction_tolerating_repeated_reference(
     the customer had already been charged, leaving a collection that later
     resolved to `successful` with no transaction behind it - so no ledger
     posting, and the merchant never credited. Four real payments reached
-    that state (TZS 2,500, all BennyWiFi) before this guard existed.
+    that state (TZS 2,500, all Serengeti WiFi) before this guard existed.
 
     The fallback is the transaction's own generated reference, which is
     unique by construction and is an identifier this app owns - the same

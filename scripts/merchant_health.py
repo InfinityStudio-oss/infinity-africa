@@ -6,8 +6,8 @@ what actually matters for a growing integration: whether payments reach
 them, whether money reaches their wallet, and whether their own endpoint
 is keeping up.
 
-    python scripts/merchant_health.py BennyWiFi
-    python scripts/merchant_health.py 27004818 --days 7
+    python scripts/merchant_health.py "Serengeti WiFi"
+    python scripts/merchant_health.py 27000001 --days 7
 
 Why these numbers and not the obvious ones:
 

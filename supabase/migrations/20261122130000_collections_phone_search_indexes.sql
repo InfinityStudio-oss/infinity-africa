@@ -4,7 +4,7 @@
 -- created in August. Measured against production today, at 149,417
 -- rows:
 --
---   exact match  (customer_phone = '255762474101')   331 ms
+--   exact match  (customer_phone = '255755123456')   331 ms
 --   suffix match (customer_phone ilike '%878545')    650 ms
 --
 -- Both are sequential scans of the whole table, and both are inside the
@@ -86,7 +86,7 @@ create extension if not exists pg_trgm;
 create index if not exists collections_customer_phone_idx
   on public.collections (customer_phone);
 
--- The partial-number path, for both: `ilike '%474101'`, which the btree
+-- The partial-number path, for both: `ilike '%123456'`, which the btree
 -- above cannot answer. Verified in use: on a comparable table the
 -- planner chose a Bitmap Index Scan on this index over a seq scan.
 create index if not exists collections_customer_phone_trgm_idx

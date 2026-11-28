@@ -49,7 +49,7 @@ from decimal import Decimal
 APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "api"
 sys.path.insert(0, str(APP))
 
-# The four collections found on 2026-10-25, all BennyWiFi, all
+# The four collections found on 2026-10-25, all Serengeti WiFi, all
 # API_WALLET_PUSH. Listed explicitly rather than discovered by query so
 # this script can only ever touch rows a human has read.
 TARGETS = [

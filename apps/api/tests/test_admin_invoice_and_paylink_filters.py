@@ -118,10 +118,10 @@ def test_an_invoice_is_found_by_its_customer(fake_client):
 def test_an_invoice_is_found_by_the_customers_phone(fake_client):
     headers = _headers(fake_client)
     merchant_id = uuid.UUID(create_merchant(fake_client)["id"])
-    _invoice(fake_client, merchant_id, number="INV-1", customer_phone="255762474101")
+    _invoice(fake_client, merchant_id, number="INV-1", customer_phone="255755123456")
     _invoice(fake_client, merchant_id, number="INV-2", customer_phone="255700111222")
 
-    assert _numbers(client.get("/v1/admin/invoices?search=474101", headers=headers)) == {"INV-1"}
+    assert _numbers(client.get("/v1/admin/invoices?search=123456", headers=headers)) == {"INV-1"}
 
 
 def test_an_invoice_is_found_by_the_business_name(fake_client):
@@ -305,7 +305,7 @@ def test_a_pay_link_is_found_by_its_slug(fake_client):
 def test_a_pay_link_is_found_by_its_display_name(fake_client):
     headers = _headers(fake_client)
     merchant_id = uuid.UUID(create_merchant(fake_client)["id"])
-    _pay_link(fake_client, merchant_id, slug="a", display_name="Benny WiFi Hotspot")
+    _pay_link(fake_client, merchant_id, slug="a", display_name="Serengeti WiFi Hotspot")
     _pay_link(fake_client, merchant_id, slug="b", display_name="Dar Hardware")
 
     assert _slugs(client.get("/v1/admin/pay-by-link?search=Hotspot", headers=headers)) == {"a"}

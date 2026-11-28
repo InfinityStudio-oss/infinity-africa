@@ -40,7 +40,7 @@ def _world(fake_client, *, status="processing", **payout_overrides):
         {
             "id": str(merchant_id),
             "business_name": "Merchant",
-            "merchant_code": "27413765",
+            "merchant_code": "27000006",
             "status": "active",
             "webhook_url": "https://merchant.example.invalid/hooks",
         },

@@ -40,7 +40,9 @@ from app.database.session import get_supabase_admin
 from app.services.crud import execute_maybe_single, insert_row, update_row
 
 SUPER_ADMIN_EMAIL_DEFAULT = "ceo@infinitypay.me"
-MERCHANT_EMAIL_DEFAULT = "paulmasanja008@gmail.com"
+# A real person's address does not belong in a public repository. Set
+# SEED_MERCHANT_EMAIL to the account you actually want seeded.
+MERCHANT_EMAIL_DEFAULT = "test-merchant@infinitypay.me"
 MERCHANT_BUSINESS_NAME_DEFAULT = "InfinityPay Test Merchant"
 MERCHANT_CONTACT_PHONE_DEFAULT = "+255747730270"
 

@@ -139,8 +139,8 @@ def test_closing_a_duplicate_removes_it_from_the_count(fake_client):
     """The practical reason this matters: a typo creates a second account
     for a business that already trades, and closing it should make the
     headline figure honest again."""
-    create_merchant(fake_client, business_name="KILUNGULE SUPER WiFi", status="active")
-    create_merchant(fake_client, business_name="KILUNGULE SUPER WiFi", status="closed")
+    create_merchant(fake_client, business_name="Mlimani Super WiFi", status="active")
+    create_merchant(fake_client, business_name="Mlimani Super WiFi", status="closed")
 
     assert get_admin_overview(fake_client)["total_merchants"] == 1
 

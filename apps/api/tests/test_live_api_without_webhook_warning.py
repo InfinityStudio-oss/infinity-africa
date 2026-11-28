@@ -4,7 +4,7 @@ partner is never told about it.
 This failure is silent by construction, which is why it needs a flag
 rather than an alert. A *wrong* webhook URL is loud: deliveries are
 queued, they fail, they retry, they exhaust, and Sentry says so - that is
-how BEACH WiFi's typo was found. *No* URL queues nothing, attempts
+how Bahari WiFi's typo was found. *No* URL queues nothing, attempts
 nothing and raises nothing. Nobody hears about it until a partner asks
 why their customers were charged and never activated.
 

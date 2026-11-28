@@ -15,8 +15,8 @@ all four surfaces, and mutation-tested below.
 
 Pinned here:
 
-1. A number is found however it was typed: 0762474101, 255762474101,
-   +255 762 474 101, or just the last six digits.
+1. A number is found however it was typed: 0755123456, 255755123456,
+   +255 755 123 456, or just the last six digits.
 2. A number that matches nothing returns nothing, never everything.
 3. A merchant cannot find another merchant's customers this way.
 4. Tails are ANCHORED, so the same typed number means the same thing on
@@ -49,10 +49,10 @@ from tests.factories import (
 client = TestClient(app)
 
 # The number under test, in every shape a person might type it.
-STORED = "255762474101"
-AS_LOCAL = "0762474101"
-AS_SPACED = "+255 762 474 101"
-AS_TAIL = "474101"
+STORED = "255755123456"
+AS_LOCAL = "0755123456"
+AS_SPACED = "+255 755 123 456"
+AS_TAIL = "123456"
 
 # A number that exists nowhere.
 ABSENT = "255700000999"
@@ -128,7 +128,7 @@ def _ids(response, key="id"):
 
 @pytest.mark.parametrize(
     "term",
-    [STORED, AS_LOCAL, AS_SPACED, AS_TAIL, "762474101", "0762 474 101"],
+    [STORED, AS_LOCAL, AS_SPACED, AS_TAIL, "755123456", "0755 123 456"],
 )
 def test_a_typed_number_is_recognised_as_a_phone(term):
     assert looks_like_phone(term) is True
@@ -148,7 +148,7 @@ def test_something_too_short_is_not_a_phone():
     assert looks_like_phone("1" * MIN_PARTIAL_DIGITS) is True
 
 
-@pytest.mark.parametrize("term", [STORED, AS_LOCAL, AS_SPACED, "762474101"])
+@pytest.mark.parametrize("term", [STORED, AS_LOCAL, AS_SPACED, "755123456"])
 def test_a_whole_number_normalises_to_the_stored_form(term):
     exact, suffix = canonical_or_suffix(term)
     assert exact == STORED, f"{term!r} should normalise to the stored form"

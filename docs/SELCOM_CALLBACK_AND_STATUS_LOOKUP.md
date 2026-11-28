@@ -1,6 +1,6 @@
 # Payment confirmation: the callback, the status lookup, and how to verify both
 
-Written after investigating Kinange Wifi (merchant `27607535`) on
+Written after investigating Nyati Wifi (merchant `27000007`) on
 2026-10-16. Two separate defects surfaced, one of which affects every
 merchant on the platform.
 
@@ -15,7 +15,7 @@ then be refused when asking what happened to it.
 The published integration guide shows the lookup with no query string at
 all, so a partner following our own documentation received `422`.
 
-Production, 15 October: Kinange made 70 API requests. Seven were
+Production, 15 October: Nyati made 70 API requests. Seven were
 `POST /v1/collections/wallet-push` and returned `202`. **Sixty-one were
 `GET /v1/collections/{uuid}` and every one returned `422`** — five
 collections, polled up to 25 times each, roughly every four seconds,
@@ -75,7 +75,7 @@ matched anything they actually send.
 
 **Consequence, platform-wide:** every collection on this platform is
 confirmed by the reconciliation sweep polling Selcom, not by the
-callback. Kinange's two real payments took 78 and 108 seconds from
+callback. Nyati's two real payments took 78 and 108 seconds from
 creation to credit. That delay is this, and it applies to every merchant.
 
 ### The already-built fix
@@ -161,15 +161,15 @@ log, and nothing in the payment or ledger path reads it.
 
 ## What was already correct
 
-- **Kinange's webhook URL** was already configured on merchant
-  `27607535`, with all events enabled. No configuration change was needed.
-  (`KISINGA WiFi` is a different merchant — do not confuse the two.)
+- **Nyati's webhook URL** was already configured on merchant
+  `27000007`, with all events enabled. No configuration change was needed.
+  (`Tandale WiFi` is a different merchant — do not confuse the two.)
 - **Operator minimums.** Mixx/Tigo TZS 1,000, everything else TZS 200,
   enforced before any collection, transaction or Selcom call is created,
   with an error naming the network and suggesting another. A TZS 200 or
   TZS 500 package simply cannot be paid on a Tigo number; the partner
   must offer those on another network or price them at TZS 1,000.
-- **No double credits.** Kinange's two real payments each produced
+- **No double credits.** Nyati's two real payments each produced
   exactly one transaction and one wallet credit, with the expected
   `balance_after` progression.
 

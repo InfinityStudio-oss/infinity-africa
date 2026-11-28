@@ -55,8 +55,8 @@ def _fake_resend(monkeypatch):
 
 def _form(**overrides) -> dict:
     data = {
-        "full_name": "Hussein Said",
-        "email": f"hussein-{uuid.uuid4().hex[:8]}@example.com",
+        "full_name": "Juma Kassim",
+        "email": f"juma-{uuid.uuid4().hex[:8]}@example.com",
         "password": "Str0ng!pass",
         "contact_phone": "+255620000005",
         "nida_number": _NIDA,
@@ -162,7 +162,7 @@ def test_an_unrelated_business_signs_up_normally(fake_client):
 
     second = _post(
         _form(
-            business_name="GEO_NETWORK",
+            business_name="ZUHURA_NETWORK",
             nida_number=_OTHER_NIDA,
             contact_phone="+255620000003",
         )
@@ -191,7 +191,7 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
     first = {
         "id": str(uuid.uuid4()),
         "business_name": "Bahari WiFi",
-        "merchant_code": "27141957",
+        "merchant_code": "27000005",
         "contact_email": "jumakassim1@example.com",
         "contact_phone": "255620000005",
         "created_at": "2026-10-15T20:50:00+00:00",
@@ -199,7 +199,7 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
     second = {
         **first,
         "id": str(uuid.uuid4()),
-        "merchant_code": "27042291",
+        "merchant_code": "27000003",
         "contact_email": "jummakassim1@example.com",
         "created_at": "2026-10-16T04:37:00+00:00",
     }
@@ -210,7 +210,7 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
     # new signup if its owner never confirmed their email.
     for merchant, when in ((first, "2026-10-15T20:50:00+00:00"), (second, "2026-10-16T04:37:00+00:00")):
         user_id = uuid.uuid4()
-        fake_client.seed_auth_user(user_id, email=merchant["contact_email"], full_name="Hussein Said")
+        fake_client.seed_auth_user(user_id, email=merchant["contact_email"], full_name="Juma Kassim")
         fake_client.seed(
             "merchant_users",
             {
@@ -224,7 +224,7 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
 
     existing = find_existing_application(fake_client, nida="", phone="255620000005")
 
-    assert existing["merchant_code"] == "27141957"
+    assert existing["merchant_code"] == "27000005"
 
 
 # --- what the merchant is told ----------------------------------------------
@@ -301,11 +301,11 @@ def test_a_verified_merchant_can_open_a_second_business(fake_client):
     "this person runs two businesses", and only the first is the accident
     this guard exists for.
     """
-    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
-    _verify(fake_client, "benny@example.com")
+    assert _post(_form(email="serengeti@example.com", business_name="Serengeti WiFi")).status_code == 201
+    _verify(fake_client, "serengeti@example.com")
 
     second = _post(
-        _form(email="benny-billing@example.com", business_name="Benny Billing", contact_phone="+255620000004")
+        _form(email="serengeti-billing@example.com", business_name="Serengeti Billing", contact_phone="+255620000004")
     )
 
     assert second.status_code == 201, second.text
@@ -316,10 +316,10 @@ def test_the_second_business_is_allowed_even_on_the_very_same_phone(fake_client)
     """Phone is only a fallback key, and it is a weaker one than NIDA: a
     business owner may well give the same number twice. A verified first
     account must not block on it either."""
-    assert _post(_form(email="benny@example.com")).status_code == 201
-    _verify(fake_client, "benny@example.com")
+    assert _post(_form(email="serengeti@example.com")).status_code == 201
+    _verify(fake_client, "serengeti@example.com")
 
-    second = _post(_form(email="benny-two@example.com", business_name="Benny Billing"))
+    second = _post(_form(email="benny-two@example.com", business_name="Serengeti Billing"))
 
     assert second.status_code == 201, second.text
 
@@ -340,11 +340,11 @@ def test_the_unverified_one_is_found_even_when_a_verified_one_is_older(fake_clie
     pointed at the abandoned one - that is the row whose email support
     corrects. Being verified elsewhere does not make the stray invisible.
     """
-    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
-    _verify(fake_client, "benny@example.com")
-    assert _post(_form(email="bennu@example.con", business_name="Benny Billing")).status_code == 201
+    assert _post(_form(email="serengeti@example.com", business_name="Serengeti WiFi")).status_code == 201
+    _verify(fake_client, "serengeti@example.com")
+    assert _post(_form(email="bennu@example.con", business_name="Serengeti Billing")).status_code == 201
 
-    third = _post(_form(email="benny-billing@example.com", business_name="Benny Billing"))
+    third = _post(_form(email="serengeti-billing@example.com", business_name="Serengeti Billing"))
 
     assert third.status_code == 409
     assert "bennu@example.con"[0] in third.json()["error"]["message"]
@@ -382,10 +382,10 @@ def test_the_review_screen_is_told_about_the_owners_other_businesses(fake_client
     shown."""
     from app.services.duplicate_signup import identity_siblings
 
-    assert _post(_form(email="benny@example.com", business_name="BennyWiFi")).status_code == 201
-    _verify(fake_client, "benny@example.com")
+    assert _post(_form(email="serengeti@example.com", business_name="Serengeti WiFi")).status_code == 201
+    _verify(fake_client, "serengeti@example.com")
     assert _post(
-        _form(email="benny-billing@example.com", business_name="Benny Billing")
+        _form(email="serengeti-billing@example.com", business_name="Serengeti Billing")
     ).status_code == 201
 
     merchants = _merchants(fake_client)

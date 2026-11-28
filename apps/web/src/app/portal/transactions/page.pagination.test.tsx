@@ -181,10 +181,10 @@ describe("Transactions page — filters across pages", () => {
   it("keeps the other filters when searching", async () => {
     await renderPage("status=failed");
 
-    fireEvent.change(screen.getByLabelText(/Search transactions/), { target: { value: "0762474101" } });
+    fireEvent.change(screen.getByLabelText(/Search transactions/), { target: { value: "0755123456" } });
     fireEvent.submit(screen.getByRole("search"));
 
-    expect(push).toHaveBeenCalledWith("/portal/transactions?status=failed&search=0762474101");
+    expect(push).toHaveBeenCalledWith("/portal/transactions?status=failed&search=0755123456");
   });
 
   it("exports every matching page with the same filters, and says when it had to stop", async () => {

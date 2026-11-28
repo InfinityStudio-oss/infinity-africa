@@ -98,7 +98,7 @@ Do not start until **all** of these hold:
 | Account | Email confirmed | Signed in yet |
 |---|---|---|
 | `ceo@infinitypay.me` | yes | yes |
-| `paulmasanja27@icloud.com` | yes | **no** |
+| the second Super Admin (address held outside this repo) | yes | **no** |
 
 The second was added on 2026-09-25 by direct service-role insert into
 `platform_admins`, with an `audit_logs` entry recording it — that table has
@@ -106,7 +106,7 @@ no product write path, so a grant leaves no trace unless one is written
 deliberately.
 
 **The count precondition is met. The login precondition is not.**
-`paulmasanja27@icloud.com` has never signed in, so it is currently an
+The second account has never signed in, so it is currently an
 untested backup: it satisfies the "two admins" rule on paper while being
 unproven in practice, which is the failure mode this precondition exists to
 prevent. Sign in with it at least once, and confirm it reaches the Super

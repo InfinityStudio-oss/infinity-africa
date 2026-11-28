@@ -736,8 +736,8 @@ def list_my_collections(
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
     search: Annotated[str | None, Query(max_length=100)] = None,
 ):
-    """`search` is the customer's phone when it is digits - 0762474101,
-    255762474101, +255 762 474 101, or just the last six - and the
+    """`search` is the customer's phone when it is digits - 0755123456,
+    255755123456, +255 755 123 456, or just the last six - and the
     merchant reference otherwise.
 
     The phone case is why this exists: a customer says they paid, and
@@ -1592,7 +1592,7 @@ def list_my_transactions(
     the phone case on purpose: a UUID that happens to be all digits and
     dashes also "looks like" a phone number.
 
-    A term that is digits - 0762474101, 255762474101, +255 762 474 101,
+    A term that is digits - 0755123456, 255755123456, +255 755 123 456,
     or just the last six - is treated as the CUSTOMER'S PHONE and
     matched through the collection each transaction belongs to.
     Anything else matches the transaction reference as a substring.

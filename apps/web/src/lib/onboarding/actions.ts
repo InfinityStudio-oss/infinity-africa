@@ -95,7 +95,7 @@ export async function submitOnboardingAction(_prevState: FormState, formData: Fo
     // for review" told an applicant whose account was already active and
     // verified that it was queued, and gave them nothing to do about it.
     //
-    // Production example: CHITE Wi-Fi signed up on 17 Nov, never opened
+    // Production example: Chuo Wi-Fi signed up on 17 Nov, never opened
     // the verification email, could not sign in, and tried to register
     // again. They were told their account was awaiting review. It was
     // live. The real problem — an unconfirmed address — was never

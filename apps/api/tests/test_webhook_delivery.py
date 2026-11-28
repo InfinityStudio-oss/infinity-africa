@@ -439,7 +439,7 @@ def test_a_test_delivery_is_distinguishable_from_a_real_one():
     """
     from app.routers.merchant_webhooks import _sample_test_payload
 
-    payload = _sample_test_payload({"merchant_code": "27413765"})
+    payload = _sample_test_payload({"merchant_code": "27000006"})
 
     assert payload["test"] is True
     assert payload["collection_id"] == "00000000-0000-0000-0000-000000000000"
