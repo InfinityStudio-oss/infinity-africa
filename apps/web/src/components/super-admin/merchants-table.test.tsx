@@ -152,25 +152,25 @@ describe("MerchantsTable correct signup email", () => {
   });
 
   it("prefills the address currently on the account, so support can see the typo", () => {
-    render(<MerchantsTable rows={[merchant({ email: "huseinsaid211@gmail.com" })]} />);
+    render(<MerchantsTable rows={[merchant({ email: "jumakassim1@example.com" })]} />);
 
     fireEvent.click(screen.getByTitle("Correct signup email"));
 
-    expect(screen.getByLabelText("Correct signup email")).toHaveValue("huseinsaid211@gmail.com");
+    expect(screen.getByLabelText("Correct signup email")).toHaveValue("jumakassim1@example.com");
   });
 
   it("sends the corrected address", async () => {
     correctMerchantContactEmailAction.mockResolvedValue({ error: null, ok: true, message: "Email changed." });
-    render(<MerchantsTable rows={[merchant({ email: "huseinsaid211@gmail.com" })]} />);
+    render(<MerchantsTable rows={[merchant({ email: "jumakassim1@example.com" })]} />);
 
     fireEvent.click(screen.getByTitle("Correct signup email"));
     fireEvent.change(screen.getByLabelText("Correct signup email"), {
-      target: { value: "hussensaid211@gmail.com" },
+      target: { value: "jumakasim1@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(correctMerchantContactEmailAction).toHaveBeenCalledWith("merchant-1", "hussensaid211@gmail.com"),
+      expect(correctMerchantContactEmailAction).toHaveBeenCalledWith("merchant-1", "jumakasim1@example.com"),
     );
   });
 

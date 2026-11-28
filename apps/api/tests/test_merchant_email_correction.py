@@ -66,13 +66,13 @@ def fake_resend(monkeypatch):
     return fake
 
 
-def _setup(fake_client, *, email="huseinsaid211@gmail.com"):
-    """A merchant stuck exactly where BEACH WiFi was: an account on a
+def _setup(fake_client, *, email="jumakassim1@example.com"):
+    """A merchant stuck exactly where Bahari WiFi was: an account on a
     mistyped address, with an unverified auth user behind it."""
     admin_id = uuid.uuid4()
     make_super_admin(fake_client, admin_id)
     merchant = create_merchant(
-        fake_client, business_name="BEACH WiFi", contact_email=email
+        fake_client, business_name="Bahari WiFi", contact_email=email
     )
     owner_id = uuid.uuid4()
     make_merchant_member(
@@ -100,12 +100,12 @@ def test_the_address_is_corrected_on_the_merchant_and_the_login(fake_client):
     the wrong address."""
     merchant, owner_id, headers = _setup(fake_client)
 
-    response = _correct(merchant, headers, "hussensaid211@gmail.com")
+    response = _correct(merchant, headers, "jumakasim1@example.com")
 
     assert response.status_code == 200
     row = fake_client.table("merchants")._table.rows[0]
-    assert row["contact_email"] == "hussensaid211@gmail.com"
-    assert fake_client.auth.admin._users[str(owner_id)].email == "hussensaid211@gmail.com"
+    assert row["contact_email"] == "jumakasim1@example.com"
+    assert fake_client.auth.admin._users[str(owner_id)].email == "jumakasim1@example.com"
 
 
 def test_a_fresh_verification_link_goes_to_the_new_address(fake_client, fake_resend):
@@ -113,9 +113,9 @@ def test_a_fresh_verification_link_goes_to_the_new_address(fake_client, fake_res
     wrong address."""
     merchant, _owner_id, headers = _setup(fake_client)
 
-    _correct(merchant, headers, "hussensaid211@gmail.com")
+    _correct(merchant, headers, "jumakasim1@example.com")
 
-    sent = [c for c in fake_resend.calls if c["to"] == ["hussensaid211@gmail.com"]]
+    sent = [c for c in fake_resend.calls if c["to"] == ["jumakasim1@example.com"]]
     assert len(sent) == 1
     assert "confirm" in sent[0]["subject"].lower()
 
@@ -128,9 +128,9 @@ def test_the_link_points_at_our_own_callback(fake_client, fake_resend):
     is the entire reason they were contacted."""
     merchant, _owner_id, headers = _setup(fake_client)
 
-    _correct(merchant, headers, "hussensaid211@gmail.com")
+    _correct(merchant, headers, "jumakasim1@example.com")
 
-    html = next(c for c in fake_resend.calls if c["to"] == ["hussensaid211@gmail.com"])["html"]
+    html = next(c for c in fake_resend.calls if c["to"] == ["jumakasim1@example.com"])["html"]
 
     assert "/auth/callback?next=/dashboard/overview" in html
     assert "token_hash=" in html
@@ -146,7 +146,7 @@ def test_the_new_address_is_left_unverified(fake_client):
     in."""
     merchant, owner_id, headers = _setup(fake_client)
 
-    _correct(merchant, headers, "hussensaid211@gmail.com")
+    _correct(merchant, headers, "jumakasim1@example.com")
 
     assert fake_client.auth.admin._users[str(owner_id)].email_confirmed_at is None
 
@@ -160,12 +160,12 @@ def test_the_address_still_changes_when_the_email_cannot_be_sent(
     merchant, _owner_id, headers = _setup(fake_client)
     fake_resend.should_fail = True
 
-    response = _correct(merchant, headers, "hussensaid211@gmail.com")
+    response = _correct(merchant, headers, "jumakasim1@example.com")
 
     assert response.status_code == 200
     assert (
         fake_client.table("merchants")._table.rows[0]["contact_email"]
-        == "hussensaid211@gmail.com"
+        == "jumakasim1@example.com"
     )
 
 
@@ -182,7 +182,7 @@ def test_an_address_already_in_use_is_refused(fake_client):
 
     assert response.status_code == 409
     assert fake_client.table("merchants")._table.rows[0]["contact_email"] == (
-        "huseinsaid211@gmail.com"
+        "jumakassim1@example.com"
     )
 
 
@@ -217,7 +217,7 @@ def test_a_merchant_cannot_change_their_own_login_this_way(fake_client):
     response = _correct(merchant, auth_headers(owner_id), "attacker@example.com")
 
     assert response.status_code == 403
-    assert fake_client.auth.admin._users[str(owner_id)].email == "huseinsaid211@gmail.com"
+    assert fake_client.auth.admin._users[str(owner_id)].email == "jumakassim1@example.com"
 
 
 def test_an_anonymous_caller_is_rejected(fake_client):
@@ -237,7 +237,7 @@ def test_an_anonymous_caller_is_rejected(fake_client):
 def test_the_change_is_audit_logged(fake_client):
     merchant, _owner_id, headers = _setup(fake_client)
 
-    _correct(merchant, headers, "hussensaid211@gmail.com")
+    _correct(merchant, headers, "jumakasim1@example.com")
 
     entries = [
         r
@@ -254,7 +254,7 @@ def test_the_audit_entry_masks_both_addresses(fake_client):
     addresses in clear text."""
     merchant, _owner_id, headers = _setup(fake_client)
 
-    _correct(merchant, headers, "hussensaid211@gmail.com")
+    _correct(merchant, headers, "jumakasim1@example.com")
 
     entry = next(
         r
@@ -262,9 +262,9 @@ def test_the_audit_entry_masks_both_addresses(fake_client):
         if r["action"] == "merchant.contact_email_corrected"
     )
     recorded = str(entry.get("metadata"))
-    assert "huseinsaid211@gmail.com" not in recorded
-    assert "hussensaid211@gmail.com" not in recorded
-    assert "@gmail.com" in recorded
+    assert "jumakassim1@example.com" not in recorded
+    assert "jumakasim1@example.com" not in recorded
+    assert "@example.com" in recorded
 
 
 def test_the_address_never_reaches_the_logs(fake_client, caplog):
@@ -280,9 +280,9 @@ def test_the_address_never_reaches_the_logs(fake_client, caplog):
     caplog.set_level(logging.INFO, logger="infinity.onboarding")
     logger.addHandler(caplog.handler)
     try:
-        _correct(merchant, headers, "hussensaid211@gmail.com")
+        _correct(merchant, headers, "jumakasim1@example.com")
     finally:
         logger.removeHandler(caplog.handler)
 
     assert "merchant_contact_email_corrected" in caplog.text
-    assert "hussensaid211@gmail.com" not in caplog.text
+    assert "jumakasim1@example.com" not in caplog.text

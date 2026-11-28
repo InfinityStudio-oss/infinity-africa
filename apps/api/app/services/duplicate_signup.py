@@ -5,16 +5,19 @@ them. Every single case has the same shape - a merchant mistypes their
 email on the Get Started form, never receives the verification link, and
 signs up again with the address spelled correctly:
 
-    KILUNGULE  mlangalamohamedi93@kilungulesupe...  unverified, 0 collections
-               mlangalamohamedi93@gmail.com         verified,   1409
-    BBTECH     mabesason@gmail.com                  unverified, 0
-               bbtechnology00@gmail.com             verified,   143
-    ENZOH      lunguwendelini4@gmail.com            unverified, 0
-               lunguwendelini6@gmail.com            verified,   23
-    KISINGA    breezykicnga51@gmail.com             unverified, 0
-               breezykicnga595@gmail.com            verified,   0
-    BEACH      huseinsaid211 / husseinsaid211       unverified, 0
-               hussensaid211@gmail.com              verified,   89
+Addresses and business names below are stand-ins - this repository is
+public - but the shapes are the real ones, taken from those five:
+
+    A   name@wrongdomain...        unverified, 0 collections   <- typo in the DOMAIN
+        name@example.com           verified,   high volume
+    B   somethingelse@example.com  unverified, 0               <- a different address entirely
+        business@example.com       verified,   moderate
+    C   name4@example.com          unverified, 0               <- one digit out
+        name6@example.com          verified,   low
+    D   nickname51@example.com     unverified, 0               <- digits transposed
+        nickname595@example.com    verified,   none yet
+    E   jumakassim1 / jummakassim1 unverified, 0               <- a doubled letter
+        jumakasim1@example.com     verified,   moderate
 
 They sign up again because that is the only thing the product lets them
 do: the "check your email" screen offers "Resend verification email",
@@ -34,11 +37,11 @@ rather than a self-service endpoint: at this scale every signup is
 reviewed by hand anyway, and an unauthenticated "change the email on an
 account" endpoint is not something this platform should grow.
 
-**NIDA is the key that works, not the phone.** ENZOH used two different
-phone numbers with one NIDA, and the one pre-existing legitimate pair
-(a deactivated test account and VoxopPay) shares a phone with no NIDA on
-file. Phone is still checked, because it is the only key available for
-the four merchants with no NIDA on record.
+**NIDA is the key that works, not the phone.** One of the five used two
+different phone numbers with one NIDA, and the one pre-existing
+legitimate pair (a deactivated test account and a live merchant) shares
+a phone with no NIDA on file. Phone is still checked, because it is the
+only key available for the four merchants with no NIDA on record.
 
 **Only an application that never got off the ground blocks a second
 one.** Read the five cases again: every stray was *unverified* - nobody
@@ -67,12 +70,13 @@ logger = logging.getLogger("infinity.onboarding")
 
 
 def mask_email(email: str | None) -> str:
-    """``husseinsaid211@gmail.com`` -> ``h••••••••••1@gmail.com``.
+    """``jummakassim1@example.com`` -> ``j••••••••••1@example.com``.
 
     Enough for the person who just mistyped their own address to
     recognise it, not enough to hand a real address to someone who
     guessed a NIDA number. The domain stays readable because that is
-    usually where the typo is (``@kilungulesupe...`` for ``@gmail.com``).
+    usually where the typo is - a business domain typed in place of
+    ``@gmail.com``, in the one real case that had it.
     """
     if not email or "@" not in email:
         return "•••"

@@ -3,8 +3,12 @@
 From production, 2026-10-16: five businesses held eleven accounts between
 them, and every case was the same accident - a merchant mistyped their
 email on the Get Started form, never received the verification link, and
-signed up again with the address spelled right. KILUNGULE's abandoned
-account sat next to one carrying 1409 collections; BEACH WiFi had three.
+signed up again with the address spelled right. One abandoned account
+sat next to a sibling carrying over a thousand collections; another
+business had three accounts.
+
+The addresses and phone numbers below are stand-ins - this repository is
+public - but each one keeps the shape of the real case it stands for.
 
 They signed up again because it was the only thing the product allowed:
 the "check your email" screen offers "Resend verification email", which
@@ -54,9 +58,9 @@ def _form(**overrides) -> dict:
         "full_name": "Hussein Said",
         "email": f"hussein-{uuid.uuid4().hex[:8]}@example.com",
         "password": "Str0ng!pass",
-        "contact_phone": "+255766771207",
+        "contact_phone": "+255620000005",
         "nida_number": _NIDA,
-        "business_name": "BEACH WiFi",
+        "business_name": "Bahari WiFi",
         "nature_of_business": "Internet service",
         "business_category": "Telecom",
         "accepted_terms": "true",
@@ -80,30 +84,30 @@ def _merchants(fake_client):
 def test_the_same_business_cannot_create_a_second_account(fake_client):
     """The production case exactly: same person, same NIDA, email spelled
     differently the second time."""
-    assert _post(_form(email="huseinsaid211@gmail.com")).status_code == 201
+    assert _post(_form(email="jumakassim1@example.com")).status_code == 201
 
-    second = _post(_form(email="husseinsaid211@gmail.com"))
+    second = _post(_form(email="jummakassim1@example.com"))
 
     assert second.status_code == 409
-    assert len(_merchants(fake_client)) == 1, "a second BEACH WiFi was created"
+    assert len(_merchants(fake_client)) == 1, "a second Bahari WiFi was created"
 
 
 def test_a_third_attempt_is_refused_too(fake_client):
-    """BEACH WiFi reached three accounts, not two."""
-    _post(_form(email="huseinsaid211@gmail.com"))
-    _post(_form(email="husseinsaid211@gmail.com"))
-    _post(_form(email="hussensaid211@gmail.com"))
+    """Bahari WiFi reached three accounts, not two."""
+    _post(_form(email="jumakassim1@example.com"))
+    _post(_form(email="jummakassim1@example.com"))
+    _post(_form(email="jumakasim1@example.com"))
 
     assert len(_merchants(fake_client)) == 1
 
 
 def test_a_different_phone_with_the_same_nida_is_still_caught(fake_client):
-    """ENZOH WI-FI's two accounts used two different phone numbers and one
+    """One of the five had two accounts on two different phone numbers and one
     NIDA. Matching on phone alone would have missed it, which is why NIDA
     is the primary key here."""
-    assert _post(_form(contact_phone="+255629674047")).status_code == 201
+    assert _post(_form(contact_phone="+255620000001")).status_code == 201
 
-    second = _post(_form(contact_phone="+255712999888"))
+    second = _post(_form(contact_phone="+255620000002"))
 
     assert second.status_code == 409
     assert len(_merchants(fake_client)) == 1
@@ -118,11 +122,11 @@ def test_the_phone_is_still_a_fallback_when_no_nida_is_on_record(fake_client):
     fake_client.table("onboarding_submissions")._table.rows.clear()
 
     existing = find_existing_application(
-        fake_client, nida=_NIDA_DIGITS, phone="255766771207"
+        fake_client, nida=_NIDA_DIGITS, phone="255620000005"
     )
 
     assert existing is not None
-    assert existing["business_name"] == "BEACH WiFi"
+    assert existing["business_name"] == "Bahari WiFi"
 
 
 def test_no_auth_user_is_left_behind_when_a_duplicate_is_refused(fake_client):
@@ -160,7 +164,7 @@ def test_an_unrelated_business_signs_up_normally(fake_client):
         _form(
             business_name="GEO_NETWORK",
             nida_number=_OTHER_NIDA,
-            contact_phone="+255768486279",
+            contact_phone="+255620000003",
         )
     )
 
@@ -177,7 +181,7 @@ def test_a_lookup_failure_lets_the_signup_through(fake_client):
         def table(self, _name):
             raise RuntimeError("supabase unreachable")
 
-    assert find_existing_application(_Broken(), nida=_NIDA_DIGITS, phone="255766771207") is None
+    assert find_existing_application(_Broken(), nida=_NIDA_DIGITS, phone="255620000005") is None
 
 
 def test_the_oldest_application_is_the_one_returned(fake_client):
@@ -186,17 +190,17 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
     the stray and leave the real one broken."""
     first = {
         "id": str(uuid.uuid4()),
-        "business_name": "BEACH WiFi",
+        "business_name": "Bahari WiFi",
         "merchant_code": "27141957",
-        "contact_email": "huseinsaid211@gmail.com",
-        "contact_phone": "255766771207",
+        "contact_email": "jumakassim1@example.com",
+        "contact_phone": "255620000005",
         "created_at": "2026-10-15T20:50:00+00:00",
     }
     second = {
         **first,
         "id": str(uuid.uuid4()),
         "merchant_code": "27042291",
-        "contact_email": "husseinsaid211@gmail.com",
+        "contact_email": "jummakassim1@example.com",
         "created_at": "2026-10-16T04:37:00+00:00",
     }
     fake_client.seed("merchants", second)
@@ -218,7 +222,7 @@ def test_the_oldest_application_is_the_one_returned(fake_client):
             },
         )
 
-    existing = find_existing_application(fake_client, nida="", phone="255766771207")
+    existing = find_existing_application(fake_client, nida="", phone="255620000005")
 
     assert existing["merchant_code"] == "27141957"
 
@@ -230,9 +234,9 @@ def test_the_message_names_the_business_code_and_what_to_do(fake_client):
     """"You have already applied" on its own leaves them stuck, which is
     how this mess started. They need the code support will ask for and
     the instruction not to try again."""
-    _post(_form(email="huseinsaid211@gmail.com"))
+    _post(_form(email="jumakassim1@example.com"))
 
-    body = _post(_form(email="husseinsaid211@gmail.com")).json()
+    body = _post(_form(email="jummakassim1@example.com")).json()
     message = body["error"]["message"]
     code = _merchants(fake_client)[0]["merchant_code"]
 
@@ -245,27 +249,27 @@ def test_the_existing_address_is_masked_not_echoed(fake_client):
     """The response is unauthenticated: anyone who guesses a NIDA number
     gets this message. A masked hint is enough for the person who just
     mistyped their own address and not enough to harvest one."""
-    _post(_form(email="huseinsaid211@gmail.com"))
+    _post(_form(email="jumakassim1@example.com"))
 
-    message = _post(_form(email="husseinsaid211@gmail.com")).json()["error"]["message"]
+    message = _post(_form(email="jummakassim1@example.com")).json()["error"]["message"]
 
-    assert "huseinsaid211@gmail.com" not in message
-    assert "@gmail.com" in message
+    assert "jumakassim1@example.com" not in message
+    assert "@example.com" in message
 
 
 @pytest.mark.parametrize(
     ("email", "expected"),
     [
-        ("husseinsaid211@gmail.com", "h••••••••••••1@gmail.com"),
-        ("ab@gmail.com", "a•@gmail.com"),
-        ("a@gmail.com", "a•@gmail.com"),
+        ("jummakassim1@example.com", "j••••••••••1@example.com"),
+        ("ab@example.com", "a•@example.com"),
+        ("a@example.com", "a•@example.com"),
         (None, "•••"),
         ("not-an-email", "•••"),
     ],
 )
 def test_mask_email_keeps_the_domain_readable(email, expected):
-    """The domain is where the typo usually is - KILUNGULE's dead account
-    was on @kilungulesupe... when they meant @gmail.com - so masking the
+    """The domain is where the typo usually is - one dead account was on a
+    mistyped business domain when they meant @gmail.com - so masking the
     domain as well would hide the one part that helps them recognise it."""
     assert mask_email(email) == expected
 
@@ -301,7 +305,7 @@ def test_a_verified_merchant_can_open_a_second_business(fake_client):
     _verify(fake_client, "benny@example.com")
 
     second = _post(
-        _form(email="benny-billing@example.com", business_name="Benny Billing", contact_phone="+255766771299")
+        _form(email="benny-billing@example.com", business_name="Benny Billing", contact_phone="+255620000004")
     )
 
     assert second.status_code == 201, second.text
@@ -323,9 +327,9 @@ def test_the_second_business_is_allowed_even_on_the_very_same_phone(fake_client)
 def test_an_unverified_first_account_still_blocks(fake_client):
     """The guard has not been turned off. Same identity, first account
     never verified - still refused, exactly as before."""
-    assert _post(_form(email="huseinsaid211@gmail.com")).status_code == 201
+    assert _post(_form(email="jumakassim1@example.com")).status_code == 201
 
-    second = _post(_form(email="husseinsaid211@gmail.com"))
+    second = _post(_form(email="jummakassim1@example.com"))
 
     assert second.status_code == 409
     assert len(_merchants(fake_client)) == 1
@@ -361,12 +365,12 @@ def test_a_merchant_row_with_no_owner_never_blocks_a_signup(fake_client):
             "business_name": "Ownerless",
             "merchant_code": "27000001",
             "contact_email": "nobody@example.com",
-            "contact_phone": "255766771207",
+            "contact_phone": "255620000005",
             "created_at": "2026-09-01T00:00:00+00:00",
         },
     )
 
-    assert find_existing_application(fake_client, nida="", phone="255766771207") is None
+    assert find_existing_application(fake_client, nida="", phone="255620000005") is None
 
 
 # --- what the reviewer is shown ---------------------------------------------
@@ -414,7 +418,7 @@ def test_the_index_uses_the_same_keys_the_guard_does(fake_client):
     _verify(fake_client, "a@example.com")
     # Same person, same NIDA, different phone — still one owner.
     assert _post(
-        _form(email="b@example.com", business_name="Two", contact_phone="+255712999888")
+        _form(email="b@example.com", business_name="Two", contact_phone="+255620000002")
     ).status_code == 201
 
     index = identity_siblings(fake_client)
