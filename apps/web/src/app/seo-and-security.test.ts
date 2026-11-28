@@ -390,6 +390,64 @@ describe("per-page canonical URLs", () => {
   });
 });
 
+describe("every public page is offered to Google", () => {
+  // Every sitemap test above runs sitemap -> page: each entry must have a real
+  // self-canonical page behind it. Nothing ran the other way, so a newly added
+  // public page was never required to reach Google at all. /developers/payouts
+  // went live self-canonical and linked from the developers nav, and stayed
+  // out of the sitemap across three commits until someone checked by hand.
+  const PRIVATE_FIRST_SEGMENTS = new Set([
+    "dashboard",
+    "merchant",
+    "portal",
+    "super-admin",
+    "admin",
+    "admin-login",
+    "admin-mfa",
+    "auth",
+    "onboarding",
+    "pay",
+    "payment-links",
+    "invoices",
+    "login",
+    "api",
+  ]);
+
+  // Public and deliberately unlisted. Each needs a stated reason, because the
+  // default for a public page is that Google is told about it.
+  const DELIBERATELY_UNLISTED = new Map([
+    ["/get-started", "redirect-only; a redirect in a sitemap is a Search Console error"],
+  ]);
+
+  function publicRoutes(dir: string, prefix = ""): string[] {
+    const found: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name === "page.tsx") {
+        found.push(prefix === "" ? "/" : prefix);
+        continue;
+      }
+      if (!entry.isDirectory()) continue;
+      // A dynamic segment can never be a static sitemap entry, and a
+      // parenthesised route group contributes no path segment of its own.
+      if (entry.name.startsWith("[")) continue;
+      const nested = entry.name.startsWith("(") ? prefix : `${prefix}/${entry.name}`;
+      found.push(...publicRoutes(join(dir, entry.name), nested));
+    }
+    return found;
+  }
+
+  it("lists every public page in the sitemap, or states why not", () => {
+    const listed = new Set(sitemap().map((entry) => new URL(entry.url).pathname));
+    const missing = publicRoutes(appDir)
+      .filter((route) => {
+        const firstSegment = route.split("/").filter(Boolean)[0];
+        return firstSegment === undefined || !PRIVATE_FIRST_SEGMENTS.has(firstSegment);
+      })
+      .filter((route) => !listed.has(route) && !DELIBERATELY_UNLISTED.has(route));
+    expect(missing).toEqual([]);
+  });
+});
+
 describe("homepage structured data", () => {
   const structured = readFileSync(
     join(appDir, "..", "components", "marketing", "structured-data.tsx"),

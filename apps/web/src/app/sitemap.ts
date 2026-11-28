@@ -33,6 +33,7 @@ const PUBLIC_PATHS = [
   "/developers/javascript-example",
   "/developers/onboarding-requirements",
   "/developers/payment-links",
+  "/developers/payouts",
   "/developers/python-example",
   "/developers/sandbox",
   "/developers/transaction-status",
